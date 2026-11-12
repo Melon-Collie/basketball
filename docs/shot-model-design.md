@@ -474,7 +474,7 @@ All five milestones are done. Jumpers, floaters and layups in the prototype are 
 - **Noise:** the old inch-based components are converted into launch-speed and direction noise using each shot's own sensitivities. Jumpers and floaters no longer have a distance term: a short shot comes down more steeply, so the rim is effectively bigger, and the old term double-counted that.
 - **Calibration:** jumper noise 1.23× the old values, floaters 1.42×, layups 1.40×; contest scatter 6.17 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.5%, open layup at a sprint 80.8%.
 - **Live readouts:** 14 simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
-- **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. Blocks turned out to be all-or-nothing for a given defender position: see Calibration, where a standing jumper against the default on-ball defender was blocked 24% of the time, not the 1 in 12 first estimated.
+- **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. Blocks turned out to be all-or-nothing for a given defender position: see Calibration, where standing jumpers against the default on-ball defender were blocked about a quarter of the time, not the 1 in 12 first estimated.
 - **Bank shots:** the cursor on the backboard beside the rim targets the glass, and a marker turns green where a bank can go in from your spot. From about 45° the working band is narrow and right beside the rim; from 63–65° it's over a foot wide; straight on, none.
 - **Ratings retired for shooting:** the shooter rating and floater touch sliders are gone; a universal floor replaces them.
 
@@ -601,6 +601,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
 - **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
 - **Measurement** (`sim/measure.js`): an offline script that reports make and block rates with defenders' hands in the simulation.
+- **Browser tools** (`tools/`, need Playwright): `replay.js` plays a scripted session in the prototype with a seeded random generator and a stepped clock, and compares every checkpoint against a git ref, as a check that a refactor didn't change behavior. `ingame.js` measures standing jumpers with the defenders reacting as they do in play.
 - **Game and rendering:** movement, dribbling, the defenders' AI, input, the court view and the side-on replay. Still one inline script in `prototype/shot-model-lab.html`, which loads the modules above.
 - **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
@@ -693,7 +694,15 @@ What this shows:
 - **A raised hand inside 3 ft blocks every floater.** The floater leaves at 8.7 ft and the rim protector's standing reach is 8.9 ft.
 - **A standing rim protector barely costs a layup:** 72–78%, against 81% open. The landing-point model had about 48% finishing away and 33% into them. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
 
-**In the prototype** (a scripted run at default settings: 300 standing jumpers with a perfect release against the on-ball defender, who starts at their usual cushion and reacts as normal): 24% were blocked and 33% went in (28% of 150 from 20.8 ft, 38% of 150 from 25.3 ft). The defender had closed to a contest of about 0.5 by the release. Half the time they leave their feet, and about half of those jumps put the hand in the path.
+**In the prototype** (`tools/ingame.js`, which plays standing jumpers in a headless browser at default settings, each with a perfect release against the on-ball defender, who starts at their usual cushion and reacts as normal). Over 450 shots, 25% were blocked and 30% went in:
+
+| Run | Made | Blocked |
+| --- | --- | --- |
+| 20.8 ft, seed 12345 | 28% | 24% |
+| 20.8 ft, seed 1 | 24% | 28% |
+| 25.3 ft (`--back 22`), seed 777 | 38% | 24% |
+
+The defender leaves their feet half the time. When they stay down they close to a contest of about 0.5 by the release; when they jump they stop closing and the contest is only about 0.16, but about half of those jumps put the hand in the path.
 
 **Landing-point model output at default settings** (the original resolver, computed from its formulas; jumpers include the 30% perfect release bonus). Kept for reference: the shooter rating and floater touch no longer exist, and their values at 80 and 75 became the universal floors.
 

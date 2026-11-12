@@ -44,6 +44,30 @@ The measurement with defenders' hands takes about two minutes and prints its tab
 node sim/measure.js
 ```
 
+## Browser tools
+
+Two scripts in [`tools/`](tools) drive the prototype in headless Chromium, with a seeded random generator and a clock they step by hand, so a run plays out the same way every time. They need Playwright:
+
+```bash
+npm install
+```
+
+```bash
+npx playwright install chromium
+```
+
+`replay.js` is a check that a refactor didn't change behavior. It plays one scripted session covering every shot type in the working tree and in a git ref (`HEAD` by default), compares the panels and both canvases at each checkpoint, and exits 1 on any difference:
+
+```bash
+node tools/replay.js
+```
+
+`ingame.js` measures make and block rates for standing jumpers with the defenders reacting as they do in play. See the top of the file for its options:
+
+```bash
+node tools/ingame.js
+```
+
 ## Controls
 
 Mouse and keyboard:
