@@ -1,0 +1,2007 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shot model lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+  --bg:#E6EBEF; --panel:#FFFFFF; --ink:#14202B; --muted:#56636F; --line:#CCD4DB;
+  --court:#D9A96B; --grain:#CE9E60; --paint:#2A4C70; --courtline:#FFFFFF; --oob:#C08D52;
+  --rim:#E2772A; --ball:#E07A2C;
+  --make:#1D8A57; --miss:#C23B4A; --accent:#2A4C70; --player:#FFFFFF; --defender:#6E2F60; --defender2:#2C6464;
+  --seg1:#2A4C70; --seg2:#8FA3B8; --seg3:#D9A96B; --seg4:#C23B4A;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#151D25; --panel:#1E2933; --ink:#E4EAEF; --muted:#9AA8B4; --line:#33414D;
+    --court:#9C7548; --grain:#936D42; --paint:#1D3A57; --courtline:#ECE7DE; --oob:#7A5B38;
+    --rim:#F08A3E; --ball:#E8863A;
+    --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --player:#FFFFFF; --defender:#B0629E; --defender2:#4FA3A3;
+    --seg1:#86B4E3; --seg2:#5E7489; --seg3:#C9995C; --seg4:#EE6474;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#151D25; --panel:#1E2933; --ink:#E4EAEF; --muted:#9AA8B4; --line:#33414D;
+  --court:#9C7548; --grain:#936D42; --paint:#1D3A57; --courtline:#ECE7DE; --oob:#7A5B38;
+  --rim:#F08A3E; --ball:#E8863A;
+  --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --player:#FFFFFF; --defender:#B0629E; --defender2:#4FA3A3;
+  --seg1:#86B4E3; --seg2:#5E7489; --seg3:#C9995C; --seg4:#EE6474;
+}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Barlow","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1300px;margin:0 auto;padding:20px 20px 32px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 20px;margin-bottom:14px}
+h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:2.1rem;line-height:1;margin:0;letter-spacing:.01em}
+header p{margin:0;color:var(--muted);max-width:62ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:20px;align-items:start}
+@media (max-width:960px){.grid{grid-template-columns:1fr}}
+.court-box{border-radius:10px;overflow:hidden;background:var(--oob);box-shadow:0 1px 0 var(--line)}
+#court{display:block;width:100%;aspect-ratio:53/41.5;cursor:crosshair;touch-action:none;outline:none}
+#court:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.help{margin:12px 2px 0;color:var(--muted);max-width:80ch}
+.help kbd{font-family:inherit;font-weight:600;color:var(--ink);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:flex-end;margin-top:16px;padding:14px 16px;background:var(--panel);border-radius:10px}
+.stat .v{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.9rem;line-height:1}
+.stat .v small{font-size:1rem;font-weight:600;color:var(--muted);margin-left:4px}
+.stat .k{color:var(--muted);font-size:.85rem}
+.stats button{margin-left:auto}
+button{font:inherit;font-weight:600;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+aside{background:var(--panel);border-radius:10px;padding:4px 18px 18px}
+aside section{padding-top:14px}
+aside section+section{border-top:1px solid var(--line);margin-top:14px}
+h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.25rem;margin:0 0 8px}
+.caption{color:var(--muted);font-size:.85rem;margin:8px 0 0}
+#inset{display:block;width:100%;max-width:300px;aspect-ratio:1;margin:0 auto}
+.result{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.result .big{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:2rem;line-height:1}
+.result .sub{color:var(--muted)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:0}
+dt{color:var(--muted)}
+dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+dd small{color:var(--muted)}
+.empty{color:var(--muted);margin:0}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:10px 0 6px;background:var(--line)}
+.bar span{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.82rem;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:0}
+.odds{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.odds > div{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.odds .v{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.6rem;line-height:1.05}
+.odds .k{font-size:.8rem;color:var(--muted)}
+.slider{margin-top:10px}
+.slider label{display:flex;justify-content:space-between;gap:10px;font-size:.92rem}
+.slider label output{font-variant-numeric:tabular-nums;color:var(--muted)}
+.slider input[type=range]{width:100%;accent-color:var(--accent);margin:4px 0 0}
+.slider .hint{font-size:.78rem;color:var(--muted)}
+.check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.92rem}
+.check input{accent-color:var(--accent);width:16px;height:16px}
+.sub-h{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:1.05rem;margin:16px 0 0;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Shot model lab</h1>
+    <p>The cursor sets your aim and release timing sets your launch speed; every shot is then simulated against a real rim and backboard, with noise from movement, the contest and a universal floor. Defenders’ hands can block it for real.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="court-box"><canvas id="court" tabindex="0" aria-label="Half court. Move with W A S D, aim with the mouse, hold and release the mouse button to shoot."></canvas></div>
+      <p class="help"><strong>Jumpers:</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, cursor to aim. Hold the mouse button and let go when the meter reaches the line. Moving shots drift with your momentum, so aim against it. Put the cursor on the backboard beside the rim to bank it: the marker turns green where a bank can go in from your spot. A clean look (nobody within about 8 ft, feet set) with a perfect release goes in about 60% of the time, and its misses rim out instead of clanging. Let go within the first 150 ms to pump fake instead: the ball comes back down, your dribble is dead, and a defender who bit may be in the air. Hold the key that moves you away from the rim as you start a jumper (within the first 150 ms) to commit to a fadeaway: a fixed fade with its own, later release line on the meter. Hold a diagonal (<kbd>S</kbd>+<kbd>A</kbd> or <kbd>S</kbd>+<kbd>D</kbd>) for a side fade: a smaller release shift, but the fade pushes the ball sideways, so aim against it.<br>
+      <strong>Finishes:</strong> drive at the rim and click inside about 7 ft. The cursor picks which side of the rim you finish on; finish away from the defender to shield the ball. Keep holding to hang in the air and wait out a shot blocker, at the cost of control. Hold <kbd>Shift</kbd> as you click to try a dunk.<br>
+      <strong>Dribbling:</strong> the ball bounces toward your cursor. Keep it on the side away from the defender; the farther out the cursor, the longer and more exposed the dribble. Switch sides for a crossover. Slow down with the cursor pulled in tight and the ball hangs up like a pull-up; a defender who respects your shot steps up, and that’s the moment to explode past. Nothing is a button: the defender just reacts to what they saw a moment ago.<br>
+      <strong>Gather:</strong> press <kbd>Space</kbd> to pick up your dribble. On the move you get two gather steps: each foot follows WASD until it plants (a ghost circle shows where it will land), so you can steer it mid-step. Changing direction on the second step is a euro; letting go of WASD on the second step is a jump stop. Click whenever you want to go up. Gathered while stopped, your dribble is dead: the cursor holds the ball and turns your body around the pivot foot, and WASD moves your free foot. The first foot you move is the one on the ball’s side. You can’t dribble again until you shoot.<br>
+      <strong>Floaters:</strong> click while driving from about 7 to 14 ft. It’s a lenient timed release whose arc clears a rim protector who stays home. Keep driving instead and you get a layup.</p>
+      <div class="stats" aria-live="polite">
+        <div class="stat"><div class="v" id="sFG">0/0<small>–</small></div><div class="k">Field goals</div></div>
+        <div class="stat"><div class="v" id="s3">0/0<small>–</small></div><div class="k">Threes</div></div>
+        <div class="stat"><div class="v" id="s2">0/0<small>–</small></div><div class="k">Twos</div></div>
+        <div class="stat"><div class="v" id="sRim">0/0<small>–</small></div><div class="k">At the rim</div></div>
+        <div class="stat"><div class="v" id="sFl">0/0<small>–</small></div><div class="k">Floaters</div></div>
+        <div class="stat"><div class="v" id="sPPS">–</div><div class="k">Points per shot</div></div>
+        <div class="stat"><div class="v" id="sTO">0</div><div class="k">Turnovers</div></div>
+        <div class="stat"><div class="v" id="sPPP">–</div><div class="k">Points per possession</div></div>
+        <button id="reset" type="button">Reset stats</button>
+      </div>
+    </div>
+
+    <aside>
+      <section>
+        <h2>Last shot, side on</h2>
+        <canvas id="inset" aria-label="Rim view of shot landing spots"></canvas>
+        <p class="caption">The last shot near the rim, drawn to scale from the side: its arc, the rim and glass, and dots where the ball touched (blue for glass). Shots are simulated against a real rim and backboard.</p>
+      </section>
+
+      <section>
+        <h2>Last shot</h2>
+        <div id="last"><p class="empty">Take a shot to see how it was resolved.</p></div>
+      </section>
+
+      <section>
+        <h2>Current look</h2>
+        <dl>
+          <dt>A click now gives</dt><dd id="lKind">–</dd>
+          <dt>Distance</dt><dd id="lDist">–</dd>
+          <dt>Contest right now</dt><dd id="lCon">–</dd>
+          <dt>Rim protector</dt><dd id="lRim">–</dd>
+          <dt>Handle</dt><dd id="lHandle">–</dd>
+          <dt>On-ball defender</dt><dd id="lDef">–</dd>
+          <dt>Scatter</dt><dd id="lSig">–</dd>
+        </dl>
+        <div class="bar" id="lBar"><span></span><span></span><span></span><span></span></div>
+        <div class="legend">
+          <span><i style="background:var(--seg1)"></i><b id="lg1">Shooter</b></span>
+          <span><i style="background:var(--seg2)"></i><b id="lg2">Distance</b></span>
+          <span><i style="background:var(--seg3)"></i><b id="lg3">Movement</b></span>
+          <span><i style="background:var(--seg4)"></i><b id="lg4">Contest</b></span>
+        </div>
+        <div class="odds">
+          <div><div class="v" id="lCeil">–</div><div class="k" id="lCeilK">Ceiling, perfect input</div></div>
+          <div><div class="v" id="lAim">–</div><div class="k" id="lAimK">With your aim and momentum</div></div>
+        </div>
+        <p class="caption" id="lMove"></p>
+      </section>
+
+      <section>
+        <h2>Tuning</h2>
+        <p class="sub-h" style="margin-top:0">Jump shooting</p>
+        <div class="slider"><label for="tAssist">Timing assist <output id="o-tAssist"></output></label><input id="tAssist" type="range" min="0" max="60" step="1" value="15"><div class="hint">Release error inside this window costs nothing.</div></div>
+        <div class="slider"><label for="bonus">Perfect release bonus <output id="o-bonus"></output></label><input id="bonus" type="range" min="0" max="50" step="5" value="30"><div class="hint">How much a perfect release tightens the shooter’s own scatter. Contest scatter is untouched.</div></div>
+        <div class="slider"><label for="fadeR">Fadeaway rating <output id="o-fadeR"></output></label><input id="fadeR" type="range" min="40" max="99" step="1" value="70"><div class="hint">How much consistency a fade costs. The depth push is always compensated by the later release.</div></div>
+        <div class="slider"><label for="aAssist">Aim assist <output id="o-aAssist"></output></label><input id="aAssist" type="range" min="0" max="80" step="5" value="40"><div class="hint">Shrinks lateral input error, including uncorrected drift.</div></div>
+        <div class="slider"><label for="drift">Drift strength <output id="o-drift"></output></label><input id="drift" type="range" min="0" max="2" step="0.1" value="1"></div>
+        <p class="sub-h">Dribbling</p>
+        <div class="slider"><label for="handle">Ball handling <output id="o-handle"></output></label><input id="handle" type="range" min="40" max="99" step="1" value="80"><div class="hint">Harder to read (adds to the defender’s reaction time), fewer steals.</div></div>
+        <p class="sub-h">Finishing</p>
+        <div class="slider"><label for="finish">Finishing rating <output id="o-finish"></output></label><input id="finish" type="range" min="40" max="99" step="1" value="80"><div class="hint">Touch, plus how much speed you can carry into a layup under control.</div></div>
+        <div class="slider"><label for="dunk">Dunk rating <output id="o-dunk"></output></label><input id="dunk" type="range" min="40" max="99" step="1" value="75"><div class="hint">Below 55, dunks are unavailable. Higher wins more duels with a shot blocker.</div></div>
+        <p class="sub-h">Defense</p>
+        <label class="check"><input id="defOn" type="checkbox" checked> On-ball defender</label>
+        <label class="check"><input id="rimOn" type="checkbox" checked> Rim protector</label>
+        <div class="slider"><label for="stepUp">Rim protector steps up <output id="o-stepUp"></output></label><input id="stepUp" type="range" min="0" max="100" step="5" value="50"><div class="hint">Chance per drive that the big comes out to take away the floater, conceding the lane.</div></div>
+        <div class="slider"><label for="sag">Guarding distance <output id="o-sag"></output></label><input id="sag" type="range" min="3" max="12" step="0.5" value="4.5"></div>
+        <div class="slider"><label for="dQuick">On-ball quickness <output id="o-dQuick"></output></label><input id="dQuick" type="range" min="40" max="99" step="1" value="70"><div class="hint">Reaction time, lateral speed and acceleration.</div></div>
+        <div class="slider"><label for="dSteal">On-ball steals <output id="o-dSteal"></output></label><input id="dSteal" type="range" min="40" max="99" step="1" value="60"></div>
+        <div class="slider"><label for="react">Reaction time <output id="o-react"></output></label><input id="react" type="range" min="100" max="500" step="10" value="250"><div class="hint">Also sets roughly when shot blockers leave their feet on a finish.</div></div>
+        <div class="slider"><label for="length">On-ball defender length <output id="o-length"></output></label><input id="length" type="range" min="0.7" max="1.3" step="0.05" value="1"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+// Shot physics: milestone 1 of the design doc.
+// Pure and deterministic: the same launch always produces the same path.
+// Units: feet, seconds. x/y on the court (y = 0 is the baseline), z up.
+
+const PHYS = {
+  G: 32.17,
+  RIM: { x: 25, y: 5.25, z: 10.0, r: 0.75, tube: 0.026 },   // 18 in inner diameter, 5/8 in tube
+  BOARD: { y: 4.0, x0: 22, x1: 28, z0: 9.5, z1: 13.0 },     // front face 15 in behind rim center
+  BALL_R: 0.39,                                             // 4.7 in
+  E_RIM: 0.6, MU_RIM: 0.3,                                  // starting values, to tune
+  E_BOARD: 0.75, MU_BOARD: 0.2,
+  E_FLOOR: 0.75, MU_FLOOR: 0.1,
+  DT: 0.001, DT_NEAR: 0.0005, DT_FAR: 0.01,                 // finer steps near the rim, big ones far from it
+  T_MAX: 3.5,
+  NET_DEPTH: 0.6,                                           // make confirmed this far below the rim, still inside
+};
+
+const v3 = {
+  add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }),
+  sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }),
+  mul: (a, k) => ({ x: a.x*k, y: a.y*k, z: a.z*k }),
+  dot: (a, b) => a.x*b.x + a.y*b.y + a.z*b.z,
+  len: a => Math.hypot(a.x, a.y, a.z),
+};
+
+// Bounce off a surface with outward normal n: restitution on the normal part, Coulomb friction on the rest.
+function bounce(vel, n, e, mu) {
+  const vn = v3.dot(vel, n);
+  if (vn >= 0) return vel;                                   // already separating
+  const velN = v3.mul(n, vn), velT = v3.sub(vel, velN), tl = v3.len(velT);
+  const jn = -(1 + e)*vn;                                    // normal impulse per unit mass
+  const tScale = tl > 1e-9 ? Math.max(0, 1 - mu*jn/tl) : 0;  // friction can stop sliding, never reverse it
+  return v3.add(v3.mul(velT, tScale), v3.mul(velN, -e));
+}
+
+// Ideal launch speed through `target` from `from` at elevation `elev` (radians). Null if unreachable.
+function idealSpeed(from, target, elev) {
+  const d = Math.hypot(target.x - from.x, target.y - from.y), dz = target.z - from.z;
+  const denom = 2*Math.cos(elev)**2*(d*Math.tan(elev) - dz);
+  return denom > 0 ? Math.sqrt(PHYS.G*d*d/denom) : null;
+}
+
+// Build a launch velocity: speed, elevation (radians), and a horizontal heading toward `target`
+// rotated by `azimuthOffset` (radians, positive = to the shooter's right).
+function launchVelocity(from, target, speed, elev, azimuthOffset = 0) {
+  const h = Math.atan2(target.y - from.y, target.x - from.x) + azimuthOffset;  // with y growing away from the baseline, the shooter's right is +angle
+  return { x: Math.cos(h)*Math.cos(elev)*speed, y: Math.sin(h)*Math.cos(elev)*speed, z: Math.sin(elev)*speed };
+}
+
+function rimContact(c) {
+  const R = PHYS.RIM, dx = c.x - R.x, dy = c.y - R.y, hl = Math.hypot(dx, dy);
+  const ux = hl > 1e-9 ? dx/hl : 1, uy = hl > 1e-9 ? dy/hl : 0;
+  const p = { x: R.x + ux*R.r, y: R.y + uy*R.r, z: R.z };   // closest point on the ring
+  const d = v3.sub(c, p), dist = v3.len(d), reach = PHYS.BALL_R + R.tube;
+  if (dist >= reach) return null;
+  return { p, n: v3.mul(d, 1/(dist || 1e-9)), depth: reach - dist };
+}
+
+function boardContact(c) {
+  const B = PHYS.BOARD;
+  if (c.y - PHYS.BALL_R >= B.y || c.y < B.y - 0.5) return null;          // in front of the face, or long gone behind it
+  if (c.x < B.x0 || c.x > B.x1 || c.z < B.z0 || c.z > B.z1) return null;  // edges ignored for now
+  return { n: { x: 0, y: 1, z: 0 }, depth: B.y + PHYS.BALL_R - c.y };
+}
+
+// Simulate a whole shot. Returns the path (every ~10 ms), the contact log, and the outcome.
+function simulateShot(launch, opts = {}) {
+  const R = PHYS.RIM;
+  let c = { ...launch.pos }, vel = { ...launch.vel }, t = 0;
+  const path = [{ t, ...c }], contacts = [];
+  let wentIn = false, made = false, madeAt = null, sinceSample = 0, floorBounces = 0, blocked = false, goaltend = false;
+  const hands = opts.hands || [];                            // defenders' hands: { at: t => {x, y, z}, r }
+  let maxSpeedAfter = [];                                    // for the energy check
+  while (t < PHYS.T_MAX) {
+    const hR = Math.hypot(c.x - R.x, c.y - R.y);
+    const nearRim = hR < 2 && Math.abs(c.z - R.z) < 1.5;
+    const far = hR > 3.2 && c.z > 1.5;                       // nothing to hit out here: take big steps
+    const dt = nearRim ? PHYS.DT_NEAR : far ? PHYS.DT_FAR : PHYS.DT;
+    const prevZ = c.z;
+    c = { x: c.x + vel.x*dt, y: c.y + vel.y*dt, z: c.z + vel.z*dt - 0.5*PHYS.G*dt*dt };   // exact free flight
+    vel = { x: vel.x, y: vel.y, z: vel.z - PHYS.G*dt };
+    t += dt;
+
+    const rc = rimContact(c);
+    if (rc) {
+      const before = v3.len(vel);
+      c = v3.add(c, v3.mul(rc.n, rc.depth));
+      vel = bounce(vel, rc.n, PHYS.E_RIM, PHYS.MU_RIM);
+      const last = contacts[contacts.length - 1];
+      if (!last || last.type !== "rim" || t - last.t > 0.02) contacts.push({ type: "rim", t, x: rc.p.x, y: rc.p.y, z: rc.p.z, before, after: v3.len(vel) });
+      else last.after = v3.len(vel);
+    }
+    const bc = boardContact(c);
+    if (bc && vel.y < 0) {
+      const before = v3.len(vel);
+      c = v3.add(c, v3.mul(bc.n, bc.depth));
+      vel = bounce(vel, bc.n, PHYS.E_BOARD, PHYS.MU_BOARD);
+      contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel) });
+    }
+    // hands: a touch on the way up is a block; on the way down over the rim it's goaltending (counts as a make)
+    if (hands.length && !made && !blocked) for (const h of hands) {
+      const hp = h.at(t), d = v3.sub(c, hp), dist = v3.len(d), reach = PHYS.BALL_R + (h.r || 0.35);
+      if (dist >= reach) continue;
+      const before = v3.len(vel);
+      if (vel.z < 0 && c.z > R.z && Math.hypot(c.x - R.x, c.y - R.y) < 1.6) {
+        goaltend = true; made = true; madeAt = t;
+        contacts.push({ type: "goaltend", t, x: hp.x, y: hp.y, z: hp.z, before, after: before });
+      } else {
+        blocked = true;
+        const n = v3.mul(d, 1/(dist || 1e-9));
+        c = v3.add(hp, v3.mul(n, reach));
+        vel = bounce(vel, n, 0.45, 0.3);                     // swatted: loses most of its pace
+        vel.z = Math.min(vel.z, -4);                         // and goes down
+        contacts.push({ type: "block", t, x: hp.x, y: hp.y, z: hp.z, before, after: v3.len(vel) });
+      }
+      break;
+    }
+    // make detection: down through the rim plane with the center inside the ring, then on into the net
+    const hl = Math.hypot(c.x - R.x, c.y - R.y);
+    if (prevZ >= R.z && c.z < R.z && vel.z < 0) wentIn = hl < R.r;
+    if (wentIn && c.z > R.z) wentIn = false;                 // popped back out
+    if (!made && !blocked && wentIn && c.z <= R.z - PHYS.NET_DEPTH && hl < R.r) {
+      made = true; madeAt = t;
+      vel = v3.mul(vel, 0.3);                               // the net takes the pace off
+    }
+    if (c.z - PHYS.BALL_R < 0) {
+      c.z = PHYS.BALL_R;
+      const before = v3.len(vel);
+      vel = bounce(vel, { x: 0, y: 0, z: 1 }, PHYS.E_FLOOR, PHYS.MU_FLOOR);
+      contacts.push({ type: "floor", t, x: c.x, y: c.y, z: 0, before, after: v3.len(vel) });
+      if (++floorBounces >= (opts.floorBounces ?? 2)) break;
+    }
+    if (opts.quick && (made || (c.z < R.z - 1.5 && vel.z < 0))) break;   // outcome decided: stop early
+    sinceSample += dt;
+    if (sinceSample >= 0.01) { path.push({ t, ...c }); sinceSample = 0; }
+  }
+  path.push({ t, ...c });
+  return { path, contacts, made, madeAt, blocked, goaltend, label: labelFor(launch, contacts, made, madeAt) };
+}
+
+function labelFor(launch, contacts, made, madeAt) {
+  const early = contacts.filter(k => k.type !== "floor" && (madeAt === null || k.t <= madeAt));
+  const R = PHYS.RIM;
+  if (contacts.some(k => k.type === "goaltend")) return "Goaltending";
+  if (contacts.some(k => k.type === "block")) return "Blocked";
+  if (made) {
+    if (!early.length) return "Swish";
+    return early[0].type === "board" ? "Bank" : "In off the rim";
+  }
+  const hits = contacts.filter(k => k.type !== "floor");
+  if (!hits.length) return "Airball";
+  const first = hits[0];
+  if (first.type === "board") return "Off the glass";
+  // which part of the rim: along the shot's horizontal direction
+  const ux = R.x - launch.pos.x, uy = R.y - launch.pos.y, ul = Math.hypot(ux, uy) || 1;
+  const along = ((first.x - R.x)*ux + (first.y - R.y)*uy)/ul/R.r;
+  const rimHits = hits.filter(k => k.type === "rim").length;
+  if (rimHits >= 2) return "In and out";
+  if (along < -0.5) return "Front rim";
+  if (along > 0.5) return "Back iron";
+  return "Off the side";
+}
+
+if (typeof module !== "undefined") module.exports = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact };
+
+window.PhysicsLib = { PHYS, idealSpeed, launchVelocity, simulateShot };
+</script>
+<script>
+// Launch model: milestone 2 of the design doc.
+// Turns what the player did (aim, timing, carried momentum) and the situation (shot type, contest)
+// into a launch for the physics: release point, velocity, and the ideal launch it was built from.
+const PL = (typeof module !== "undefined") ? require("./physics.js") : window.PhysicsLib;
+
+const LAUNCH = {
+  ELEV: { jumper: 48, floater: 60, layup: 58 },       // degrees
+  REL_Z: { jumper: 9.6, floater: 8.7, layup: 9.6 },   // release height, ft: jumpers release near the top of their jump (placeholders until frames)
+  REL_FWD: 0.7,                                       // release point this far in front of the body, toward the target
+  CONTEST_ARC: 6,                                     // degrees of extra arc at full contest
+  // Calibrated by calibrateLaunch() so sensitivities match today's model at 24 ft (see below)
+  K_SPEED: 0,                                         // fraction of launch speed per ms of post-assist timing error
+  F_LAT: 0, F_DEP: 0,                                 // share of body velocity the ball inherits, sideways and along the shot
+  // Today's model, the targets for continuity
+  OLD: { KT: 0.09, DRIFT_LAT: 1.6, DRIFT_DEP: 1.0 },
+};
+const RIMC = () => ({ x: PL.PHYS.RIM.x, y: PL.PHYS.RIM.y, z: PL.PHYS.RIM.z });
+const rad = d => d*Math.PI/180;
+
+// Where a launch's free flight comes down through rim height, as offsets from the rim center in inches:
+// lateral (+ = shooter's right) and depth (+ = long). Pure kinematics, no collisions.
+function rimPlaneOffset(L, from) {
+  const R = RIMC(), g = PL.PHYS.G;
+  const a = -g/2, b = L.vel.z, c = L.pos.z - R.z;
+  const disc = b*b - 4*a*c; if (disc < 0) return null;
+  const t = (-b - Math.sqrt(disc))/(2*a);                 // the later root: on the way down
+  const x = L.pos.x + L.vel.x*t, y = L.pos.y + L.vel.y*t;
+  const ux = R.x - from.x, uy = R.y - from.y, ul = Math.hypot(ux, uy);
+  const u = { x: ux/ul, y: uy/ul }, r = { x: -u.y, y: u.x };
+  const dx = x - R.x, dy = y - R.y;
+  return { lat: (dx*r.x + dy*r.y)*12, dep: (dx*u.x + dy*u.y)*12, t };
+}
+
+// inputs: kind, player {x, y}, aimTheta (radians, + = right), timingMs (post-assist), body {vx, vy}, contest 0..1,
+// noise { dv (fraction), de (deg), da (deg) } added on top
+function buildLaunch(inp) {
+  const R = RIMC(), kind = inp.kind || "jumper";
+  const ux = R.x - inp.player.x, uy = R.y - inp.player.y, ul = Math.hypot(ux, uy) || 1;
+  const u = { x: ux/ul, y: uy/ul }, r = { x: -u.y, y: u.x };
+  const pos = { x: inp.player.x + u.x*LAUNCH.REL_FWD, y: inp.player.y + u.y*LAUNCH.REL_FWD, z: inp.relZ ?? LAUNCH.REL_Z[kind] };
+  const target = inp.target || R;
+  const n = inp.noise || { dv: 0, de: 0, da: 0 };
+  const elev = rad(LAUNCH.ELEV[kind] + LAUNCH.CONTEST_ARC*(inp.contest || 0));
+  const ideal = PL.idealSpeed(pos, target, elev);
+  if (!ideal) return null;
+  const speed = ideal*(1 + LAUNCH.K_SPEED*(inp.timingMs || 0) + n.dv);
+  const vel = PL.launchVelocity(pos, target, speed, elev + rad(n.de), (inp.aimTheta || 0) + rad(n.da));
+  // carried momentum: the ball inherits part of the body's velocity, split into sideways and along-the-shot parts
+  const b = inp.body || { vx: 0, vy: 0 };
+  const bl = b.vx*r.x + b.vy*r.y, ba = b.vx*u.x + b.vy*u.y;
+  vel.x += r.x*bl*LAUNCH.F_LAT + u.x*ba*LAUNCH.F_DEP;
+  vel.y += r.y*bl*LAUNCH.F_LAT + u.y*ba*LAUNCH.F_DEP;
+  return { pos, vel, ideal, elev, target, from: inp.player };
+}
+
+// Set K_SPEED, F_LAT and F_DEP so a jumper from 24 ft responds like today's model:
+// 0.09 in of depth per ms, 1.6 in sideways and 1.0 in of depth per ft/s of carried momentum.
+function calibrateLaunch(dist = 24) {
+  const R = RIMC(), player = { x: R.x, y: R.y + dist };
+  const base = () => rimPlaneOffset(buildLaunch({ kind: "jumper", player }), player);
+  const o = { K_SPEED: LAUNCH.K_SPEED, F_LAT: LAUNCH.F_LAT, F_DEP: LAUNCH.F_DEP };
+  // depth per unit of speed fraction
+  LAUNCH.K_SPEED = 1e-4; const dT = rimPlaneOffset(buildLaunch({ kind: "jumper", player, timingMs: 10 }), player).dep - base().dep;
+  LAUNCH.K_SPEED = 1e-4*LAUNCH.OLD.KT*10/dT;
+  // sideways inheritance: body moving to the shooter's right is +x here (shooter faces -y)
+  LAUNCH.F_LAT = 0.1; const dL = rimPlaneOffset(buildLaunch({ kind: "jumper", player, body: { vx: 1, vy: 0 } }), player).lat - base().lat;
+  LAUNCH.F_LAT = 0.1*LAUNCH.OLD.DRIFT_LAT/dL;
+  LAUNCH.F_DEP = 0.1; const dD = rimPlaneOffset(buildLaunch({ kind: "jumper", player, body: { vx: 0, vy: -1 } }), player).dep - base().dep;
+  LAUNCH.F_DEP = 0.1*LAUNCH.OLD.DRIFT_DEP/dD;
+  return { before: o, after: { K_SPEED: LAUNCH.K_SPEED, F_LAT: LAUNCH.F_LAT, F_DEP: LAUNCH.F_DEP } };
+}
+calibrateLaunch();
+
+// The spot on the glass, at lateral position aimX, that banks a perfect shot from here into the rim:
+// the middle of the range of heights that work. works = false if no height banks it in from here.
+function glassTarget(player, kind, aimX) {
+  const B = PL.PHYS.BOARD, y = B.y + PL.PHYS.BALL_R, zs = [];
+  for (let z = 10.1; z <= 12.6; z += 0.1) {
+    const L = buildLaunch({ kind, player, target: { x: aimX, y, z } });
+    if (!L) continue;
+    const r = PL.simulateShot(L, { quick: true });
+    if (r.made && r.contacts[0] && r.contacts[0].type === "board") zs.push(z);
+  }
+  return zs.length ? { target: { x: aimX, y, z: zs[Math.floor(zs.length/2)] }, works: true, range: zs.length*0.1 }
+                   : { target: { x: aimX, y, z: 11.2 }, works: false, range: 0 };
+}
+
+if (typeof module !== "undefined") module.exports = { LAUNCH, buildLaunch, rimPlaneOffset, calibrateLaunch, glassTarget };
+else window.LaunchLib = { LAUNCH, buildLaunch, rimPlaneOffset, calibrateLaunch, glassTarget };
+
+</script>
+<script>
+// Noise in launch space: milestone 3.
+// Today's scatter components (inches at the rim, already tuned in play) are converted into launch noise
+// (speed fraction, direction angle) using each shot's own sensitivities, then scaled by one multiplier per
+// shot type found by calibration. Ratings are gone: the shooter term is a universal floor.
+const PLn = (typeof module !== "undefined") ? require("./physics.js") : window.PhysicsLib;
+const LLn = (typeof module !== "undefined") ? require("./launch.js") : window.LaunchLib;
+
+const NOISE = {
+  FLOOR_IN: 3.93,            // universal floor, inches (today's 80-rated shooter term)
+  BONUS: 0.30,               // perfect release shrinks the floor by up to this
+  DIST_IN: 0.10, MOVE_IN: 0.14, CONTEST_IN: 6.0,
+  DEP_RATIO: { jumper: 1.16, floater: 1.45, layup: 1.2 },
+  FLOATER_FLOOR_IN: 4.6, FLOATER_MOVE_IN: 0.08, FLOATER_CONTEST_IN: 5.0,
+  LAYUP_FLOOR_IN: 2.48,      // today's 80 finisher
+  MULT: { jumper: 1, floater: 1, layup: 1 },   // set by calibration
+  PREMIUM: 0.13, CAP: 1.35,                    // clean looks; set by calibration
+  TAIL_IN: 12.5, CONTEST_TAIL_IN: 0,           // a contest can push past that: a heavily altered shot can airball (set by calibration)
+                                // noise alone can carry a shot at most this far from the rim's center (in):
+                                               // a hard clank off the rim's edge, never clean past it. Airballs come from mistakes.
+};
+
+// Today's components, in inches: { lat, dep }
+function scatterIn(s) {
+  const q = s.q ?? 1, kind = s.kind || "jumper";
+  let lat;
+  if (kind === "floater") {
+    const r = NOISE.FLOATER_FLOOR_IN*(1 - NOISE.BONUS*q);
+    lat = Math.hypot(r, NOISE.DIST_IN*s.dist, NOISE.FLOATER_MOVE_IN*(s.move || 0), NOISE.FLOATER_CONTEST_IN*(s.contest || 0));
+  } else if (kind === "layup") {
+    lat = Math.hypot(NOISE.LAYUP_FLOOR_IN, s.extra || 0, 3.5*(s.contest || 0));
+  } else {
+    const r = NOISE.FLOOR_IN*(1 - NOISE.BONUS*q);
+    lat = Math.hypot(r, NOISE.DIST_IN*s.dist, Math.hypot(NOISE.MOVE_IN*(s.move || 0), s.fadeIn || 0), NOISE.CONTEST_IN*(s.contest || 0));
+  }
+  lat *= NOISE.MULT[kind]*(1 - NOISE.PREMIUM*(s.clean || 0)*q);
+  return { lat, dep: lat*NOISE.DEP_RATIO[kind] };
+}
+
+// Local sensitivities of a launch: inches at the rim per radian of direction and per unit of speed fraction
+function sensitivity(inp) {
+  const base = LLn.rimPlaneOffset(LLn.buildLaunch(inp), inp.player);
+  const a = LLn.rimPlaneOffset(LLn.buildLaunch({ ...inp, noise: { dv: 0, de: 0, da: 0.1 } }), inp.player);
+  const v = LLn.rimPlaneOffset(LLn.buildLaunch({ ...inp, noise: { dv: 0.002, de: 0, da: 0 } }), inp.player);
+  return { latPerRad: (a.lat - base.lat)/(0.1*Math.PI/180), depPerFrac: (v.dep - base.dep)/0.002 };
+}
+
+// Draw one shot's launch noise. z = two standard normals (lateral, depth); clean perfect shots get capped.
+function sampleNoise(inp, sc, z) {
+  const sens = sensitivity(inp);
+  const shape = (sc.clean || 0)*(sc.q ?? 1);
+  let zl = z[0], zd = z[1];
+  if (shape > 0.05) { const zr = Math.hypot(zl, zd), cap = NOISE.CAP/shape; if (zr > cap) { zl *= cap/zr; zd *= cap/zr; } }
+  const s = scatterIn(sc);
+  { const rin = Math.hypot(zl*s.lat, zd*s.dep); const lim = NOISE.TAIL_IN + NOISE.CONTEST_TAIL_IN*(sc.contest || 0); if (rin > lim) { zl *= lim/rin; zd *= lim/rin; } }
+  return { dv: zd*s.dep/sens.depPerFrac, de: 0, da: (zl*s.lat/sens.latPerRad)*180/Math.PI };
+}
+
+function rngN(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
+function gaussN(r) { const a = Math.max(1e-9, r()), b = r(); return Math.sqrt(-2*Math.log(a))*Math.cos(2*Math.PI*b); }
+
+// Make rate (and outcome mix) for a situation, by simulation
+const NEAR_MISS_IN = 11;
+function makeRate(situ, n = 3000, seed = 1) {
+  const R = PLn.PHYS.RIM, r = rngN(seed), player = situ.player || { x: R.x, y: R.y + situ.dist };
+  const base = { kind: situ.kind || "jumper", player, contest: situ.contest || 0, timingMs: situ.timingMs || 0, relZ: situ.relZ };
+  const sc = { kind: base.kind, dist: situ.dist, q: situ.q ?? 1, move: situ.move || 0, contest: situ.contest || 0,
+               clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0 };
+  let made = 0, near = 0, misses = 0, air = 0; const labels = {};
+  for (let i = 0; i < n; i++) {
+    const noise = sampleNoise(base, sc, [gaussN(r), gaussN(r)]);
+    const L = LLn.buildLaunch({ ...base, noise }), res = PLn.simulateShot(L, { quick: true });
+    labels[res.label] = (labels[res.label] || 0) + 1;
+    if (res.made) made++;
+    else {
+      misses++; if (res.label === "Airball") air++;
+      const o = LLn.rimPlaneOffset(L, player);                // a near miss comes down on the rim, not off its front or back
+      if (o && Math.hypot(o.lat, o.dep) <= NEAR_MISS_IN) near++;
+    }
+  }
+  return { rate: made/n, nearOfMisses: misses ? near/misses : 1, airballs: air, labels };
+}
+
+if (typeof module !== "undefined") module.exports = { NOISE, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };
+else window.NoiseLib = { NOISE, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };
+
+Object.assign(window.NoiseLib.NOISE, {
+ "MULT": {
+  "jumper": 1.2315551757812497,
+  "floater": 1.41915283203125,
+  "layup": 1.40020751953125
+ },
+ "DIST_IN": 0,
+ "CONTEST_IN": 6.173828125,
+ "PREMIUM": 0.04,
+ "CAP": 1.6,
+ "TAIL_IN": 12.5,
+ "CONTEST_TAIL_IN": 1.6
+});   // calibration (milestone 3)
+</script>
+<script>
+(() => {
+"use strict";
+
+// ---------- Model constants (inches, feet, ms) ----------
+const C = {
+  IDEAL: 520, MAX: 820,          // jumper: perfect release point, auto-release
+  KT: 0.09,                      // in of depth bias per ms of post-assist timing error
+  WIN_A: 4.3, WIN_B: 5.0,        // jumper make window half-sizes (in)
+  DEP_RATIO: 1.16,
+  TAU: 0.40,                     // s, momentum bleed once a jumper starts
+  PSPEED: 15, PACC: 70,
+  DSPEED: 13, DACC: 50, CLOSE_SPEED: 15.5, CLOSE_ACC: 60,
+  DRIFT_LAT: 1.6, DRIFT_DEP: 1.0,
+  CONTEST_SIG: 6.0, CONTEST_BIAS: 2.5,
+  PERFECT_MS: 12,
+  CLEAN_PREMIUM: 0.13, NEAR_MISS_CAP: 1.35,   // clean looks: less scatter, and perfect misses rim out instead of clanging
+  // dribbling
+  STEP_T: 0.2, GATHER_SPEED: 6,   // gather steps
+  COMMIT_MS: 150,                  // release before this and the shot is a pump fake
+  ARM: 2.6, SHOULDER: 0.75,       // hands: reach from each shoulder (will come from wingspan)
+  DRIB_SPEED: 13.5, ACC0: 85, DECEL: 95, REACH_MIN: 0.7, REACH_MAX: 2.4,   // explosive from a stop, sharper to stop than to start
+  FADE_SPEED: 5, FADE_COMMIT: 150,   // canned fade: always the same, so its release timing is learnable
+  // finishing
+  FIN_A: 5.0, FIN_B: 6.0,        // softer touch, bigger window
+  RISE_LAYUP: 320, RISE_DUNK: 380, MAX_HANG: 450,
+  LAYUP_RANGE: 7, FLOATER_RANGE: 14, DUNK_RANGE: 9, DRIVE_SPEED: 4, DUNK_SPEED: 7,
+  // floaters: lenient timed release, high arc
+  FL_IDEAL: 330, FL_MAX: 560, FL_KT: 0.07, FL_PERFECT: 20, FL_A: 4.6, FL_B: 5.6, FL_DEP_RATIO: 1.45, FL_CONTEST_SIG: 5.0, FL_CONTEST_BIAS: 1.5,
+  RIM_CONTEST_SIG: 3.5, DUNK_FUMBLE: 0.04
+};
+const HOOP = { x: 25, y: 5.25 };
+const VIEW = { w: 53, h: 41.5 };                    // canvas aspect
+const CAM = { h: 36, lead: 7.5, tau: 0.06 };          // follow camera: visible height (ft), lead toward the baseline, smoothing (s)
+const cam = { x: 25, y: 26 - 7.5 };
+const CACHE = { x0: -14, y0: -16, w: 78, h: 72 };     // world area pre-drawn into the court image
+const params = { rating: 80, fadeR: 70, handle: 80, dQuick: 70, dSteal: 60, tAssist: 15, bonus: 30, aAssist: 40, drift: 1, finish: 80, floater: 75, dunk: 75, stepUp: 50,
+                 defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 };
+
+// ---------- Monte Carlo ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const seeded = mulberry32(20261109);
+const MCN = 3000, MC = new Float32Array(MCN*2);
+for (let i = 0; i < MCN; i++) {
+  const u1 = Math.max(1e-9, seeded()), u2 = seeded(), r = Math.sqrt(-2*Math.log(u1));
+  MC[i*2] = r*Math.cos(2*Math.PI*u2); MC[i*2+1] = r*Math.sin(2*Math.PI*u2);
+}
+function pMake(bLat, bDep, sLat, sDep, A = C.WIN_A, B = C.WIN_B) {
+  let n = 0;
+  for (let i = 0; i < MCN; i++) {
+    const x = (bLat + MC[i*2]*sLat)/A, y = (bDep + MC[i*2+1]*sDep)/B;
+    if (x*x + y*y <= 1) n++;
+  }
+  return n/MCN;
+}
+function gauss(){ const u1 = Math.max(1e-9, Math.random()), u2 = Math.random(); return Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2); }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------- Physics shots (milestone 4) ----------
+// Jumpers, floaters and layups are launched and simulated against a real rim and backboard.
+const PHX = window.PhysicsLib, LNX = window.LaunchLib, NZX = window.NoiseLib;
+let lastPhys = null;                                     // last simulated shot, for the side-on replay
+// carried momentum split along the shot, each part scaled (aim assist on the sideways part, as before)
+function liftBody(f, vx, vy, latK = 1, depK = 1) {
+  const bl = vx*f.r.x + vy*f.r.y, ba = vx*f.u.x + vy*f.u.y;
+  return { vx: (f.r.x*bl*latK + f.u.x*ba*depK)*params.drift, vy: (f.r.y*bl*latK + f.u.y*ba*depK)*params.drift };
+}
+function physNoise(inp, sc, z) { NZX.NOISE.BONUS = params.bonus/100; return NZX.sampleNoise(inp, sc, z || [gauss(), gauss()]); }
+function physRates(inp, sc, n, zs) {
+  let m = 0, b = 0;
+  for (let i = 0; i < n; i++) {
+    const L = LNX.buildLaunch({ ...inp, noise: physNoise(inp, sc, zs && zs[i]) });
+    if (!L) continue;
+    const r = PHX.simulateShot(L, { quick: true, hands: inp.hands || [] });
+    if (r.made) m++; if (r.blocked) b++;
+  }
+  return { make: m/n, block: b/n };
+}
+const physChance = (inp, sc, n, zs) => physRates(inp, sc, n, zs).make;
+// Defenders' hands during the flight: where the hand is now, carried by their motion, at standing reach if it's up,
+// plus any jump in progress or already scheduled. Reach heights are placeholders until frames.
+function handPaths() {
+  const out = [];
+  for (const d of defenders()) {
+    const dist = Math.hypot(d.x - P.x, d.y - P.y);
+    if (dist > 7) continue;
+    const tl = dist || 1, reach = 0.85 + 0.75*Math.max(d.hand, d.h);
+    const hx = d.x + (P.x - d.x)/tl*reach, hy = d.y + (P.y - d.y)/tl*reach;
+    const stand = d === R ? 8.9 : 8.2*(0.94 + 0.06*params.length);
+    const up = Math.max(d.hand, d.jumpT >= 0 ? 1 : 0);
+    const z0 = 6.2 + (stand - 6.2)*up;
+    const jumpStart = d.jumpT >= 0 ? -d.jumpT : (d.jumpAt !== null && shot.state === "shooting" ? Math.max(0, (d.jumpAt - shot.t)/1000) : null);
+    const vx = d.vx, vy = d.vy;
+    out.push({ r: 0.3, at: t => {
+      const tt = Math.min(t, 0.35), jt = jumpStart === null ? -1 : t - jumpStart;
+      return { x: hx + vx*tt, y: hy + vy*tt, z: z0 + (jt >= 0 && jt < 0.5 ? 2.2*Math.sin(Math.PI*jt/0.5) : 0) };
+    } });
+  }
+  return out;
+}
+function physOut(sr, layup) {
+  if (!sr) return { make: false, big: "Miss", sub: layup ? "Blown layup" : "Airball" };
+  const r = sr.res;
+  if (r.blocked) return { make: false, big: "Blocked", sub: layup ? "Swatted at the rim" : "Hand on the ball" };
+  if (r.goaltend) return { make: true, big: "Make", sub: "Goaltending" };
+  return { make: r.made, big: r.made ? "Make" : "Miss", sub: layup ? (LAYUP_LABEL[r.label] || r.label) : r.label };
+}
+// Aiming at the glass: the cursor on the backboard line, away from the rim. Height is chosen for you.
+let glassCache = {}, glassN = 0;
+function glassAimFor(kind) {
+  if (kind !== "jumper" && kind !== "floater") return null;
+  const B = PHX.PHYS.BOARD;
+  if (Math.abs(mouse.y - B.y) > 0.7 || mouse.x < B.x0 + 0.3 || mouse.x > B.x1 - 0.3 || Math.abs(mouse.x - HOOP.x) < 0.8) return null;
+  const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${mouse.x.toFixed(1)}`;
+  if (!glassCache[key]) { if (++glassN > 300) { glassCache = {}; glassN = 0; } glassCache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1)); }
+  return glassCache[key];
+}
+const liveEst = {};
+let liveZs = null;
+const liveZ = reuse => (reuse && liveZs) ? liveZs : (liveZs = Array.from({ length: 14 }, () => [gauss(), gauss()]));
+// running estimate: a few simulated shots per refresh. Estimates sharing a refresh share their random draws (zs),
+// so the gap between them is the effect of aim and momentum, not noise.
+function liveRates(key, inp, sc, zs) {
+  const p = physRates(inp, sc, 14, zs), e = liveEst[key];
+  liveEst[key] = e === undefined ? p : { make: e.make + (p.make - e.make)*0.12, block: e.block + (p.block - e.block)*0.12 };
+  return liveEst[key];
+}
+const liveChance = (key, inp, sc, zs) => liveRates(key, inp, sc, zs).make;
+function physShot(inp, sc) {
+  const L = LNX.buildLaunch({ ...inp, noise: physNoise(inp, sc) });
+  return L ? { L, res: PHX.simulateShot(L, { floorBounces: 2, hands: inp.hands || [] }) } : null;
+}
+// when the result is known: through the net, or the first time the ball drops below the rim after its peak
+function decideTime(res) {
+  if (res.made) return res.madeAt;
+  const p = res.path; let apex = 0;
+  for (let i = 1; i < p.length; i++) if (p[i].z > p[apex].z) apex = i;
+  for (let i = apex + 1; i < p.length; i++) if (p[i].z < 9.2) return p[i].t;
+  return p[p.length - 1].t;
+}
+function startPathBall(L, res) {
+  const RR = PHX.PHYS.RIM;
+  ball = { phase: "path", t: 0, i: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t,
+           announced: false, relZ: L.pos.z, rimDist: Math.hypot(L.pos.x - RR.x, L.pos.y - RR.y) || 1, reached: false };
+  lastPhys = { path: res.path, contacts: res.contacts, from: L.pos, made: res.made };
+}
+function pathPoint(b) {
+  while (b.i < b.path.length - 1 && b.path[b.i + 1].t <= b.t) b.i++;
+  return b.path[b.i];
+}
+// top-down drawing height: rises off the release and comes back to the rim's plane, then shows only height above the rim
+function pathVisH(b, p) {
+  const RR = PHX.PHYS.RIM, hd = Math.hypot(p.x - RR.x, p.y - RR.y);
+  if (hd < 1.2) b.reached = true;
+  if (b.reached) return Math.max(0, p.z - RR.z);
+  const sProg = clamp(1 - hd/b.rimDist, 0, 1);
+  return Math.max(0, p.z - (b.relZ + (RR.z - b.relZ)*sProg));
+}
+const ballFree = () => !ball || (ball.phase === "path" && ball.announced);
+const LAYUP_LABEL = { "Swish": "Finished", "Bank": "Kissed off the glass", "In off the rim": "Rolled in", "In and out": "In and out",
+  "Front rim": "Short off the front", "Back iron": "Too strong", "Off the side": "Off the side", "Off the glass": "Too strong off the glass", "Airball": "Blown layup" };
+
+// ---------- State ----------
+const P = { x: 25, y: 26, vx: 0, vy: 0 };
+function makeDef(x, y, len) { return { x, y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, len }; }
+const D = makeDef(25, 20, () => params.length);   // on-ball
+const R = makeDef(25, 9.5, () => 1.2);            // rim protector
+R.mode = null; R.upX = 25; R.upY = 13; R.upDist = 8;
+D.shade = 0; D.threat = 0;
+const mouse = { x: 25, y: 5.25 };
+const shot = { state: "idle", kind: "jumper", t: 0, held: false, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0 };
+let ball = null, fx = [], meterFlash = null, history = [], last = null, live = null, shiftDown = false;
+const stats = { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, pts: 0, to: 0 };
+const drib = { phase: 0, period: 400, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9,
+               top: 3, hold: 0, crossing: false, lastMove: "" };
+let simT = 0;
+// gathered ball: "none" (dribbling), "steps" (gather steps on the move), "pivot" (dead dribble, feet planted)
+const hold = { state: "none", step: 0, t: 0, speed: 0, dir: { x: 0, y: -1 }, from: null, to: null, euro: 0, jumpStop: false,
+               landedT: 0, center: null, pivot: null, free: null, freeSide: 0, face: { x: 0, y: -1 }, ext: 0, stripT: 0,
+               firstFoot: 1, prints: [], stepDir: { x: 0, y: -1 }, stopping: false, fakeT: 0 };
+const keys = new Set();
+const defenders = () => { const a = []; if (params.defOn) a.push(D); if (params.rimOn) a.push(R); return a; };
+
+// ---------- Geometry ----------
+function frame(p) {
+  const dx = HOOP.x - p.x, dy = HOOP.y - p.y, dist = Math.hypot(dx, dy) || 0.001;
+  const u = { x: dx/dist, y: dy/dist };
+  return { dist, u, r: { x: -u.y, y: u.x } };
+}
+function isThree(p) {
+  if (p.y <= 14.2) return Math.abs(p.x - 25) >= 22;
+  return Math.hypot(p.x - HOOP.x, p.y - HOOP.y) >= 23.75;
+}
+function aimOf(p, f) {
+  const ax = mouse.x - p.x, ay = mouse.y - p.y;
+  if (Math.hypot(ax, ay) < 0.5) return { theta: 0.5, lat: f.dist*12*Math.tan(0.5) };   // cursor on your own body is not aiming
+  const cross = f.u.x*ay - f.u.y*ax, dot = f.u.x*ax + f.u.y*ay;
+  const theta = Math.atan2(cross, dot);
+  return { theta, lat: f.dist*12*Math.tan(clamp(theta, -0.6, 0.6)) };
+}
+function driftOf(vx, vy, f) {
+  const vPerp = vx*f.r.x + vy*f.r.y, vAlong = vx*f.u.x + vy*f.u.y;
+  return { vPerp, vAlong, speed: Math.hypot(vx, vy), lat: C.DRIFT_LAT*params.drift*vPerp, dep: C.DRIFT_DEP*params.drift*vAlong };
+}
+function combine(list) {
+  let keep = 1, top = { c: 0, cos: 0, d: 99, speed: 0, lat: 0 };
+  for (const x of list) { keep *= 1 - x.c; if (x.c > top.c) top = x; }
+  return { ...top, c: 1 - keep };
+}
+
+// ---------- Context: what does a click do right now? ----------
+function shotContext(shift) {
+  const f = frame(P), dr = driftOf(P.vx, P.vy, f);
+  if (hold.state === "pivot") {
+    // stepping through toward the rim with the free foot is a finish; otherwise it's a set shot
+    const ex = hold.pivot ? { x: hold.free.x - hold.pivot.x, y: hold.free.y - hold.pivot.y } : { x: 0, y: 0 }, el = Math.hypot(ex.x, ex.y) || 1;
+    const through = hold.ext > 1.2 && (ex.x*f.u.x + ex.y*f.u.y)/el > 0.5 && f.dist <= 8;
+    return f.dist <= 4 || through ? { kind: "layup", note: through ? "Step-through finish" : "" } : { kind: "jumper", note: "" };
+  }
+  const driving = dr.vAlong >= C.DRIVE_SPEED || hold.state === "steps";   // gather steps are always going somewhere
+  // click early on a drive = floater, keep driving and click late = layup; Shift attacks the rim from a bit farther
+  const layupRange = hold.state === "steps" ? 9 : C.LAYUP_RANGE;   // the gather steps carry you in, so they reach a little farther
+  const attack = f.dist <= 4 || (driving && f.dist <= layupRange) || (shift && driving && f.dist <= C.DUNK_RANGE);
+  if (!attack) return driving && f.dist <= C.FLOATER_RANGE ? { kind: "floater", note: "" } : { kind: "jumper", note: "" };
+  if (!shift) return { kind: "layup", note: "" };
+  let why = "";
+  if (params.dunk < 55) why = "not athletic enough";
+  else if (f.dist > C.DUNK_RANGE) why = "too far out";
+  else if (dr.vAlong < C.DUNK_SPEED) why = "needs more speed";
+  return why ? { kind: "layup", note: `Dunk unavailable, ${why}` } : { kind: "dunk", note: "" };
+}
+
+// ---------- Jumpers ----------
+function inputDir() {
+  let ax = 0, ay = 0;
+  if (keys.has("u")) ay -= 1; if (keys.has("d")) ay += 1; if (keys.has("l")) ax -= 1; if (keys.has("r")) ax += 1;
+  const l = Math.hypot(ax, ay); return l ? { x: ax/l, y: ay/l } : null;
+}
+// Fades are read relative to the shot line: any input with a component away from the rim.
+// Straight back = fadeaway; back plus a side = side fade at 45 degrees.
+function fadeIntent(f) {
+  const d = inputDir(); if (!d) return null;
+  const along = d.x*f.u.x + d.y*f.u.y, lat = d.x*f.r.x + d.y*f.r.y;
+  if (along > -0.3) return null;
+  if (Math.abs(lat) < 0.38) return { type: "back", x: -f.u.x, y: -f.u.y, along: 1 };
+  const sg = Math.sign(lat), k = Math.SQRT1_2;
+  return { type: sg < 0 ? "left" : "right", x: -f.u.x*k + f.r.x*sg*k, y: -f.u.y*k + f.r.y*sg*k, along: k };
+}
+// The later release offsets the depth part of the fade exactly; the sideways part is left for the cursor.
+const fadeShiftFor = along => Math.round(C.DRIFT_DEP*params.drift*C.FADE_SPEED*along/C.KT);
+const fadeSigmaFor = type => (0.5 + (95 - params.fadeR)*0.06)*(type === "back" ? 1 : 1.25);
+const FADE_NAME = { back: "Fadeaway", left: "Side fade left", right: "Side fade right" };
+function commitFade(fi) {
+  const along = shot.bvx*fi.x + shot.bvy*fi.y;   // momentum already heading the fade's way folds into it
+  let start = 0;
+  if (along > 0) { shot.bvx -= along*fi.x; shot.bvy -= along*fi.y; start = Math.min(C.FADE_SPEED, along); }
+  Object.assign(shot, { fade: fi.type, fadeV: start, fux: fi.x, fuy: fi.y, fadeAlong: fi.along,
+                        shift: fadeShiftFor(fi.along), gatherSpeed: Math.hypot(shot.bvx, shot.bvy) });
+}
+function jumperContestOne(def, f) {
+  const tx = def.x - P.x, ty = def.y - P.y, d = Math.hypot(tx, ty) || 0.001;
+  const cos = (tx*f.u.x + ty*f.u.y)/d;
+  const prox = Math.pow(clamp((5 - d)/3.5, 0, 1), 1.5);
+  const inline = 0.25 + 0.75*clamp(cos, 0, 1);
+  const closing = clamp((def.vx*(-tx) + def.vy*(-ty))/d/12, 0, 1);
+  const handF = 0.35 + 0.65*Math.max(def.hand, def.h)*(def.land > 0 ? 0.3 : 1);   // just landed off a jump: can't get a hand up
+  return { c: clamp(prox*inline*handF*(0.85 + 0.35*closing)*def.len(), 0, 1), cos, d, speed: Math.hypot(def.vx, def.vy), lat: 0 };
+}
+const jumperContest = f => combine(defenders().map(d => jumperContestOne(d, f)));
+function releaseQ(e) { return clamp(1 - Math.max(0, Math.abs(e) - C.PERFECT_MS)/40, 0, 1); }
+// premium = clean look x release quality: up to 13% less scatter, which takes an open perfect three from ~50% to ~60%
+function jumperSigma(distFt, moveSpeed, c, q, fs = 0, premium = 0) {
+  const r = (3.15 + (95 - params.rating)*0.052)*(1 - params.bonus/100*q);
+  const dd = 0.10*distFt, m = Math.hypot(0.14*moveSpeed, fs), ct = C.CONTEST_SIG*c;
+  const lat = Math.sqrt(r*r + dd*dd + m*m + ct*ct)*(1 - C.CLEAN_PREMIUM*premium);
+  return { lat, dep: lat*C.DEP_RATIO, parts: [r, dd, m, ct] };
+}
+// A clean look: nobody within ~8 ft, feet set, not a fade. Ramps in from 5 ft and from 3 ft/s.
+function cleanLook(fade, moveSpeed) {
+  if (fade) return 0;
+  let dmin = 99;
+  for (const d of defenders()) dmin = Math.min(dmin, Math.hypot(d.x - P.x, d.y - P.y));
+  return clamp((dmin - 5)/3, 0, 1)*clamp((3 - moveSpeed)/2, 0, 1);
+}
+function classifyJumper(lat, dep, blocked) {
+  if (blocked) return { make: false, big: "Blocked", sub: "Hand on the ball" };
+  const x = lat/C.WIN_A, y = dep/C.WIN_B, r = Math.hypot(x, y);
+  if (r <= 1) return { make: true, big: "Make", sub: r < 0.45 ? "Nothing but net" : r < 0.85 ? "Through" : "Rattled in" };
+  if (r <= 1.22) return { make: false, big: "Miss", sub: "In and out" };
+  if (r <= C.NEAR_MISS_CAP + 0.01) return { make: false, big: "Miss", sub: "Rimmed out" };
+  if (r > 3.2 && dep < 3*C.WIN_B) return { make: false, big: "Miss", sub: "Airball" };
+  if (Math.abs(x) > Math.abs(y)) return { make: false, big: "Miss", sub: `${lat > 0 ? "Right" : "Left"} by ${(Math.abs(lat) - C.WIN_A).toFixed(1)} in` };
+  return { make: false, big: "Miss", sub: `${dep > 0 ? "Long" : "Short"} by ${(Math.abs(dep) - C.WIN_B).toFixed(1)} in` };
+}
+
+// ---------- Finishes ----------
+// side: -1 = finish on the left side of the rim, +1 = right, from the cursor.
+function finishSideOf(f) {
+  const a = aimOf(P, f);
+  return clamp(f.dist*Math.tan(clamp(a.theta, -1.2, 1.2))/1.2, -1, 1);
+}
+function bankOf(x, y) {
+  const deg = Math.atan2(Math.abs(x - 25), Math.max(0.1, y - HOOP.y))*180/Math.PI;
+  return deg >= 25 && deg <= 65 ? 1.2 : 1.0;
+}
+function rimContestOne(def, f, side) {
+  const rx = P.x + f.u.x*1.2, ry = P.y + f.u.y*1.2;              // where the ball goes up
+  const d = Math.hypot(def.x - rx, def.y - ry);
+  const tx = def.x - P.x, ty = def.y - P.y, dl = Math.hypot(tx, ty) || 0.001;
+  const cos = (tx*f.u.x + ty*f.u.y)/dl;
+  const prox = clamp((5.5 - d)/4, 0, 1);
+  const inline = 0.35 + 0.65*clamp(cos, 0, 1);                    // chasing from behind is weaker
+  const speed = Math.hypot(def.vx, def.vy);
+  const set = 1 - 0.35*clamp(speed/12, 0, 1);                      // planted beats arriving late
+  const reach = def.land > 0 ? 0.3 : 0.45 + 0.55*def.h;           // standing vs in the air vs just landed
+  const lat = tx*f.r.x + ty*f.r.y, soft = lat/(Math.abs(lat) + 0.6);
+  const sideM = 1 - 0.4*Math.max(0, -side*soft) + 0.2*Math.max(0, side*soft); // shield vs into them
+  return { c: clamp(prox*inline*set*reach*sideM*def.len()*1.15, 0, 1), cos, d, speed, lat };
+}
+const rimContest = (f, side) => combine(defenders().map(d => rimContestOne(d, f, side)));
+function finishSigma(gatherSpeed, vPerpG, side, hangMs, c, bank) {
+  const r = 1.8 + (95 - params.finish)*0.045;
+  const limit = 9 + (params.finish - 50)*0.08;
+  const sp = 0.35*Math.max(0, gatherSpeed - limit);
+  const vp = clamp(vPerpG/6, -1, 1);
+  const euro = shot.state === "shooting" ? (shot.euro || 0) : hold.state === "steps" ? hold.euro : 0;
+  const turn = 2.2*Math.max(0, -side*vp) + 0.8*Math.abs(side) + 0.6*euro;   // cutting back, awkward angles, euro footwork
+  const hang = 0.9*hangMs/100;
+  const ct = C.RIM_CONTEST_SIG*c;
+  const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang + ct*ct);
+  return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang), sp, ct], A: C.FIN_A*bank, B: C.FIN_B*bank, limit };
+}
+const blockChanceLayup = c => 0.5*c*c;
+const blockChanceDunk = c => clamp(c*(0.6 - (params.dunk - 70)/100), 0, 0.9);
+const foulChance = con => con.c*(0.12 + 0.25*clamp(con.speed/10, 0, 1));
+
+// ---------- Floaters ----------
+function floaterContestOne(def, f) {
+  const tx = def.x - P.x, ty = def.y - P.y, d = Math.hypot(tx, ty) || 0.001;
+  const cos = (tx*f.u.x + ty*f.u.y)/d;
+  const prox = Math.pow(clamp((4 - d)/2.5, 0, 1), 1.5);   // the arc clears anyone more than ~4 ft away
+  const inline = 0.25 + 0.75*clamp(cos, 0, 1);
+  const handF = 0.35 + 0.65*Math.max(def.hand, def.h)*(def.land > 0 ? 0.3 : 1);   // just landed off a jump: can't get a hand up
+  return { c: clamp(prox*inline*handF*def.len(), 0, 1), cos, d, speed: Math.hypot(def.vx, def.vy), lat: 0 };
+}
+const floaterContest = f => combine(defenders().map(d => floaterContestOne(d, f)));
+function floaterQ(e) { return clamp(1 - Math.max(0, Math.abs(e) - C.FL_PERFECT)/40, 0, 1); }
+function floaterSigma(distFt, moveSpeed, c, q) {
+  const r = (3.5 + (95 - params.floater)*0.055)*(1 - params.bonus/100*q);   // touch is the cost
+  const dd = 0.10*distFt, m = 0.08*moveSpeed, ct = C.FL_CONTEST_SIG*c;    // built for moving, so movement costs little
+  const lat = Math.sqrt(r*r + dd*dd + m*m + ct*ct);
+  return { lat, dep: lat*C.FL_DEP_RATIO, parts: [r, dd, m, ct], A: C.FL_A, B: C.FL_B };
+}
+function floaterBias(e, f, vx, vy) {
+  const eEff = Math.sign(e)*Math.max(0, Math.abs(e) - params.tAssist);
+  const aim = aimOf(P, f), dr = driftOf(vx, vy, f), assistK = 1 - params.aAssist/100;
+  return { eEff, aim, dr, assistK, lat: (aim.lat + 0.6*dr.lat)*assistK, dep: C.FL_KT*eEff + 0.5*dr.dep };
+}
+
+// ---------- Canvas ----------
+const court = document.getElementById("court"), ctx = court.getContext("2d");
+const inset = document.getElementById("inset"), ictx = inset.getContext("2d");
+const cache = document.createElement("canvas");
+let dpr = 1, ppf = 10, T = {};
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["court","grain","paint","courtline","oob","rim","ball","make","miss","accent","player","defender","defender2","ink","muted","line","panel"]) T[k] = cs.getPropertyValue("--" + k).trim();
+}
+function S(x, y) { return [(x - cam.x)*ppf + court.width/2, (y - cam.y)*ppf + court.height/2]; }
+let cps = 10;                                           // court image scale, capped to stay inside mobile canvas limits
+function SC(x, y) { return [(x - CACHE.x0)*cps, (y - CACHE.y0)*cps]; }
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const w = court.clientWidth;
+  court.width = Math.round(w*dpr); court.height = Math.round(w*dpr*VIEW.h/VIEW.w);
+  ppf = court.height/CAM.h;
+  const iw = inset.clientWidth;
+  inset.width = Math.round(iw*dpr); inset.height = Math.round(iw*dpr);
+  buildCourt();
+}
+function buildCourt() {
+  cps = Math.min(ppf, 50);
+  cache.width = Math.round(CACHE.w*cps); cache.height = Math.round(CACHE.h*cps);
+  const g = cache.getContext("2d");
+  g.fillStyle = T.oob; g.fillRect(0, 0, cache.width, cache.height);
+  const [x0, y0] = SC(0, 0), [x1, y1] = SC(50, 47);
+  g.fillStyle = T.court; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  g.save(); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip();
+  g.strokeStyle = T.grain; g.lineWidth = Math.max(1, dpr);
+  for (let x = 0; x <= 50; x += 1.6) { const [sx] = SC(x, 0); g.beginPath(); g.moveTo(sx, y0); g.lineTo(sx, y1); g.stroke(); }
+  const [px0, py0] = SC(17, 0), [px1, py1] = SC(33, 19);
+  g.fillStyle = T.paint; g.fillRect(px0, py0, px1 - px0, py1 - py0);
+  g.restore();
+  g.strokeStyle = T.courtline; g.lineWidth = Math.max(2*dpr, cps*0.16);
+  g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  g.strokeRect(px0, py0, px1 - px0, py1 - py0);
+  const [fcx, fcy] = SC(25, 19);
+  g.beginPath(); g.arc(fcx, fcy, 6*cps, 0, Math.PI); g.stroke();
+  g.save(); g.setLineDash([cps*0.9, cps*0.7]); g.beginPath(); g.arc(fcx, fcy, 6*cps, Math.PI, 2*Math.PI); g.stroke(); g.restore();
+  const [hx, hy] = SC(HOOP.x, HOOP.y);
+  g.beginPath(); g.arc(hx, hy, 4*cps, 0, Math.PI); g.stroke();
+  const cornerY = 5.25 + Math.sqrt(23.75*23.75 - 22*22);
+  let [a, b] = SC(3, 0), [c, d] = SC(3, cornerY);
+  g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke();
+  [a, b] = SC(47, 0); [c, d] = SC(47, cornerY);
+  g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke();
+  const ang = Math.atan2(cornerY - 5.25, 22);
+  g.beginPath(); g.arc(hx, hy, 23.75*cps, ang, Math.PI - ang); g.stroke();
+  g.lineWidth = cps*0.28;
+  [a, b] = SC(22, 4); [c, d] = SC(28, 4);
+  g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke();
+  g.lineWidth = cps*0.12; g.strokeStyle = T.rim;
+  [a, b] = SC(25, 4); g.beginPath(); g.moveTo(a, b); g.lineTo(hx, hy - 0.75*cps); g.stroke();
+}
+
+// ---------- Input ----------
+function setMouse(e) {
+  const r = court.getBoundingClientRect();
+  mouse.fx = (e.clientX - r.left)/r.width; mouse.fy = (e.clientY - r.top)/r.height;
+  mouseToWorld();
+}
+// a still mouse stays at the same spot relative to the camera, and so relative to your player
+function mouseToWorld() {
+  if (mouse.fx === undefined) return;
+  mouse.x = cam.x + (mouse.fx - 0.5)*court.width/ppf; mouse.y = cam.y + (mouse.fy - 0.5)*court.height/ppf;
+}
+court.addEventListener("pointermove", e => { setMouse(e); shiftDown = e.shiftKey; });
+court.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  court.focus({ preventScroll: true });
+  setMouse(e);
+  startShot(e.shiftKey);
+  e.preventDefault();
+});
+window.addEventListener("pointerup", e => {
+  if (e.button !== 0 || shot.state !== "shooting") return;
+  if (shot.fakeable && shot.t < C.COMMIT_MS) { pumpFake(); return; }
+  if (shot.kind === "jumper") releaseJumper(); else if (shot.kind === "floater") releaseFloater(); else { shot.held = false; shot.upAt = shot.t; }
+});
+court.addEventListener("contextmenu", e => e.preventDefault());
+const KEYMAP = { KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r" };
+window.addEventListener("keydown", e => {
+  if (e.key === "Shift") shiftDown = true;
+  if (e.target.tagName === "INPUT" && e.target.type === "range" && e.code.startsWith("Arrow")) return;
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) gather(); return; }
+  if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
+});
+window.addEventListener("keyup", e => { if (e.key === "Shift") shiftDown = false; if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
+window.addEventListener("blur", () => {
+  keys.clear(); shiftDown = false;
+  if (shot.state === "shooting") { if (shot.kind === "jumper") releaseJumper(); else if (shot.kind === "floater") releaseFloater(); else { shot.held = false; shot.upAt = shot.t; } }
+});
+
+function startShot(shift) {
+  if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree()) return;
+  if (ball) ball = null;
+  const fromSteps = hold.state === "steps" ? hold.euro : 0;
+  const cx = shotContext(shift), f = frame(P);
+  Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, held: true, upAt: null,
+    gatherSpeed: Math.hypot(P.vx, P.vy), vPerpG: P.vx*f.r.x + P.vy*f.r.y, gx: P.x, gy: P.y,
+    fade: false, fadeV: 0, fux: 0, fuy: 0, fadeAlong: 0, shift: 0, bvx: P.vx, bvy: P.vy, euro: fromSteps });
+  shot.fakeable = cx.kind === "jumper" || cx.kind === "floater" || hold.state === "pivot";
+  shot.prev = hold.state === "pivot" && hold.pivot ? { pivot: { ...hold.pivot }, free: { ...hold.free }, freeSide: hold.freeSide,
+                                                     center: { ...hold.center }, face: { ...hold.face } } : null;
+  hold.state = "none";   // going up ends the gather
+  if (cx.kind === "jumper") { const fi = fadeIntent(f); if (fi) commitFade(fi); }
+  D.jumpAt = null; R.jumpAt = null;
+  if (cx.kind === "layup" || cx.kind === "dunk") {
+    // shot blockers pick a moment to leave their feet; the shooter can hang to wait them out
+    for (const d of defenders()) { d.jumpAt = Math.random() < 0.25 ? null : params.react*0.5 + 40 + Math.random()*180; }
+  }
+}
+
+// ---------- Release ----------
+function releaseJumper() {
+  const fade = shot.fade, ideal = C.IDEAL + shot.shift;
+  const e = shot.t - ideal;
+  const eEff = Math.sign(e)*Math.max(0, Math.abs(e) - params.tAssist);
+  const f = frame(P);
+  // drift comes from the momentum you carried in; the fade itself is canned and paid for by the later release
+  const aim = aimOf(P, f), dr = driftOf(shot.bvx, shot.bvy, f), con = jumperContest(f);
+  const q = releaseQ(e);
+  const clean = cleanLook(fade, shot.gatherSpeed), shape = clean*q;
+  const sig = jumperSigma(f.dist, shot.gatherSpeed, con.c, q, fade ? fadeSigmaFor(fade) : 0, shape);
+  const fadeBack = fade ? (P.x - shot.gx)*shot.fux + (P.y - shot.gy)*shot.fuy : 0;
+  const fadeLat = fade ? C.DRIFT_LAT*params.drift*shot.fadeV*(shot.fux*f.r.x + shot.fuy*f.r.y) : 0;
+  const assistK = 1 - params.aAssist/100;
+  const bLat = (aim.lat + dr.lat + fadeLat)*assistK;
+  const bDep = C.KT*eEff + dr.dep + C.CONTEST_BIAS*con.c;
+  // physics: the same inputs, as a launch. Clean-look shaping and calibration live in the noise model.
+  const fadeAng = fade ? Math.atan(fadeLat/12/f.dist) : 0;
+  const glass = glassAimFor("jumper");
+  const inp = { kind: "jumper", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : (clamp(aim.theta, -0.6, 0.6) + fadeAng)*assistK, timingMs: eEff,
+                body: liftBody(f, shot.bvx, shot.bvy, assistK, 1), contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+  const sc = { kind: "jumper", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
+  const chance = physChance(inp, sc, 80);              // blocks are real collisions now, so they're in here
+  const ps = NZX.scatterIn(sc); sig.lat = ps.lat; sig.dep = ps.dep;
+  const shotRes = physShot(inp, sc), out = physOut(shotRes);
+  const blocked = !!(shotRes && shotRes.res.blocked);
+  const three = isThree({ x: shot.gx, y: shot.gy });   // zone is where you took off, not where you landed
+  record(out.make, three ? 3 : 2, three, false);
+  last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, chance, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
+  meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
+  if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, 0, 0, true, false, 0.4, 3);
+  shot.state = "flight";
+  renderLast(); renderStats();
+}
+
+function releaseFinish() {
+  const f = frame(P), dunk = shot.kind === "dunk";
+  const rise = dunk ? C.RISE_DUNK : C.RISE_LAYUP;
+  const hangMs = dunk ? 0 : Math.max(0, (shot.upAt !== null ? Math.min(shot.upAt, shot.t) : shot.t) - rise);
+  const side = finishSideOf(f);
+  const con = rimContest(f, side);
+  const bank = bankOf(shot.gx, shot.gy);
+  const foul = Math.random() < foulChance(con);
+  let out, chance, block, sig = null, lat = 0, dep = 0, layupShot = null;
+  if (dunk) {
+    block = blockChanceDunk(con.c);
+    chance = (1 - block)*(1 - C.DUNK_FUMBLE);
+    if (Math.random() < block) out = { make: false, big: "Blocked", sub: "Met at the rim" };
+    else if (Math.random() < C.DUNK_FUMBLE) out = { make: false, big: "Miss", sub: "Rattled out" };
+    else out = { make: true, big: "Dunk", sub: con.c > 0.5 ? "Posterized" : "Throwdown" };
+  } else {
+    sig = finishSigma(shot.gatherSpeed, shot.vPerpG, side, hangMs, con.c, bank);
+    // physics: finish-side, speed and hang costs come through as extra scatter; contact costs a little more
+    const inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths() };
+    const sc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2])*(foul ? 1.15 : 1), contest: con.c };
+    const rates = physRates(inp, sc, 80); chance = rates.make; block = rates.block;
+    layupShot = physShot(inp, sc);
+    out = physOut(layupShot, true);
+  }
+  const blocked = out.big === "Blocked";
+  if (foul && !blocked) out.sub = out.make ? "And one" : "Fouled, two free throws";
+  record(out.make, 2, false, true);
+  last = { kind: shot.kind, out, side, con, hangMs, sig, block, foulP: foulChance(con), chance, bank,
+           speed: shot.gatherSpeed, note: shot.note, dist: f.dist };
+  if (layupShot) startPathBall(layupShot.L, layupShot.res); else launchBall(f, lat, dep, blocked, out.make, dunk ? 0.18 : 0.38, dunk ? 1 : 3);
+  if (blocked && !layupShot) fx.push({ kind: "text", text: "Blocked", t: 0 });
+  shot.state = "flight";
+  renderLast(); renderStats();
+}
+
+function releaseFloater() {
+  const e = shot.t - C.FL_IDEAL, f = frame(P);
+  const con = floaterContest(f), q = floaterQ(e);
+  const sig = floaterSigma(f.dist, shot.gatherSpeed, con.c, q);
+  const b = floaterBias(e, f, P.vx, P.vy);
+  const bDep = b.dep + C.FL_CONTEST_BIAS*con.c;
+  const glass = glassAimFor("floater");
+  const inp = { kind: "floater", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, timingMs: b.eEff,
+                body: liftBody(f, P.vx, P.vy, 0.6*b.assistK, 0.5), contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+  const sc = { kind: "floater", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c };
+  const rates = physRates(inp, sc, 80), chance = rates.make, block = rates.block;
+  const ps = NZX.scatterIn(sc); sig.lat = ps.lat; sig.dep = ps.dep;
+  const shotRes = physShot(inp, sc), out = physOut(shotRes);
+  if (out.sub === "Swish") out.sub = "Dropped in soft";
+  const blocked = !!(shotRes && shotRes.res.blocked);
+  record(out.make, 2, false, false, true);
+  last = { kind: "floater", out, e, q, b, con, sig, chance, block, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
+  meterFlash = { e, t: 0.8, kind: "floater" };
+  if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, 0, 0, true, false, 0.4, 3);
+  shot.state = "flight";
+  renderLast(); renderStats();
+}
+
+function record(make, value, three, rim, floater = false) {
+  stats.fga++; if (three) stats.a3++; if (rim) stats.ar++; if (floater) stats.af++;
+  if (make) { stats.fgm++; stats.pts += value; if (three) stats.m3++; if (rim) stats.mr++; if (floater) stats.mf++; }
+}
+function pushHistory(lat, dep, A, B, make) {
+  history.push({ x: lat/A*C.WIN_A, y: dep/B*C.WIN_B, make });   // normalized to the jumper window for display
+  if (history.length > 60) history.shift();
+}
+function launchBall(f, lat, dep, blocked, make, dur, hmax) {
+  const sx = P.x, sy = P.y;
+  if (blocked) {
+    const sd = Math.random() < 0.5 ? -1 : 1;
+    ball = { phase: "flight", t: 0, dur: 0.4, sx, sy, tx: sx + f.r.x*sd*7 + f.u.x*1.5, ty: sy + f.r.y*sd*7 + f.u.y*1.5, hmax: 3, make: false, blocked: true };
+  } else {
+    ball = { phase: "flight", t: 0, dur, sx, sy, hmax, make, tx: HOOP.x + f.r.x*lat/12 + f.u.x*dep/12, ty: HOOP.y + f.r.y*lat/12 + f.u.y*dep/12,
+             dirx: f.r.x*lat + f.u.x*dep, diry: f.r.y*lat + f.u.y*dep, u: f.u };
+  }
+}
+
+// ---------- Simulation ----------
+// ---------- Dribbling: the cursor is the ball hand ----------
+// Nothing is triggered. The ball follows the cursor, the body follows WASD, and the defender reacts to
+// what they saw one reaction time ago. "Crossover" and "hesi" are names for what that produces.
+function defHand() {
+  const tx = P.x - D.x, ty = P.y - D.y, tl = Math.hypot(tx, ty) || 1, reach = 0.85 + 0.75*D.hand;
+  return { x: D.x + tx/tl*reach, y: D.y + ty/tl*reach };
+}
+const stealFactor = () => clamp(1 + (params.dSteal - params.handle)/60, 0.3, 2);
+const tightness = () => drib.hold;   // 1 = ball pulled in tight; follows the cursor continuously
+// What a defender reads as a pull-up: a shooter in range, slowing down, ball held up and tight.
+function pullUpThreat() {
+  const f = frame(P), sp = Math.hypot(P.vx, P.vy);
+  const respect = clamp((params.rating - 50)/40, 0, 1);
+  const range = f.dist <= 27 ? 1 : clamp(1 - (f.dist - 27)/5, 0, 1);
+  const slow = 1 - clamp(sp/C.DRIB_SPEED, 0, 1);
+  return respect*range*slow*(0.35 + 0.65*tightness());
+}
+function updateDribble(dt) {
+  const cd = Math.hypot(mouse.x - P.x, mouse.y - P.y);
+  drib.hold += ((1 - clamp((cd - 2)/8, 0, 1)) - drib.hold)*Math.min(1, dt/0.1);   // the hand reacts now, not at the next bounce
+  const sf = clamp(Math.hypot(P.vx, P.vy)/C.DRIB_SPEED, 0, 1), tight = tightness();
+  drib.period = 430 - 110*sf + 190*tight*(1 - sf);     // slow and tight: the ball hangs at the top
+  drib.top = 3 + 1.2*tight*(1 - sf);
+  drib.phase += dt*1000/drib.period;
+  if (drib.phase >= 1) { drib.phase -= 1; newBounce(); }
+}
+function newBounce() {
+  const f = frame(P);
+  const cdx = mouse.x - P.x, cdy = mouse.y - P.y, cd = Math.hypot(cdx, cdy);
+  const latC = cdx*f.r.x + cdy*f.r.y, oldSide = drib.side;
+  if (Math.abs(latC) > 0.6) drib.side = Math.sign(latC);                        // deadzone: jitter can't cross you
+  // toward the cursor, but never straight ahead into the defender: at least 30 degrees to the ball side
+  let ang = cd > 0.3 ? Math.atan2(latC, cdx*f.u.x + cdy*f.u.y) : drib.side*Math.PI/2;
+  ang = drib.side > 0 ? clamp(ang, Math.PI/6, Math.PI - 0.2) : clamp(ang, -(Math.PI - 0.2), -Math.PI/6);
+  const len = C.REACH_MIN + (C.REACH_MAX - C.REACH_MIN)*clamp((cd - 2)/8, 0, 1);
+  const fw = Math.cos(ang)*len, lt = Math.sin(ang)*len;
+  drib.from = drib.to;
+  drib.to = { x: f.u.x*fw + f.r.x*lt, y: f.u.y*fw + f.r.y*lt };
+  { const o = shoulder(f, drib.side), t = reachFrom(o, P.x + drib.to.x, P.y + drib.to.y, C.ARM); drib.to = { x: t.x - P.x, y: t.y - P.y }; }
+  drib.len = len;
+  drib.crossing = drib.side !== oldSide;
+  if (drib.crossing) onCross(f);
+  else if (params.defOn) {
+    const h = defHand(), dm = Math.hypot(h.x - (P.x + drib.to.x), h.y - (P.y + drib.to.y));
+    const bx = P.x + drib.to.x, by = P.y + drib.to.y;
+    if (dm < 1.6 && Math.random() < 0.06*(1.6 - dm)/1.6*(len/1.5)*stealFactor()*armBarFactor(bx, by)) turnover("Reached in and picked an exposed dribble");
+  }
+}
+// ---------- Hands ----------
+// Two hands, each reaching from its own shoulder. The ball hand carries the dribble; on a crossover the ball
+// travels between them; the free hand guards the ball against the defender's reach (an arm bar).
+const shoulder = (f, s) => ({ x: P.x + f.r.x*C.SHOULDER*s, y: P.y + f.r.y*C.SHOULDER*s });
+function reachFrom(o, tx, ty, maxR) {
+  let dx = tx - o.x, dy = ty - o.y; const d = Math.hypot(dx, dy);
+  if (d > maxR) { dx *= maxR/d; dy *= maxR/d; }
+  return { x: o.x + dx, y: o.y + dy };
+}
+function handPositions() {
+  const f = frame(P), s = drib.side;
+  if (hold.state !== "none") {                                    // held ball: both hands on it
+    const b = heldBallPos();
+    return { L: reachFrom(shoulder(f, -1), b.x - f.r.x*0.3, b.y - f.r.y*0.3, C.ARM), R: reachFrom(shoulder(f, 1), b.x + f.r.x*0.3, b.y + f.r.y*0.3, C.ARM), guard: false };
+  }
+  const b = dribbleBallPos();
+  let ballHand, offHand, guard = false;
+  if (drib.crossing && drib.phase < 0.5) {
+    // mid-crossover: the receiving hand reaches for the landing spot, the other follows through; nobody guards
+    ballHand = reachFrom(shoulder(f, s), P.x + drib.to.x, P.y + drib.to.y, C.ARM);
+    offHand = reachFrom(shoulder(f, -s), b.x, b.y, C.ARM);
+  } else {
+    ballHand = reachFrom(shoulder(f, s), b.x, b.y, C.ARM);
+    const o = shoulder(f, -s);
+    if (params.defOn && Math.hypot(D.x - P.x, D.y - P.y) < 6) {   // off arm up between the defender's reach and the ball
+      const h = defHand(), mx = (h.x + b.x)/2, my = (h.y + b.y)/2;
+      offHand = reachFrom(o, mx, my, 1.4); guard = true;
+    } else offHand = { x: o.x + f.u.x*0.6, y: o.y + f.u.y*0.6 };
+  }
+  return s > 0 ? { R: ballHand, L: offHand, guard } : { L: ballHand, R: offHand, guard };
+}
+// Does the off arm sit between the defender's hand and the ball? Then a reach mostly hits arm.
+function armBarFactor(bx, by) {
+  if (hold.state !== "none" || (drib.crossing && drib.phase < 0.5)) return 1;
+  const hp = handPositions(); if (!hp.guard) return 1;
+  const off = drib.side > 0 ? hp.L : hp.R, h = defHand();
+  const sx = bx - h.x, sy = by - h.y, sl = sx*sx + sy*sy || 1;
+  const t = clamp(((off.x - h.x)*sx + (off.y - h.y)*sy)/sl, 0, 1);
+  const d = Math.hypot(h.x + sx*t - off.x, h.y + sy*t - off.y);
+  return d < 0.6 ? 0.4 : 1;
+}
+function onCross(f) {
+  drib.lastMove = "Crossover";
+  if (!params.defOn) return;
+  const dd = Math.hypot(D.x - P.x, D.y - P.y);
+  if (dd > 8) return;
+  // the ball crosses in front of the body: the moment a close defender can poke it
+  const mx = P.x + f.u.x*0.9, my = P.y + f.u.y*0.9, h = defHand(), dm = Math.hypot(h.x - mx, h.y - my);
+  const cos = ((D.x - P.x)*f.u.x + (D.y - P.y)*f.u.y)/(dd || 1);
+  const exposure = (Math.hypot(drib.from.x, drib.from.y) + drib.len)/3;
+  const pSteal = dm < 2.4 && cos > 0.3 ? clamp((2.4 - dm)/2.4*0.22*stealFactor()*exposure, 0, 0.35) : 0;
+  if (pSteal > 0.005) drib.lastMove = `Crossover in front of a close defender: ${Math.round(pSteal*100)}% steal risk`;
+  if (Math.random() < pSteal) turnover("Poked on the crossover");
+}
+function turnover(text) {
+  stats.to++;
+  const dx = P.x - D.x, dy = P.y - D.y, dl = Math.hypot(dx, dy) || 1;
+  ball = { phase: "bounce", t: 0, bx: P.x + drib.to.x, by: P.y + drib.to.y,
+           vx: -dx/dl*9 + (Math.random() - 0.5)*6, vy: -dy/dl*9 + (Math.random() - 0.5)*6 };
+  fx.push({ kind: "text", text: "Stolen", t: 0, x: P.x, y: P.y });
+  drib.lastMove = text; shot.cooldown = 1.0; hold.state = "none";
+  renderStats();
+}
+function dribbleBallPos() {
+  const ph = drib.phase, top = drib.top, f = frame(P);
+  const mix = (a, b, t) => ({ x: a.x + (b.x - a.x)*t, y: a.y + (b.y - a.y)*t });
+  let o, h;
+  if (ph < 0.5) {
+    const t = ph/0.5;
+    o = mix({ x: drib.from.x*0.75, y: drib.from.y*0.75 }, drib.to, t);
+    if (drib.crossing) { const b = Math.sin(Math.PI*t)*0.5; o.x += f.u.x*b; o.y += f.u.y*b; }   // crosses in front of the body
+    h = top*(1 - t);
+  } else {
+    const t = (ph - 0.5)/0.5;
+    o = mix(drib.to, { x: drib.to.x*0.75, y: drib.to.y*0.75 }, t); h = top*t;
+  }
+  return { x: P.x + o.x, y: P.y + o.y, h };
+}
+// ---------- Gather: a state change, not a move ----------
+function gather() {
+  if (shot.state !== "idle" || !ballFree() || hold.state !== "none" || shot.cooldown > 0) return;
+  const sp = Math.hypot(P.vx, P.vy);
+  if (sp < C.GATHER_SPEED) { enterPivot(); drib.lastMove = "Gathered: dead dribble"; return; }
+  // the ball-side foot steps first, then the other
+  Object.assign(hold, { state: "steps", step: 0, t: 0, speed: sp, dir: { x: P.vx/sp, y: P.vy/sp }, euro: 0, jumpStop: false,
+                        landedT: 0, firstFoot: drib.side, prints: [] });
+  drib.lastMove = "Gathered on the move";
+  beginStep();
+}
+function beginStep() { hold.step++; hold.t = 0; hold.from = { x: P.x, y: P.y }; aimStep(); }
+// The landing spot follows WASD for the whole step: you steer the foot until it plants.
+function aimStep() {
+  const d = inputDir();
+  hold.stopping = hold.step === 2 && !d;                               // nothing held on the second step: two-foot stop
+  const dir = d || hold.dir;
+  const len = hold.stopping ? 0.8 : clamp(hold.speed*0.2, 1.2, 3.0);
+  hold.stepDir = dir;
+  hold.to = { x: hold.from.x + dir.x*len, y: hold.from.y + dir.y*len };
+}
+const stepFoot = k => (k === 1 ? 1 : -1)*hold.firstFoot;              // +1 right foot, -1 left foot
+const footSpot = (at, dir, foot) => ({ x: at.x - dir.y*0.6*foot, y: at.y + dir.x*0.6*foot });   // feet sit either side of the line of travel
+function stepMove(dt) {
+  if (hold.t < C.STEP_T) {
+    hold.t += dt;
+    aimStep();
+    const rem = Math.max(0.02, C.STEP_T - hold.t);
+    P.vx = (hold.to.x - P.x)/rem; P.vy = (hold.to.y - P.y)/rem;
+    if (hold.step === 2) {                                             // sideways off the first step's line, so far = euro
+      hold.euro = Math.abs((P.x - hold.from.x)*(-hold.dir.y) + (P.y - hold.from.y)*hold.dir.x);
+    }
+    if (hold.t >= C.STEP_T) plantStep();
+    return;
+  }
+  hold.landedT += dt;                                                  // planted on the second step: go up now or stop
+  P.vx *= Math.exp(-dt/0.08); P.vy *= Math.exp(-dt/0.08);
+  if (hold.landedT > 0.3) { enterPivot(); drib.lastMove = "Stopped on the second step: dead dribble"; }
+}
+function plantStep() {
+  if (hold.step === 2 && hold.stopping) {
+    hold.prints.push(footSpot(hold.to, hold.dir, stepFoot(2)));
+    enterPivot(); drib.lastMove = "Jump stop: dead dribble"; return;
+  }
+  hold.prints.push(footSpot(hold.to, hold.stepDir, stepFoot(hold.step)));
+  if (hold.step === 1) {
+    const dx = hold.to.x - hold.from.x, dy = hold.to.y - hold.from.y, dl = Math.hypot(dx, dy) || 1;
+    hold.dir = { x: dx/dl, y: dy/dl };                                 // the first step is the reference line
+    beginStep();
+  } else if (hold.euro > 0.8) drib.lastMove = `Euro step: ${hold.euro.toFixed(1)} ft sideways`;
+}
+function pumpFake() {
+  const prev = shot.prev;
+  shot.state = "idle"; shot.cooldown = 0.15; meterFlash = null;
+  enterPivot();                                                        // rising into a shot picks up the dribble
+  if (prev) Object.assign(hold, prev);
+  hold.fakeT = 0.3;
+  drib.lastMove = "Pump fake";
+  fx.push({ kind: "text", text: "Pump fake", t: 0, x: P.x, y: P.y });
+}
+function enterPivot() {
+  P.vx = 0; P.vy = 0;
+  Object.assign(hold, { state: "pivot", center: { x: P.x, y: P.y }, pivot: null, free: null, freeSide: 0, ext: 0, stripT: 0 });
+}
+function pivotMove(dt) {
+  P.vx = 0; P.vy = 0;
+  const f = frame(P);
+  const cdx = mouse.x - P.x, cdy = mouse.y - P.y, cd = Math.hypot(cdx, cdy);
+  if (cd > 0.5) hold.face = { x: cdx/cd, y: cdy/cd };                // the body turns to follow the ball
+  const face = hold.face, perp = { x: -face.y, y: face.x };          // perp = the body's right
+  const d = inputDir();
+  if (!hold.pivot) {
+    if (!d) return;
+    // the first foot to move is the free foot: the one on the ball's side
+    hold.freeSide = (cdx*f.r.x + cdy*f.r.y) >= 0 ? 1 : -1;
+    hold.pivot = { x: hold.center.x - perp.x*0.7*hold.freeSide, y: hold.center.y - perp.y*0.7*hold.freeSide };
+    hold.free = { x: hold.center.x + perp.x*0.7*hold.freeSide, y: hold.center.y + perp.y*0.7*hold.freeSide };
+    drib.lastMove = `Pivot set: ${hold.freeSide > 0 ? "left" : "right"} foot`;
+  }
+  // free foot reaches in the WASD direction, otherwise returns to stance beside the pivot (which turns with the body)
+  const base = { x: hold.pivot.x + perp.x*1.4*hold.freeSide, y: hold.pivot.y + perp.y*1.4*hold.freeSide };
+  const tgt = d ? { x: hold.pivot.x + d.x*2.6, y: hold.pivot.y + d.y*2.6 } : base;
+  const mx = tgt.x - hold.free.x, my = tgt.y - hold.free.y, ml = Math.hypot(mx, my), stepL = 14*dt;
+  if (ml <= stepL) { hold.free.x = tgt.x; hold.free.y = tgt.y; } else { hold.free.x += mx/ml*stepL; hold.free.y += my/ml*stepL; }
+  hold.ext = Math.hypot(hold.free.x - base.x, hold.free.y - base.y);
+  P.x = (hold.pivot.x + hold.free.x)/2; P.y = (hold.pivot.y + hold.free.y)/2;
+  // a held ball can be stripped if it's left where the defender's hand can reach
+  hold.stripT += dt;
+  if (hold.stripT > 0.25 && params.defOn) {
+    hold.stripT = 0;
+    const h = defHand(), b = heldBallPos(), dm = Math.hypot(h.x - b.x, h.y - b.y);
+    if (dm < 1.2 && Math.random() < 0.12*(1.2 - dm)/1.2*stealFactor()) turnover("Stripped on a dead dribble");
+  }
+}
+function heldBallPos() {
+  if (hold.state === "steps") return { x: P.x + hold.dir.x*0.6, y: P.y + hold.dir.y*0.6, h: 3.5 };
+  return { x: P.x + hold.face.x*0.9, y: P.y + hold.face.y*0.9, h: 3.2 + 6*Math.max(0, hold.fakeT) };
+}
+
+// The defender's eyes: a short history of what the ball handler was doing.
+const seen = [];
+function recordSeen() {
+  seen.push({ t: simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none",
+              rising: shot.state === "shooting" || hold.fakeT > 0,
+              threat: shot.state === "idle" && ballFree() ? pullUpThreat() : 0 });
+  while (seen.length > 2 && seen[1].t < simT - 0.7) seen.shift();
+}
+function perceived(lag) {
+  for (let i = seen.length - 1; i >= 0; i--) if (seen[i].t <= simT - lag) return seen[i];
+  return seen[0];
+}
+// reaction lag: quicker defenders read sooner, better handlers are harder to read
+const defLag = () => clamp(0.32 - (params.dQuick - 40)*0.0025 + (params.handle - 70)*0.0015, 0.12, 0.4);
+
+function stepToward(def, tx, ty, maxS, acc, dt) {
+  const dx = tx - def.x, dy = ty - def.y, dd = Math.hypot(dx, dy);
+  const want = Math.min(maxS, dd*4);
+  const wx = dd ? dx/dd*want : 0, wy = dd ? dy/dd*want : 0;
+  const ex = wx - def.vx, ey = wy - def.vy, el = Math.hypot(ex, ey), st = acc*dt;
+  if (el <= st || el < 1e-9) { def.vx = wx; def.vy = wy; } else { def.vx += ex/el*st; def.vy += ey/el*st; }
+}
+function moveDef(def, dt, sep = 1.7) {
+  if (def.jumpT >= 0) { def.vx *= Math.exp(-dt*3); def.vy *= Math.exp(-dt*3); }
+  def.x += def.vx*dt; def.y += def.vy*dt;
+  const sx = def.x - P.x, sy = def.y - P.y, sd = Math.hypot(sx, sy);
+  if (sd < sep) {
+    const nx = sx/(sd || 1), ny = sy/(sd || 1), over = sep - sd;
+    if (shot.state === "idle" && ballFree()) {
+      // a defender holds their ground: you can't run through them, only around them
+      def.x += nx*over*0.35; def.y += ny*over*0.35;
+      P.x -= nx*over*0.65; P.y -= ny*over*0.65;
+      const into = P.vx*nx + P.vy*ny; if (into > 0) { P.vx -= into*nx; P.vy -= into*ny; }
+    } else { def.x += nx*over; def.y += ny*over; }
+  }
+  def.x = clamp(def.x, 0.6, 49.4); def.y = clamp(def.y, 4.8, 40);
+}
+function finishMove(dt) {
+  const f = frame(P);
+  if (f.dist <= 2.6) { P.vx = 0; P.vy = 0; return; }
+  const cur = Math.hypot(P.vx, P.vy), sp = Math.max(4, cur)*Math.exp(-dt/1.2);
+  const want = Math.atan2(f.u.y, f.u.x);
+  let heading = cur < 0.1 ? want : Math.atan2(P.vy, P.vx);
+  let da = want - heading; while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
+  heading += clamp(da, -4*dt, 4*dt);
+  P.vx = Math.cos(heading)*sp; P.vy = Math.sin(heading)*sp;
+}
+function update(dt) {
+  simT += dt; recordSeen();
+  if (hold.fakeT > 0) hold.fakeT -= dt;
+  let ax = 0, ay = 0;
+  if (keys.has("u")) ay -= 1; if (keys.has("d")) ay += 1; if (keys.has("l")) ax -= 1; if (keys.has("r")) ax += 1;
+  const al = Math.hypot(ax, ay); if (al) { ax /= al; ay /= al; }
+
+  if (shot.state === "shooting" && shot.kind === "jumper") {
+    if (!shot.fade && shot.t <= C.FADE_COMMIT) { const fi = fadeIntent(frame(P)); if (fi) commitFade(fi); }
+    const k = Math.exp(-dt/C.TAU);
+    shot.bvx *= k; shot.bvy *= k;                                  // carried momentum bleeds off; no steering mid-shot
+    if (shot.fade) shot.fadeV += (C.FADE_SPEED - shot.fadeV)*(1 - Math.exp(-dt/0.15));
+    P.vx = shot.bvx + shot.fux*shot.fadeV; P.vy = shot.bvy + shot.fuy*shot.fadeV;
+    shot.t += dt*1000;
+    if (shot.t >= C.MAX + shot.shift) releaseJumper();
+  } else if (shot.state === "shooting" && shot.kind === "floater") {
+    const k = Math.exp(-dt/0.12);                   // one-step stop: a little carry, no steering
+    P.vx *= k; P.vy *= k;
+    shot.t += dt*1000;
+    if (shot.t >= C.FL_MAX) releaseFloater();
+  } else if (shot.state === "shooting") {
+    finishMove(dt);
+    shot.t += dt*1000;
+    const dunk = shot.kind === "dunk", rise = dunk ? C.RISE_DUNK : C.RISE_LAYUP;
+    if (shot.t >= rise && (dunk || !shot.held || shot.t >= rise + C.MAX_HANG)) releaseFinish();
+  } else if (hold.state === "steps") { stepMove(dt);
+  } else if (hold.state === "pivot") { pivotMove(dt);
+  } else {
+    if (ballFree()) updateDribble(dt);
+    const sp0 = Math.hypot(P.vx, P.vy);
+    const tx = ax*C.DRIB_SPEED, ty = ay*C.DRIB_SPEED, dx = tx - P.vx, dy = ty - P.vy, dl = Math.hypot(dx, dy);
+    // explosive from a stop, tapering near top speed; stopping and cutting are sharper than starting
+    const speedingUp = (ax || ay) && C.DRIB_SPEED > sp0 + 0.01;
+    const step = (speedingUp ? C.ACC0*(1 - 0.6*clamp(sp0/C.DRIB_SPEED, 0, 1)) : C.DECEL)*dt;
+    if (dl <= step || dl < 1e-9) { P.vx = tx; P.vy = ty; } else { P.vx += dx/dl*step; P.vy += dy/dl*step; }
+  }
+  const cap = C.PSPEED;
+  const sp = Math.hypot(P.vx, P.vy); if (sp > cap) { P.vx *= cap/sp; P.vy *= cap/sp; }
+  P.x = clamp(P.x + P.vx*dt, 0.6, 49.4); P.y = clamp(P.y + P.vy*dt, 4.8, 38.5);
+  { const hx = P.x - HOOP.x, hy = P.y - HOOP.y, hd = Math.hypot(hx, hy);
+    if (hd < 2.6) { P.x = HOOP.x + hx/(hd || 1)*2.6; P.y = HOOP.y + (hd ? hy/hd : 1)*2.6; } }
+
+  // defenders: jumps on finishes
+  const shooting = shot.state === "shooting", jumper = shot.kind === "jumper";
+  const sawShot = !!(perceived(params.react/1000) || {}).rising;      // they react to the shooting motion they saw
+  const reacted = sawShot || shot.state === "flight";
+  for (const d of defenders()) {                                       // close defenders may leave their feet, so a fake can get them in the air
+    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0) {
+      const dist = Math.hypot(d.x - P.x, d.y - P.y);
+      if (dist < (d === R ? 7 : 5) && Math.random() < (d === R ? 0.6 : 0.5)) d.jumpT = 0;
+    }
+    d.sawPrev = sawShot;
+  }
+  for (const d of defenders()) {
+    if (shooting && !jumper && d.jumpAt !== null && shot.t >= d.jumpAt) {
+      d.jumpAt = null;
+      if (Math.hypot(d.x - P.x, d.y - P.y) < 7 && d.land <= 0 && d.jumpT < 0) d.jumpT = 0;
+    }
+    if (d.jumpT >= 0) {
+      d.jumpT += dt;
+      if (d.jumpT >= 0.5) { d.jumpT = -1; d.h = 0; d.land = 0.45; } else d.h = Math.sin(Math.PI*d.jumpT/0.5);
+    }
+    if (d.land > 0) d.land -= dt;
+  }
+  if (params.defOn) {
+    const f = frame(P);
+    let tx, ty, maxS, acc;
+    if (reacted) { tx = P.x + f.u.x*1.8; ty = P.y + f.u.y*1.8; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
+    else {
+      // act on what they saw `lag` ago, extrapolated forward: a sudden change leaves them guessing wrong
+      const lag = defLag(), s0 = perceived(lag) || { x: P.x, y: P.y, vx: 0, vy: 0, side: drib.side, threat: 0 };
+      const ex = s0.x + s0.vx*lag*0.8, ey = s0.y + s0.vy*lag*0.8, pf = frame({ x: ex, y: ey });
+      const drive = Math.max(0, s0.vx*pf.u.x + s0.vy*pf.u.y);                         // coming at them: give ground
+      const cushion = s0.dead ? Math.min(2.0, pf.dist*0.6)                              // dead dribble: no drive threat, crowd them
+                              : Math.min(clamp(params.sag - (params.sag - 1.9)*s0.threat + drive*0.12, 1.9, params.sag + 2), pf.dist*0.6);
+      const shadeT = shot.state === "idle" && ballFree() ? s0.side*0.8 : 0;                // shade toward the ball side they saw
+      D.shade += (shadeT - D.shade)*Math.min(1, dt*8);
+      D.threat = s0.dead ? 0.8 : s0.threat;
+      tx = ex + pf.u.x*cushion + pf.r.x*D.shade; ty = ey + pf.u.y*cushion + pf.r.y*D.shade;
+      maxS = C.DSPEED + (params.dQuick - 70)*0.04; acc = C.DACC + (params.dQuick - 70)*0.4;
+    }
+    if (D.jumpT < 0) stepToward(D, tx, ty, maxS, acc, dt);
+    moveDef(D, dt);
+    D.hand = clamp(D.hand + clamp((reacted ? 1 : D.threat*0.8) - D.hand, -dt/0.15, dt/0.15), 0, 1);
+  }
+  if (params.rimOn) {
+    const hx = P.x - HOOP.x, hy = P.y - HOOP.y, dP = Math.hypot(hx, hy) || 0.001, nx = hx/dP, ny = hy/dP;
+    const isFin = k => k === "layup" || k === "dunk";
+    const finishing = (shooting && isFin(shot.kind)) || (shot.state === "flight" && last && isFin(last.kind));
+    // once per drive the big decides: stay home (concede the floater) or step up (concede the lane)
+    const drivingIn = -(P.vx*nx + P.vy*ny) >= C.DRIVE_SPEED;
+    if (!R.mode && dP < 17 && drivingIn) {
+      R.mode = Math.random()*100 < params.stepUp ? "up" : "home";
+      R.upDist = clamp(dP - 4.5, 6, 10); R.upX = HOOP.x + nx*R.upDist; R.upY = HOOP.y + ny*R.upDist;
+    }
+    if (R.mode && dP > 19 && shot.state === "idle") R.mode = null;
+    const homeX = 25, homeY = 8.5;
+    let tx = homeX, ty = homeY, maxS = 11;
+    if (R.mode === "up" && dP > R.upDist - 0.5) { tx = R.upX; ty = R.upY; maxS = 12; }
+    else if (finishing || dP < 16) {
+      const k = finishing ? Math.min(3, dP*0.6) : Math.min(4.5, dP*0.45), w = finishing ? 0.75 : 0.6;
+      tx = homeX + (HOOP.x + nx*k - homeX)*w; ty = homeY + (HOOP.y + ny*k - homeY)*w;
+      maxS = R.mode === "up" ? 8 : finishing ? 12 : 11;   // a big who stepped up has to recover
+    }
+    if (R.jumpT < 0) stepToward(R, tx, ty, maxS, 40, dt);
+    moveDef(R, dt, 2.2);
+    const handUp = shooting && !isFin(shot.kind) && shot.t >= (shot.kind === "floater" ? params.react*0.6 : params.react) && Math.hypot(R.x - P.x, R.y - P.y) < 8;
+    R.hand = clamp(R.hand + clamp((handUp ? 1 : 0) - R.hand, -dt/0.15, dt/0.15), 0, 1);
+  }
+
+  // ball
+  if (ball && ball.phase === "path") {
+    ball.t += dt;
+    if (!ball.announced && ball.t >= ball.decideT) {
+      ball.announced = true;
+      if (ball.made) { fx.push({ kind: "ring", t: 0 }); fx.push({ kind: "text", text: last.out.sub === "And one" ? "And one!" : last.out.big, t: 0 }); }
+      else fx.push({ kind: "text", text: last.out.big === "Blocked" ? "Blocked" : last.out.sub, t: 0 });
+      shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;
+    }
+    if (ball.t > ball.endT + 0.2) ball = null;
+  } else if (ball) {
+    ball.t += dt;
+    if (ball.phase === "flight" && ball.t >= ball.dur) {
+      ball.t = 0;
+      if (ball.blocked) { ball.phase = "bounce"; ball.bx = ball.tx; ball.by = ball.ty; ball.vx = (ball.tx - ball.sx)*1.2; ball.vy = (ball.ty - ball.sy)*1.2; }
+      else if (ball.make) { ball.phase = "drop"; fx.push({ kind: "ring", t: 0 }); fx.push({ kind: "text", text: last.out.sub === "And one" ? "And one!" : last.out.big, t: 0 }); }
+      else {
+        let dx = ball.dirx, dy = ball.diry, dl = Math.hypot(dx, dy);
+        if (dl < 0.5) { dx = ball.u.x; dy = ball.u.y; dl = 1; }
+        ball.phase = "bounce"; ball.bx = ball.tx; ball.by = ball.ty; ball.vx = dx/dl*11; ball.vy = dy/dl*11;
+        fx.push({ kind: "text", text: last.out.sub, t: 0 });
+      }
+      shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;   // the big re-reads every possession
+    } else if (ball.phase === "bounce") {
+      ball.bx += ball.vx*dt; ball.by += ball.vy*dt; ball.vx *= Math.exp(-dt*1.5); ball.vy *= Math.exp(-dt*1.5);
+      if (ball.t > 0.9) ball = null;
+    } else if (ball.phase === "drop" && ball.t > 0.4) ball = null;
+  }
+  if (shot.cooldown > 0) shot.cooldown -= dt;
+  if (meterFlash) { meterFlash.t -= dt; if (meterFlash.t <= 0) meterFlash = null; }
+  fx = fx.filter(o => (o.t += dt) < 1.1);
+}
+
+// ---------- Live readout ----------
+function computeLive() {
+  const f = frame(P);
+  const cx = shot.state === "shooting" ? { kind: shot.kind, note: shot.note } : shotContext(shiftDown);
+  if (cx.kind === "jumper") {
+    const con = jumperContest(f);
+    const shooting = shot.state === "shooting";
+    const fi = shooting ? (shot.fade ? { type: shot.fade, x: shot.fux, y: shot.fuy, along: shot.fadeAlong } : null) : fadeIntent(f);
+    const fade = fi ? fi.type : false;
+    let bvx = shooting ? shot.bvx : P.vx, bvy = shooting ? shot.bvy : P.vy;
+    if (fi && !shooting) { const al = bvx*fi.x + bvy*fi.y; if (al > 0) { bvx -= al*fi.x; bvy -= al*fi.y; } }
+    const moving = shooting ? shot.gatherSpeed : Math.hypot(bvx, bvy);
+    const clean = cleanLook(fade, moving);
+    const sig = jumperSigma(f.dist, moving, con.c, 1, fade ? fadeSigmaFor(fade) : 0, clean);
+    cx.clean = clean;
+    const shift = shooting ? shot.shift : (fi ? fadeShiftFor(fi.along) : 0);
+    const ideal = C.IDEAL + shift;
+    const fadeLat = fi ? C.DRIFT_LAT*params.drift*C.FADE_SPEED*(fi.x*f.r.x + fi.y*f.r.y) : 0;
+    const remain = shooting ? Math.max(0, ideal - shot.t) : ideal;
+    const k = Math.exp(-remain/1000/C.TAU);
+    const dr = driftOf(bvx*k, bvy*k, f), aim = aimOf(P, f);
+    cx.fade = fade; cx.shift = shift;
+    const assistK = 1 - params.aAssist/100;
+    const bLat = (aim.lat + dr.lat + fadeLat)*assistK, bDep = dr.dep + C.CONTEST_BIAS*con.c;
+    const glass = glassAimFor("jumper"); cx.glass = glass;
+    const base = { kind: "jumper", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+    const sc = { kind: "jumper", dist: f.dist, q: 1, move: moving, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
+    const fadeAng = fi ? Math.atan(fadeLat/12/f.dist) : 0;
+    const withAim = { ...base, aimTheta: glass ? 0 : (clamp(aim.theta, -0.6, 0.6) + fadeAng)*assistK, body: liftBody(f, bvx*k, bvy*k, assistK, 1) };
+    const ps = NZX.scatterIn(sc); sig.lat = ps.lat; sig.dep = ps.dep;
+    live = { cx, f, con, sig, three: isThree(P), A: C.WIN_A, B: C.WIN_B, bLat, bDep,
+             v1: liveChance("j1", base, sc, liveZ()), v2: liveChance("j2", withAim, sc, liveZ(true)) };
+  } else if (cx.kind === "floater") {
+    const con = floaterContest(f);
+    const moving = shot.state === "shooting" ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
+    const sig = floaterSigma(f.dist, moving, con.c, 1);
+    const remain = shot.state === "shooting" ? Math.max(0, C.FL_IDEAL - shot.t) : C.FL_IDEAL;
+    const k = Math.exp(-remain/1000/0.12);
+    const b = floaterBias(0, f, P.vx*k, P.vy*k), bDep = b.dep + C.FL_CONTEST_BIAS*con.c;
+    const glass = glassAimFor("floater"); cx.glass = glass;
+    const base = { kind: "floater", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+    const sc = { kind: "floater", dist: f.dist, q: 1, move: moving, contest: con.c };
+    const withAim = { ...base, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, body: liftBody(f, P.vx*k, P.vy*k, 0.6*b.assistK, 0.5) };
+    const ps = NZX.scatterIn(sc); sig.lat = ps.lat; sig.dep = ps.dep;
+    live = { cx, f, con, sig, three: false, A: sig.A, B: sig.B, bLat: b.lat, bDep,
+             v1: liveChance("f1", base, sc, liveZ()), v2: liveChance("f2", withAim, sc, liveZ(true)) };
+  } else {
+    const side = finishSideOf(f), con = rimContest(f, side);
+    const gs = shot.state === "shooting" ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
+    const vp = shot.state === "shooting" ? shot.vPerpG : P.vx*f.r.x + P.vy*f.r.y;
+    const hang = shot.state === "shooting" && shot.kind === "layup" ? Math.max(0, shot.t - C.RISE_LAYUP) : 0;
+    const bank = shot.state === "shooting" ? bankOf(shot.gx, shot.gy) : bankOf(P.x, P.y);
+    if (cx.kind === "dunk") {
+      const block = blockChanceDunk(con.c);
+      live = { cx, f, con, side, sig: { lat: 1.2, dep: 1.2, parts: [1, 0, 0, 0] }, A: C.FIN_A, B: C.FIN_B, bLat: 0, bDep: 0,
+               v1: (1 - block)*(1 - C.DUNK_FUMBLE), v2: block, three: false };
+    } else {
+      const sig = finishSigma(gs, vp, side, hang, con.c, bank), block = blockChanceLayup(con.c);
+      const lsc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2]), contest: con.c };
+      const lr = liveRates("l1", { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths() }, lsc);
+      live = { cx, f, con, side, sig, A: sig.A, B: sig.B, bLat: 0, bDep: 0, bank, v1: lr.make, v2: lr.block, three: false };
+    }
+  }
+  renderLive();
+}
+
+// ---------- Drawing ----------
+function drawBall(x, y, h, alpha) {
+  const [sx, sy] = S(x, y), r = ppf*0.42*(1 + h/40);
+  ctx.globalAlpha = alpha*0.25; ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.ellipse(sx, sy, ppf*0.42, ppf*0.25, 0, 0, 2*Math.PI); ctx.fill();
+  const by = sy - h*ppf*0.45;
+  ctx.globalAlpha = alpha; ctx.fillStyle = T.ball;
+  ctx.beginPath(); ctx.arc(sx, by, r, 0, 2*Math.PI); ctx.fill();
+  ctx.strokeStyle = "rgba(40,20,10,.55)"; ctx.lineWidth = Math.max(1, ppf*0.05);
+  ctx.beginPath(); ctx.moveTo(sx - r, by); ctx.lineTo(sx + r, by); ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx, by, r, 0, 2*Math.PI); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+function drawDefender(def, color, radius) {
+  const [dx, dy] = S(def.x, def.y), lift = def.h*ppf*1.1, sc = 1 + 0.2*def.h;
+  if (def.h > 0.02) {
+    ctx.globalAlpha = 0.25; ctx.fillStyle = "#000";
+    ctx.beginPath(); ctx.ellipse(dx, dy, ppf*radius, ppf*radius*0.6, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill();
+  const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1;
+  const up = Math.max(def.hand, def.h), reach = radius*0.8 + 0.75*up;
+  const [hx, hy] = S(def.x + tx/tl*reach, def.y + ty/tl*reach);
+  ctx.fillStyle = T.player; ctx.strokeStyle = color; ctx.lineWidth = ppf*0.12;
+  ctx.beginPath(); ctx.arc(hx, hy - lift, ppf*(0.28 + 0.14*up)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+}
+function drawFeet() {
+  const foot = (p, pivot) => {
+    const [fx0, fy0] = S(p.x, p.y);
+    ctx.beginPath(); ctx.ellipse(fx0, fy0, ppf*0.42, ppf*0.42, 0, 0, 2*Math.PI);
+    if (pivot) { ctx.fillStyle = "#14202B"; ctx.fill(); ctx.strokeStyle = T.courtline; ctx.lineWidth = ppf*0.12; ctx.stroke(); }
+    else { ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fill(); ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.1; ctx.stroke(); }
+  };
+  ctx.save();
+  if (hold.pivot) { foot(hold.pivot, true); foot(hold.free, false); }
+  else { const pp = { x: -hold.face.y, y: hold.face.x };
+         foot({ x: hold.center.x - pp.x*0.7, y: hold.center.y - pp.y*0.7 }, false); foot({ x: hold.center.x + pp.x*0.7, y: hold.center.y + pp.y*0.7 }, false); }
+  ctx.restore();
+}
+function drawHands() {
+  const f = frame(P), hp = handPositions();
+  ctx.save();
+  for (const [s, h] of [[-1, hp.L], [1, hp.R]]) {
+    const [ox, oy] = S(shoulder(f, s).x, shoulder(f, s).y), [hx, hy] = S(h.x, h.y);
+    ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(hx, hy); ctx.stroke();
+    const isBall = hold.state === "none" && s === drib.side && !(drib.crossing && drib.phase < 0.5);
+    ctx.fillStyle = T.player; ctx.lineWidth = ppf*0.09;
+    ctx.beginPath(); ctx.arc(hx, hy, ppf*(isBall ? 0.3 : 0.25), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawGatherFeet() {
+  const foot = (p, style) => {
+    const [fx0, fy0] = S(p.x, p.y);
+    ctx.beginPath(); ctx.ellipse(fx0, fy0, ppf*0.42, ppf*0.42, 0, 0, 2*Math.PI);
+    if (style === "planted") { ctx.fillStyle = "#14202B"; ctx.fill(); ctx.strokeStyle = T.courtline; ctx.lineWidth = ppf*0.12; ctx.stroke(); }
+    else if (style === "swing") { ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fill(); ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.1; ctx.stroke(); }
+    else { ctx.setLineDash([ppf*0.2, ppf*0.16]); ctx.strokeStyle = T.courtline; ctx.lineWidth = ppf*0.1; ctx.stroke(); ctx.setLineDash([]); }
+  };
+  ctx.save();
+  for (const pr of hold.prints) foot(pr, "planted");
+  if (hold.t < C.STEP_T) {
+    const k = stepFoot(hold.step);
+    foot(footSpot(hold.to, hold.stepDir, k), "target");
+    foot(footSpot(P, hold.stepDir, k), "swing");
+  }
+  ctx.restore();
+}
+function tag(text, x, y, color) {
+  ctx.save(); ctx.font = `700 ${Math.round(ppf*0.95)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  const w = ctx.measureText(text).width + ppf*0.8, h = ppf*1.25;
+  ctx.fillStyle = color; ctx.globalAlpha = 0.92;
+  ctx.beginPath(); ctx.roundRect(x - w/2, y - h, w, h, ppf*0.3); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = "#FFFFFF"; ctx.fillText(text, x, y - ppf*0.12);
+  ctx.restore();
+}
+function draw() {
+  ctx.fillStyle = T.oob; ctx.fillRect(0, 0, court.width, court.height);
+  { const [ox, oy] = S(CACHE.x0, CACHE.y0); ctx.drawImage(cache, ox, oy, CACHE.w*ppf, CACHE.h*ppf); }
+  const f = frame(P);
+  const [px, py] = S(P.x, P.y);
+  const [hx, hy] = S(HOOP.x, HOOP.y);
+  const kind = live ? live.cx.kind : "jumper";
+  const ax = mouse.x - P.x, ay = mouse.y - P.y, al = Math.hypot(ax, ay);
+
+  if (shot.state !== "flight") {
+    if (shot.state === "shooting" && (kind === "jumper" || kind === "floater") && al > 0.5) {   // aim guide only while the shot is held
+      const mx = P.x + ax/al*f.dist, my = P.y + ay/al*f.dist, [msx, msy] = S(mx, my);
+      ctx.save(); ctx.strokeStyle = T.courtline; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1, dpr*1.2);
+      ctx.setLineDash([ppf*0.5, ppf*0.5]); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(msx, msy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 0.95; ctx.lineWidth = Math.max(1.5, dpr*1.6);
+      const s = ppf*0.45;
+      ctx.beginPath(); ctx.moveTo(msx - s, msy); ctx.lineTo(msx + s, msy); ctx.moveTo(msx, msy - s); ctx.lineTo(msx, msy + s); ctx.stroke();
+      ctx.restore();
+    } else if ((kind === "layup" || kind === "dunk") && live) {
+      // finish side indicator on the rim
+      const s = live.side, ang0 = Math.atan2(-f.u.y, -f.u.x);       // angle from rim toward the player
+      const centerAng = ang0 - s*Math.PI/2*0.9;                       // shooter's right is clockwise from them
+      ctx.save(); ctx.strokeStyle = T.courtline; ctx.lineWidth = ppf*0.32; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(hx, hy, 1.15*ppf, centerAng - 0.7, centerAng + 0.7); ctx.stroke(); ctx.restore();
+    }
+  }
+
+  if (live && live.con.c > 0.02) {
+    ctx.save(); ctx.globalAlpha = Math.min(0.9, live.con.c*1.1); ctx.strokeStyle = T.miss; ctx.lineWidth = ppf*0.18;
+    ctx.beginPath(); ctx.arc(px, py, ppf*1.6, 0, 2*Math.PI); ctx.stroke(); ctx.restore();
+  }
+  if (params.rimOn) drawDefender(R, T.defender2, 1.25);
+  if (params.defOn) drawDefender(D, T.defender, 1.05);
+
+  ctx.fillStyle = T.player; ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.14;
+  ctx.beginPath(); ctx.arc(px, py, ppf*1.05, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  if (shot.state === "idle" && hold.state === "pivot") drawFeet();   // on top, so the pivot foot is always readable
+  else if (shot.state === "idle" && hold.state === "steps") drawGatherFeet();
+  if (shot.state === "idle" && ballFree()) drawHands();
+  if (al > 0.5 && !(shot.state === "idle" && ballFree())) {   // facing tick only when the arms aren't drawn
+    const [f1x, f1y] = S(P.x + ax/al*0.45, P.y + ay/al*0.45), [f2x, f2y] = S(P.x + ax/al*1.05, P.y + ay/al*1.05);
+    ctx.beginPath(); ctx.moveTo(f1x, f1y); ctx.lineTo(f2x, f2y); ctx.stroke();
+  }
+  const fadeTag = kind === "jumper" && live && live.cx.fade;
+  if (shot.state !== "flight" && (kind !== "jumper" || fadeTag)) {
+    const tg = fadeTag ? [{ back: "FADEAWAY", left: "FADE LEFT", right: "FADE RIGHT" }[live.cx.fade], "#4B3F8C"] : { dunk: ["DUNK", "#B23445"], layup: ["LAYUP", "#2A4C70"], floater: ["FLOATER", "#2C6464"] }[kind];
+    tag(tg[0], px, py + ppf*2.6, tg[1]);
+  } else if (shot.state === "idle" && hold.state !== "none") tag(hold.state === "steps" ? "GATHER" : "DEAD BALL", px, py + ppf*3.6, "#5B5F66");   // lower, clear of the feet
+
+  if (shot.state === "shooting") {
+    const lift = shot.kind === "jumper" ? 2 + shot.t/200 : 1 + Math.min(shot.t, 400)/80;
+    drawBall(P.x + f.u.x*0.7, P.y + f.u.y*0.7, lift, 1);
+  }
+  if (shot.state === "idle" && ballFree()) { const b = hold.state === "none" ? dribbleBallPos() : heldBallPos(); drawBall(b.x, b.y, b.h, 1); }
+  if (ball && ball.phase === "path") { const pp = pathPoint(ball); drawBall(pp.x, pp.y, pathVisH(ball, pp), ball.announced ? 0.45 : 1); }
+  else if (ball) {
+    if (ball.phase === "flight") {
+      const t = ball.t/ball.dur, x = ball.sx + (ball.tx - ball.sx)*t, y = ball.sy + (ball.ty - ball.sy)*t;
+      drawBall(x, y, 4*ball.hmax*t*(1 - t), 1);
+    } else if (ball.phase === "drop") drawBall(HOOP.x, HOOP.y + ball.t*1.5, 0, 1 - ball.t/0.4);
+    else if (ball.phase === "bounce") drawBall(ball.bx, ball.by, 3*Math.abs(Math.sin(ball.t*7))*(1 - ball.t), 1 - ball.t/0.9);
+  }
+  ctx.strokeStyle = T.rim; ctx.lineWidth = ppf*0.12; ctx.beginPath(); ctx.arc(hx, hy, 0.75*ppf, 0, 2*Math.PI); ctx.stroke();
+  if (live && live.cx.glass && shot.state !== "flight") {          // aiming at the glass: green if that spot can bank it in
+    const [gx, gy] = S(live.cx.glass.target.x, PHX.PHYS.BOARD.y);
+    ctx.save(); ctx.fillStyle = live.cx.glass.works ? T.make : T.miss; ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = ppf*0.06;
+    ctx.fillRect(gx - ppf*0.35, gy - ppf*0.22, ppf*0.7, ppf*0.44); ctx.strokeRect(gx - ppf*0.35, gy - ppf*0.22, ppf*0.7, ppf*0.44); ctx.restore();
+  }
+  if (hy < ppf*0.8) {                                    // rim off the top of the screen: point to it
+    const ix = clamp(hx, ppf*3, court.width - ppf*3), iy = ppf*1.2;
+    ctx.save(); ctx.fillStyle = T.rim;
+    ctx.beginPath(); ctx.moveTo(ix, iy - ppf*0.8); ctx.lineTo(ix - ppf*0.65, iy + ppf*0.3); ctx.lineTo(ix + ppf*0.65, iy + ppf*0.3); ctx.closePath(); ctx.fill();
+    ctx.font = `700 ${Math.round(ppf*0.85)}px "Barlow Condensed", "Arial Narrow", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.lineWidth = ppf*0.25; ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.fillStyle = "#FFFFFF";
+    ctx.strokeText(`Rim ${f.dist.toFixed(0)} ft`, ix, iy + ppf*0.45); ctx.fillText(`Rim ${f.dist.toFixed(0)} ft`, ix, iy + ppf*0.45);
+    ctx.restore();
+  }
+
+  for (const o of fx) {
+    const a = 1 - o.t/1.1;
+    if (o.kind === "ring") {
+      ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = T.make; ctx.lineWidth = ppf*0.16;
+      ctx.beginPath(); ctx.arc(hx, hy, ppf*(0.9 + o.t*2.2), 0, 2*Math.PI); ctx.stroke(); ctx.restore();
+    } else {
+      ctx.save(); ctx.globalAlpha = a; ctx.font = `700 ${Math.round(ppf*1.4)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+      ctx.textAlign = "center"; ctx.lineWidth = ppf*0.35; ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.fillStyle = "#FFFFFF";
+      const [tx0, ty0] = o.x !== undefined ? S(o.x, o.y - 2.4) : [hx, hy + ppf*3.4];
+      const y = ty0 + ppf*o.t*0.8;
+      ctx.strokeText(o.text, tx0, y); ctx.fillText(o.text, tx0, y); ctx.restore();
+    }
+  }
+
+  // meters
+  const mx = px + ppf*1.9, mh = ppf*4.2, mw = ppf*0.55, mtop = py - mh*0.75;
+  if (shot.state === "shooting" && shot.kind === "layup") {
+    // rise, then hang: the red part is control you are spending to wait out the block
+    const total = C.RISE_LAYUP + C.MAX_HANG, yOf = t => mtop + mh*(1 - clamp(t, 0, total)/total);
+    ctx.save(); ctx.fillStyle = "rgba(20,32,43,.75)"; ctx.fillRect(mx, mtop, mw, mh);
+    ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = 0.85;
+    ctx.fillRect(mx + mw*0.2, yOf(Math.min(shot.t, C.RISE_LAYUP)), mw*0.6, mtop + mh - yOf(Math.min(shot.t, C.RISE_LAYUP)));
+    if (shot.t > C.RISE_LAYUP) { ctx.fillStyle = T.miss; ctx.globalAlpha = 1; ctx.fillRect(mx + mw*0.2, yOf(shot.t), mw*0.6, yOf(C.RISE_LAYUP) - yOf(shot.t)); }
+    ctx.globalAlpha = 1; ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = Math.max(1, dpr);
+    ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(C.RISE_LAYUP)); ctx.lineTo(mx + mw + ppf*0.2, yOf(C.RISE_LAYUP)); ctx.stroke();
+    ctx.restore();
+  }
+  const fsh = shot.state === "shooting" ? shot.shift : (meterFlash && meterFlash.shift) || 0;
+  const mKind = shot.state === "shooting" ? (shot.kind === "jumper" && shot.fade ? "fade" : shot.kind) : (meterFlash ? meterFlash.kind : null);
+  const MT = mKind === "floater" ? { ideal: C.FL_IDEAL, max: C.FL_MAX, perf: C.FL_PERFECT }
+           : mKind === "fade" ? { ideal: C.IDEAL + fsh, max: C.MAX + fsh, perf: C.PERFECT_MS }
+           : { ideal: C.IDEAL, max: C.MAX, perf: C.PERFECT_MS };
+  const timed = shot.state === "shooting" && (shot.kind === "jumper" || shot.kind === "floater");
+  const showT = timed ? shot.t : (meterFlash ? MT.ideal + meterFlash.e : null);
+  if (showT !== null) {
+    const alpha = shot.state === "shooting" ? 1 : Math.min(1, meterFlash.t/0.3);
+    const yOf = t => mtop + mh*(1 - clamp(t, 0, MT.max)/MT.max);
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(20,32,43,.75)"; ctx.fillRect(mx, mtop, mw, mh);
+    const dz = params.tAssist + MT.perf;
+    ctx.fillStyle = T.make; ctx.globalAlpha = alpha*0.35; ctx.fillRect(mx, yOf(MT.ideal + dz), mw, yOf(MT.ideal - dz) - yOf(MT.ideal + dz));
+    ctx.globalAlpha = alpha; ctx.fillRect(mx, yOf(MT.ideal + MT.perf), mw, yOf(MT.ideal - MT.perf) - yOf(MT.ideal + MT.perf));
+    ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = alpha*0.85;
+    ctx.fillRect(mx + mw*0.2, yOf(showT), mw*0.6, mtop + mh - yOf(showT));
+    if (shot.state !== "shooting") {
+      ctx.globalAlpha = alpha; ctx.fillStyle = Math.abs(meterFlash.e) <= dz ? T.make : T.miss;
+      ctx.fillRect(mx - ppf*0.25, yOf(showT) - ppf*0.1, mw + ppf*0.5, ppf*0.2);
+    }
+    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = Math.max(1, dpr); ctx.globalAlpha = alpha;
+    ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(MT.ideal)); ctx.lineTo(mx + mw + ppf*0.2, yOf(MT.ideal)); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawInset() {
+  const w = inset.width, h = inset.height, c = ictx, RR = PHX.PHYS.RIM, BB = PHX.PHYS.BOARD;
+  c.fillStyle = T.panel; c.fillRect(0, 0, w, h);
+  const src = lastPhys ? lastPhys.from : { x: P.x, y: P.y };
+  let ux = RR.x - src.x, uy = RR.y - src.y; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+  const s0 = -7, s1 = 2.8, z0 = 5.2, z1 = 14.4;                     // feet: along the shot from the rim center, and height
+  const k = Math.min(w/(s1 - s0), h/(z1 - z0)), ox = (w - (s1 - s0)*k)/2, oy = (h - (z1 - z0)*k)/2;
+  const X = sv => ox + (sv - s0)*k, Y = zv => h - oy - (zv - z0)*k;
+  c.strokeStyle = T.line; c.lineWidth = Math.max(1, dpr); c.setLineDash([3*dpr, 4*dpr]);
+  c.beginPath(); c.moveTo(0, Y(RR.z)); c.lineTo(w, Y(RR.z)); c.stroke(); c.setLineDash([]);
+  const tB = uy < -0.05 ? (BB.y - RR.y)/uy : 99, bx = RR.x + ux*tB;
+  if (tB < s1 && bx >= BB.x0 && bx <= BB.x1) {                       // the glass, where the shot's plane meets it
+    c.strokeStyle = T.muted; c.lineWidth = 4*dpr; c.beginPath(); c.moveTo(X(tB), Y(BB.z0)); c.lineTo(X(tB), Y(Math.min(BB.z1, z1))); c.stroke();
+    c.strokeStyle = T.rim; c.lineWidth = 2*dpr; c.beginPath(); c.moveTo(X(RR.r), Y(RR.z)); c.lineTo(X(tB), Y(RR.z)); c.stroke();
+  }
+  c.strokeStyle = T.muted; c.globalAlpha = 0.5; c.lineWidth = 1*dpr;
+  c.beginPath(); c.moveTo(X(-RR.r), Y(RR.z)); c.lineTo(X(-0.45), Y(RR.z - 1.4)); c.lineTo(X(0.45), Y(RR.z - 1.4)); c.lineTo(X(RR.r), Y(RR.z)); c.stroke();
+  c.globalAlpha = 1; c.fillStyle = T.rim;
+  for (const sv of [-RR.r, RR.r]) { c.beginPath(); c.arc(X(sv), Y(RR.z), 3*dpr, 0, 2*Math.PI); c.fill(); }
+  if (lastPhys) {
+    const proj = q => [X((q.x - RR.x)*ux + (q.y - RR.y)*uy), Y(q.z)];
+    c.save(); c.beginPath(); c.rect(0, 0, w, h); c.clip();
+    c.strokeStyle = lastPhys.made ? T.make : T.miss; c.lineWidth = 2*dpr;
+    c.beginPath(); lastPhys.path.forEach((q, i) => { const [x, y] = proj(q); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke();
+    for (const kk of lastPhys.contacts) if (kk.type !== "floor") {
+      const [x, y] = proj(kk); c.fillStyle = kk.type === "board" ? T.accent : T.ink;
+      c.beginPath(); c.arc(x, y, 4*dpr, 0, 2*Math.PI); c.fill();
+    }
+    if (ball && ball.phase === "path") {
+      const [x, y] = proj(pathPoint(ball)); c.fillStyle = T.ball;
+      c.beginPath(); c.arc(x, y, PHX.PHYS.BALL_R*k, 0, 2*Math.PI); c.fill();
+    }
+    c.restore();
+  }
+  c.fillStyle = T.muted; c.font = `500 ${Math.round(12*dpr)}px "Barlow", system-ui, sans-serif`;
+  c.textAlign = "left"; c.textBaseline = "top"; c.fillText("from the shooter", 5*dpr, 5*dpr);
+  c.textAlign = "right"; c.fillText("rim height", w - 5*dpr, Y(RR.z) + 4*dpr);
+}
+
+// ---------- DOM readouts ----------
+const $ = id => document.getElementById(id);
+const pct = p => `${Math.round(p*100)}%`;
+const side = (v, pos, neg) => `${Math.abs(v).toFixed(1)} in ${v >= 0 ? pos : neg}`;
+const conWord = c => c < 0.05 ? "Open" : c < 0.3 ? "Light" : c < 0.6 ? "Moderate" : "Heavy";
+function sideWord(s, con) {
+  if (Math.abs(s) < 0.25) return "Middle of the rim";
+  const base = `${s < 0 ? "Left" : "Right"} side`;
+  if (con.c < 0.05) return base;
+  const soft = con.lat/(Math.abs(con.lat) + 0.6), rel = s*soft;
+  return rel < -0.2 ? `${base}, away from the defender` : rel > 0.2 ? `${base}, into the defender` : base;
+}
+function renderLive() {
+  const L = live, k = L.cx.kind;
+  if (hold.state === "steps") $("lHandle").textContent = `Gather step ${hold.step} of 2${hold.euro > 0.8 ? ", euro" : hold.jumpStop ? ", jump stop" : ""}`;
+  else if (hold.state === "pivot") $("lHandle").textContent = hold.pivot
+    ? `Dead dribble, pivoting on your ${hold.freeSide > 0 ? "left" : "right"} foot${hold.ext > 1.2 ? ", free foot reaching" : ""}` : "Dead dribble, pivot not set";
+  else { const sp = Math.hypot(P.vx, P.vy), tight = tightness();
+    $("lHandle").textContent = tight > 0.7 && sp < 4 ? "Hang dribble, ball up"
+      : `${drib.len < 1.2 ? "Tight" : drib.len < 1.8 ? "Normal" : "Exposed"}, ${drib.len.toFixed(1)} ft out, ${drib.side > 0 ? "right" : "left"} hand${handPositions().guard ? ", off arm guarding" : ""}`; }
+  if (!params.defOn) $("lDef").textContent = "Off";
+  else {
+    const f = frame(P), ahead = (D.x - P.x)*f.u.x + (D.y - P.y)*f.u.y, vin = -(D.vx*f.u.x + D.vy*f.u.y);
+    $("lDef").textContent = ahead < 0.3 ? `Beaten, ${Math.max(0, -ahead).toFixed(1)} ft behind you`
+      : vin > 3 ? `Stepping up${D.threat > 0.35 ? ", reading a pull-up" : ""}` : vin < -3 ? "Giving ground"
+      : Math.abs(D.shade) > 0.3 ? `Shading your ${D.shade > 0 ? "right" : "left"}` : "Square";
+  }
+  $("lMove").textContent = drib.lastMove ? `Last move: ${drib.lastMove}` : "";
+  const bankTxt = L.cx.glass ? (L.cx.glass.works ? "Bank shot off the glass" : "Bank shot: that spot won’t bank in from here") : null;
+  $("lKind").textContent = bankTxt && (k === "jumper" || k === "floater") ? bankTxt : k === "jumper" ? (L.cx.fade ? `${FADE_NAME[L.cx.fade]} (release line +${L.cx.shift} ms${L.cx.fade !== "back" ? ", aim against the drift" : ""})` : "Jump shot (hold back to fade)") : k === "floater" ? "Floater (keep driving for a layup)" : k === "dunk" ? "Dunk attempt" : (L.cx.note ? L.cx.note : "Layup (Shift for dunk)");
+  $("lRim").textContent = !params.rimOn ? "Off" : R.mode === "up" ? "Stepping up" : R.mode === "home" ? "Staying home" : "Waiting for a drive";
+  $("lDist").textContent = `${L.f.dist.toFixed(1)} ft${k === "jumper" ? `, ${L.three ? "three" : "two"}` : ""}`;
+  $("lCon").textContent = `${conWord(L.con.c)} (${pct(L.con.c)})${k === "layup" || k === "dunk" ? ", at the rim" : ""}${k === "jumper" && L.cx.clean > 0.5 ? ", clean look" : ""}`;
+  $("lSig").textContent = k === "dunk" ? "Almost none, it’s a dunk" : `σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth`;
+  const labels = k === "jumper" ? ["Shooter", "Distance", L.cx.fade ? "Movement and fade" : "Movement", "Contest"] : k === "floater" ? ["Touch", "Distance", "Movement", "Contest"] : ["Finisher", "Finish angle and hang", "Speed", "Contest"];
+  labels.forEach((t, i) => { $("lg" + (i + 1)).textContent = t; });
+  const v = L.sig.parts.map(x => x*x), tot = v.reduce((a, b) => a + b, 0) || 1;
+  const spans = $("lBar").children;
+  ["--seg1","--seg2","--seg3","--seg4"].forEach((c, i) => { spans[i].style.width = `${v[i]/tot*100}%`; spans[i].style.background = `var(${c})`; });
+  $("lCeil").textContent = pct(L.v1); $("lAim").textContent = pct(L.v2);
+  const timedShot = k === "jumper" || k === "floater";
+  $("lCeilK").textContent = timedShot ? "Ceiling, perfect input" : "Make chance, finishing now";
+  $("lAimK").textContent = timedShot ? "With your aim and momentum" : "Block chance";
+}
+function renderLast() {
+  const L = last, o = L.out;
+  const head = `<div class="result"><span class="big" style="color:var(${o.make ? "--make" : "--miss"})">${o.big}</span><span class="sub">${o.sub}</span></div>`;
+  if (L.kind === "jumper") {
+    const rel = Math.abs(L.e) <= C.PERFECT_MS ? "Perfect" : Math.abs(L.e) <= C.PERFECT_MS + params.tAssist ? "Good" : L.e < 0 ? "Early" : "Late";
+    const msTxt = `${Math.abs(Math.round(L.e))} ms ${L.e < 0 ? "early" : "late"}`;
+    const tDep = C.KT*L.eEff, aimDeg = L.aim.theta*180/Math.PI;
+    $("last").innerHTML = `${head}
+      <dl>
+        <dt>Shot</dt><dd>${L.fade ? FADE_NAME[L.fade] : "Jumper"}, ${L.dist.toFixed(1)} ft ${L.three ? "three" : "two"}</dd>
+        ${L.fade ? `<dt>Fade</dt><dd>${L.fadeBack.toFixed(1)} ft of separation<br><small>+${fadeSigmaFor(L.fade).toFixed(1)} in scatter, release line +${L.shift} ms${L.fade !== "back" ? `, pushed ${side(L.fadeLat*L.assistK, "right", "left")} after assist` : ""}</small></dd>` : ""}
+        <dt>Release</dt><dd>${rel}, ${msTxt}<br><small>${Math.abs(tDep) < 0.05 ? "no depth error" : side(tDep, "long", "short")}${L.q > 0 && params.bonus > 0 ? `, shooter scatter −${Math.round(params.bonus*L.q)}%` : ""}</small></dd>
+        <dt>Aim</dt><dd>${Math.abs(aimDeg).toFixed(1)}° ${aimDeg >= 0 ? "right" : "left"}<br><small>${side(L.aim.lat*L.assistK, "right", "left")} after assist</small></dd>
+        <dt>Drift</dt><dd>${L.dr.speed.toFixed(1)} ft/s carried in<br><small>${side(L.dr.lat*L.assistK, "right", "left")}, ${side(L.dr.dep, "long", "short")}</small></dd>
+        <dt>Contest</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
+        <dt>Scatter</dt><dd>σ ${L.sig.lat.toFixed(1)} in</dd>
+        <dt>Make chance</dt><dd><strong>${pct(L.chance)}</strong></dd>
+      </dl>`;
+    return;
+  }
+  if (L.kind === "floater") {
+    const rel = Math.abs(L.e) <= C.FL_PERFECT ? "Perfect" : Math.abs(L.e) <= C.FL_PERFECT + params.tAssist ? "Good" : L.e < 0 ? "Early" : "Late";
+    const tDep = C.FL_KT*L.b.eEff, aimDeg = L.b.aim.theta*180/Math.PI;
+    const rimTxt = { up: "Stepped up", home: "Stayed home", off: "Off" }[L.rimMode] || "Not involved";
+    $("last").innerHTML = `${head}
+      <dl>
+        <dt>Shot</dt><dd>Floater, ${L.dist.toFixed(1)} ft</dd>
+        <dt>Release</dt><dd>${rel}, ${Math.abs(Math.round(L.e))} ms ${L.e < 0 ? "early" : "late"}<br><small>${Math.abs(tDep) < 0.05 ? "no depth error" : side(tDep, "long", "short")}</small></dd>
+        <dt>Aim</dt><dd>${Math.abs(aimDeg).toFixed(1)}° ${aimDeg >= 0 ? "right" : "left"}<br><small>${side(L.b.aim.lat*L.b.assistK, "right", "left")} after assist</small></dd>
+        <dt>Momentum</dt><dd>${L.b.dr.speed.toFixed(1)} ft/s at release<br><small>${side(0.5*L.b.dr.dep, "long", "short")}</small></dd>
+        <dt>Contest</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
+        <dt>Rim protector</dt><dd>${rimTxt}</dd>
+        <dt>Scatter</dt><dd>σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth</dd>
+        <dt>Make chance</dt><dd><strong>${pct(L.chance)}</strong></dd>
+      </dl>`;
+    return;
+  }
+  const dunk = L.kind === "dunk";
+  $("last").innerHTML = `${head}
+    <dl>
+      <dt>Shot</dt><dd>${dunk ? "Dunk" : `Layup${L.bank > 1 ? ", bank angle" : ""}`}${L.note ? `<br><small>${L.note}</small>` : ""}</dd>
+      <dt>Finish</dt><dd>${sideWord(L.side, L.con)}</dd>
+      ${dunk ? "" : `<dt>Hang</dt><dd>${L.hangMs < 10 ? "None" : `${Math.round(L.hangMs)} ms<br><small>+${(0.9*L.hangMs/100).toFixed(1)} in scatter</small>`}</dd>
+      <dt>Approach</dt><dd>${L.speed.toFixed(1)} ft/s<br><small>under control up to ${L.sig.limit.toFixed(1)}</small></dd>`}
+      <dt>Contest at rim</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
+      <dt>Block chance</dt><dd>${pct(L.block)}</dd>
+      <dt>Foul chance</dt><dd>${pct(L.foulP)}</dd>
+      <dt>Make chance</dt><dd><strong>${pct(L.chance)}</strong></dd>
+    </dl>`;
+}
+function renderStats() {
+  const f = (m, a) => `${m}/${a}<small>${a ? pct(m/a) : "–"}</small>`;
+  $("sFG").innerHTML = f(stats.fgm, stats.fga);
+  $("s3").innerHTML = f(stats.m3, stats.a3);
+  $("s2").innerHTML = f(stats.fgm - stats.m3, stats.fga - stats.a3);
+  $("sRim").innerHTML = f(stats.mr, stats.ar);
+  $("sFl").innerHTML = f(stats.mf, stats.af);
+  $("sPPS").textContent = stats.fga ? (stats.pts/stats.fga).toFixed(2) : "–";
+  $("sTO").textContent = stats.to;
+  $("sPPP").textContent = stats.fga + stats.to ? (stats.pts/(stats.fga + stats.to)).toFixed(2) : "–";
+}
+$("reset").addEventListener("click", () => {
+  Object.assign(stats, { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, pts: 0, to: 0 }); drib.lastMove = ""; history = []; last = null;
+  $("last").innerHTML = `<p class="empty">Take a shot to see how it was resolved.</p>`; renderStats();
+});
+
+// ---------- Tuning controls ----------
+const fmt = {
+  fadeR: v => `${v}`, handle: v => `${v}`, dQuick: v => `${v}`, dSteal: v => `${v}`, tAssist: v => `±${v} ms`, bonus: v => `${v}%`, aAssist: v => `${v}%`, drift: v => `${(+v).toFixed(1)}×`,
+  finish: v => `${v}`, dunk: v => `${v}`, stepUp: v => `${v}%`,
+  sag: v => `${(+v).toFixed(1)} ft`, react: v => `${v} ms`, length: v => `${(+v).toFixed(2)}×`
+};
+for (const k of Object.keys(fmt)) {
+  const el = $(k), out = $("o-" + k);
+  const sync = () => { params[k] = +el.value; out.textContent = fmt[k](el.value); };
+  el.addEventListener("input", sync); sync();
+}
+$("defOn").addEventListener("change", e => { params.defOn = e.target.checked; Object.assign(D, { hand: 0, h: 0, jumpT: -1, land: 0, x: P.x, y: Math.max(5, P.y - 6), vx: 0, vy: 0 }); });
+$("rimOn").addEventListener("change", e => { params.rimOn = e.target.checked; Object.assign(R, { hand: 0, h: 0, jumpT: -1, land: 0, x: 25, y: 9.5, vx: 0, vy: 0, mode: null }); });
+
+// ---------- Loop ----------
+readTheme();
+new ResizeObserver(resize).observe(court);
+resize();
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readTheme(); buildCourt(); });
+let prev = performance.now(), liveTimer = 0;
+function loop(now) {
+  const dt = clamp((now - prev)/1000, 0, 0.05); prev = now;
+  const ck = 1 - Math.exp(-dt/CAM.tau);
+  cam.x += (P.x - cam.x)*ck; cam.y += (P.y - CAM.lead - cam.y)*ck;
+  mouseToWorld();
+  update(dt);
+  liveTimer -= dt; if (liveTimer <= 0) { computeLive(); liveTimer = 0.08; }
+  draw(); drawInset();
+  requestAnimationFrame(loop);
+}
+computeLive(); renderStats();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
