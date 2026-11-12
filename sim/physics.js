@@ -162,3 +162,4 @@ function labelFor(launch, contacts, made, madeAt) {
 }
 
 if (typeof module !== "undefined") module.exports = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact };
+else window.PhysicsLib = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact };

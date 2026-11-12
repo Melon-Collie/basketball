@@ -33,7 +33,14 @@ for (const prem of [0.04, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12]) {
 NN.PREMIUM = best.prem; NN.CAP = best.cap;
 out.clean = best;
 console.log(JSON.stringify(out));
-require('fs').writeFileSync('calibration.json', JSON.stringify({ MULT: NN.MULT, DIST_IN: NN.DIST_IN, CONTEST_IN: NN.CONTEST_IN, PREMIUM: NN.PREMIUM, CAP: NN.CAP, TAIL_IN: NN.TAIL_IN, CONTEST_TAIL_IN: NN.CONTEST_TAIL_IN }, null, 1));
+// Written as a script, not JSON, so the prototype can load it with a plain <script> tag (no fetch, works from file://).
+const settings = { MULT: NN.MULT, DIST_IN: NN.DIST_IN, CONTEST_IN: NN.CONTEST_IN, PREMIUM: NN.PREMIUM, CAP: NN.CAP, TAIL_IN: NN.TAIL_IN, CONTEST_TAIL_IN: NN.CONTEST_TAIL_IN };
+require('fs').writeFileSync(require('path').join(__dirname, 'calibration.js'),
+`// Noise settings that hit the design targets (milestone 3). Written by calibrate.js: don't edit by hand.
+const CALIBRATION = ${JSON.stringify(settings, null, 1)};
+if (typeof module !== "undefined") module.exports = CALIBRATION;
+else Object.assign(window.NoiseLib.NOISE, CALIBRATION);
+`);
 const checks = {
   'open perfect three 24ft (target 50)': { dist: 24 },
   'clean perfect three 24ft (target 60)': { dist: 24, clean: 1 },

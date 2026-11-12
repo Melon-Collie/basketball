@@ -4,14 +4,15 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 ## Contents
 
-- [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. A single self-contained HTML file with no build step; open it in a browser.
+- [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. It loads the simulation from `sim/`, so keep the two folders side by side.
 - [`docs/shot-model-design.md`](docs/shot-model-design.md): the design doc, covering principles, the shot resolver, dribbling, defense, frames, physics, calibration and the roadmap.
 
-- [`sim/`](sim): the shot simulation as standalone modules, which the prototype inlines.
+- [`sim/`](sim): the shot simulation. The prototype loads these files directly, and they also run in Node for tests and calibration.
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
   - `noise.js`: launch-space noise and simulated make rates.
-  - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.json`.
+  - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.js`.
+  - `calibration.js`: the generated settings, applied to the noise model when the prototype loads.
   - `tests.js`, `tests-launch.js`: physics tests and the launch continuity check.
 
 ## Running the simulation
@@ -26,10 +27,10 @@ node sim/tests.js
 node sim/tests-launch.js
 ```
 
-Calibration takes about a minute and writes `calibration.json` to the current directory, so run it from `sim/`:
+Calibration takes about a minute and rewrites `sim/calibration.js`:
 
 ```bash
-cd sim && node calibrate.js
+node sim/calibrate.js
 ```
 
 ## Controls
