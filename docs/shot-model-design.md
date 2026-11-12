@@ -718,33 +718,29 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | IDEAL / MAX | 520 / 820 ms | Jumper perfect release / auto-release |
 | KT | 0.09 in/ms | Jumper depth bias per ms of timing error |
 | PERFECT\_MS | 12 ms | Jumper perfect window (±) |
-| WIN\_A / WIN\_B | 4.3 / 5.0 in | Jumper make window half-sizes |
-| DEP\_RATIO | 1.16 | Jumper depth scatter ÷ lateral |
+| DEP\_RATIO | 1.16 / 1.45 / 1.2 | Depth scatter ÷ lateral: jumper / floater / layup (in `sim/noise.js`) |
 | TAU | 0.40 s | Momentum bleed once a jumper starts |
 | DRIFT\_LAT / DRIFT\_DEP | 1.6 / 1.0 in per ft/s | Drift bias from carried momentum |
-| CONTEST\_SIG / CONTEST\_BIAS | 6.0 / 2.5 in | Jumper contest scatter / push long at full contest |
+| CONTEST\_SIG | 6.0 in | Jumper contest share in the live scatter breakdown. Outcomes use the calibrated CONTEST\_IN below |
 | FADE\_SPEED / FADE\_COMMIT | 5 ft/s / 150 ms | Canned fade speed / commit window |
-| FIN\_A / FIN\_B | 5.0 / 6.0 in | Layup make window (×1.2 from a bank angle) |
 | RISE\_LAYUP / RISE\_DUNK / MAX\_HANG | 320 / 380 / 450 ms | Finish rise times / maximum hang |
 | RIM\_CONTEST\_SIG | 3.5 in | Layup contest scatter |
 | DUNK\_FUMBLE | 4% | Dunk miss chance when not blocked |
 | LAYUP\_RANGE / DUNK\_RANGE / FLOATER\_RANGE | 7 / 9 / 14 ft | Context cutoffs on a drive |
 | DRIVE\_SPEED / DUNK\_SPEED | 4 / 7 ft/s | Minimum speed toward the rim to count as driving / to dunk |
 | FL\_IDEAL / FL\_MAX / FL\_PERFECT | 330 / 560 / 20 ms | Floater timing |
-| FL\_KT | 0.07 in/ms | Floater depth bias per ms |
-| FL\_A / FL\_B / FL\_DEP\_RATIO | 4.6 / 5.6 in / 1.45 | Floater window and depth scatter ratio |
-| FL\_CONTEST\_SIG / FL\_CONTEST\_BIAS | 5.0 / 1.5 in | Floater contest scatter / push long |
+| FL\_KT | 0.07 in/ms | Depth estimate per ms in the floater's last-shot readout. Outcomes use K\_SPEED below |
+| FL\_CONTEST\_SIG | 5.0 in | Floater contest scatter |
 | PSPEED / PACC | 15 ft/s / 70 ft/s² | Ball handler movement |
 | DSPEED / DACC | 13 ft/s / 50 ft/s² | On-ball defender guarding |
 | CLOSE\_SPEED / CLOSE\_ACC | 15.5 ft/s / 60 ft/s² | Closeouts |
 
-Under physics, some of these no longer decide outcomes, though they are still in the prototype's constants: the make windows (WIN, FIN, FL\_A / FL\_B), the push-long biases (CONTEST\_BIAS, FL\_CONTEST\_BIAS) and FL\_KT. CONTEST\_SIG is superseded by the calibrated CONTEST\_IN below. KT and the drift values still set the fade release line, and are the targets the launch mapping was fitted to at 24 ft.
+Physics retired the make windows (WIN, FIN, FL\_A / FL\_B), the push-long biases (CONTEST\_BIAS, FL\_CONTEST\_BIAS) and the landing-point clean-look values (CLEAN\_PREMIUM, NEAR\_MISS\_CAP), and they have been removed from the prototype. KT and the drift values still set the fade release line and the last-shot readout, and are the targets the launch mapping was fitted to at 24 ft.
 
 **Added since the first version:**
 
 | Constant | Value | Used for |
 | --- | --- | --- |
-| CLEAN\_PREMIUM / NEAR\_MISS\_CAP | 0.13 / 1.35 window radii | Landing-point clean-look values. Physics uses PREMIUM / CAP below |
 | COMMIT\_MS | 150 ms | Release before this and the shot is a pump fake |
 | STEP\_T / GATHER\_SPEED | 0.2 s / 6 ft/s | Gather step duration / speed that gives gather steps instead of a dead dribble |
 | DRIB\_SPEED | 13.5 ft/s | Dribbling top speed |
@@ -788,6 +784,7 @@ Full physics is built; frames are next. The prototype should become a real proje
 - **Live-ball triple threat and jab steps** need passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **Floaters don't get the clean-look premium yet.**
+- **The live scatter breakdown bar still uses the landing-point component sizes,** including a distance share the physics no longer has. The scatter figure beside it comes from the noise model.
 
 **Roadmap:**
 
@@ -799,6 +796,6 @@ Full physics is built; frames are next. The prototype should become a real proje
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** WASD movement with the mouse for contests, steals and passing-lane deflections.
 
-**Engineering:** physics, launch and noise are now separate modules in `sim/`, unit-tested and calibrated offline, and the prototype loads them from there. The game and rendering script is still inline in the prototype, at about 1,460 lines.
+**Engineering:** physics, launch and noise are now separate modules in `sim/`, unit-tested and calibrated offline, and the prototype loads them from there. The game and rendering script is still inline in the prototype, at about 1,400 lines.
 
 Prototype: [Shot model lab](https://claude.ai/artifact/DuHBqQzcuPA4ZuQT8VSBxf). Source: [`prototype/shot-model-lab.html`](../prototype/shot-model-lab.html)
