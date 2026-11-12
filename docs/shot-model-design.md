@@ -1,6 +1,6 @@
 # Shot model design: 2K-style basketball
 
-Updated Nov 11, 2026 · @Jackson Schroeder
+Updated Nov 12, 2026 · @Jackson Schroeder
 
 ## Problem and principles
 
@@ -28,7 +28,7 @@ Design principles:
 
 ## Core resolver
 
-Every shot type resolves the same way: a 2D landing point at the rim, sampled from a Gaussian, tested against an elliptical make window.
+This is the original resolver: a 2D landing point at the rim, sampled from a Gaussian, tested against an elliptical make window. Jumpers, floaters and layups are now simulated instead (see Full physics). The bias and scatter below are still computed the same way: the bias becomes the launch, the scatter becomes launch noise, and the rim and backboard decide the make.
 
 ```latex
 \text{landing} = \text{bias} + \mathcal{N}(0, \sigma), \qquad \text{make} \iff \left(\frac{\text{lat}}{A}\right)^2 + \left(\frac{\text{dep}}{B}\right)^2 \le 1
@@ -42,9 +42,9 @@ Every shot type resolves the same way: a 2D landing point at the rim, sampled fr
 \sigma_{lat} = \sqrt{\sigma_{rating}^2 + \sigma_{distance}^2 + \sigma_{movement}^2 + \sigma_{contest}^2}, \qquad \sigma_{dep} = k \cdot \sigma_{lat}
 ```
 
-- **Make window** (A, B) differs by shot type: softer shots get bigger windows. A layup from a 25–65° bank angle gets 1.2× its window.
-- **Displayed make chance** comes from a fixed set of 3,000 Monte Carlo samples evaluated at the exact bias and scatter, so readouts don't flicker. The actual shot uses a fresh random draw.
-- **Blocks and fouls** are rolled separately before or beside the landing sample. A block skips the landing entirely.
+- **Make window** (A, B) differed by shot type: softer shots got bigger windows, and a layup from a 25–65° bank angle got 1.2× its window. Physics retired it: the rim is the window.
+- **Displayed make chance** comes from simulated shots: 14 per refresh, blended into a running average, and 80 at release for the last-shot panel. The actual shot uses a fresh random draw.
+- **Blocks and fouls.** Fouls are rolled separately. Blocks on jumpers, floaters and layups are collisions between the ball and a defender's hand during the flight; only dunks still roll for a block.
 
 A key property: when scatter is small (open, good shooter), input error matters a lot. When a contest dominates the scatter, input barely matters. So skill counts most on good shots, and nobody can time through a hand in the face.
 
@@ -85,29 +85,29 @@ Clicking early on a drive gives a floater; keeping the drive going and clicking 
 
 Timing sets depth, the cursor sets lateral aim, and carried momentum drifts the ball. Ratings, distance, movement and contest set the scatter.
 
-**Timing (depth).** The ideal release is 520 ms after the press; auto-release at 820 ms. Depth bias is 0.09 in per ms of timing error, after the assist deadzone. Early misses short, late misses long.
+**Timing (depth).** The ideal release is 520 ms after the press; auto-release at 820 ms. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
 
 **Aim (lateral).** Aim error is the signed angle between the shooter→cursor and shooter→rim lines, measured on the floor plane. Lateral bias = distance × tan(angle), so long shots need finer aim. Aim assist (default 40%) scales the whole lateral bias, including uncorrected drift.
 
-**Drift.** Carried momentum at release pushes the ball: 1.6 in of lateral bias per ft/s moving sideways, and 1.0 in of depth bias per ft/s toward or away from the rim. Players aim against lateral drift. Once a jumper starts, momentum bleeds off (τ = 0.4 s) and mid-shot steering is disabled; fades are the only intentional mid-shot motion.
+**Drift.** The ball inherits part of the body's momentum at release: 10.6% of its sideways speed and 6.6% of its speed along the shot. At 24 ft that is 1.6 in of lateral push per ft/s and 1.0 in of depth per ft/s; at 15 ft, 1.25 and 0.78. Players aim against lateral drift. Once a jumper starts, momentum bleeds off (τ = 0.4 s) and mid-shot steering is disabled; fades are the only intentional mid-shot motion.
 
 **Scatter (lateral, inches).**
 
 | Component | Formula |
 | --- | --- |
-| Rating | (3.15 + 0.052 × (95 − rating)) × (1 − bonus × q) |
-| Distance | 0.10 × distance in ft |
+| Universal floor | 3.93 × (1 − bonus × q). The old rating term at 80, now the same for everyone |
+| Distance | None. The physics already makes long shots harder |
 | Movement | 0.14 × speed at the start of the shot (ft/s), combined with fade scatter |
-| Contest | 6.0 × contest |
+| Contest | 6.17 × contest |
 
-Depth scatter = 1.16 × lateral. Make window: ±4.3 in lateral, ±5.0 in depth. The contest also pushes the shot 2.5 in long at full strength.
+Depth scatter = 1.16 × lateral. The total is multiplied by 1.23 (calibration) and converted into launch noise: depth scatter becomes a spread on launch speed, lateral scatter a spread on direction. A contest also raises the arc by up to 6° at full strength, as the shooter goes over the hand.
 
 **Zone.** Two versus three is judged from the takeoff spot, so fading across the line doesn't create a three.
 
-**Clean looks.** Total lateral scatter is multiplied by (1 − 0.13 × cleanness × release quality), and misses on a clean perfect release are capped at 1.35 make-window radii so they rim out. See Shot noise and clean looks. The rating row in the scatter table is a placeholder until frames replace it.
+**Clean looks.** Total scatter is multiplied by (1 − 0.04 × cleanness × release quality), and the noise on a clean perfect release is capped at 1.6 spreads so misses rim out. See Shot noise and clean looks.
 
 ## Fadeaways
 
@@ -128,13 +128,13 @@ A fade is a committed shot variant with a fixed motion and its own fixed release
 | Straight (S) | 1.0 | +56 ms | none | fade cost |
 | Side (S+A / S+D) | 0.707 | +39 ms | \~5.7 in toward the fade side, before aim assist | 1.25 × fade cost |
 
-Fade cost (lateral scatter, combined with movement) = 0.5 + 0.06 × (95 − fadeaway rating): about 2.0 in at 70 and 0.5 in at 95. The sideways push of a side fade is constant, so the cursor correction is constant and learnable. The live scatter rings show it.
+Fade cost (lateral scatter, combined with movement) = 0.5 + 0.06 × (95 − fadeaway rating): about 2.0 in at 70 and 0.5 in at 95. The sideways push of a side fade is constant, so the cursor correction is constant and learnable.
 
-**The trade-off emerges from timing.** The later release gives a closeout more time. A fade wins against a defender who is already close and loses against a late closeout. For an 80 shooter at 15 ft, an open perfect release goes about 61% standing versus about 49% on a straight fade at fadeaway 70. In one test from the same spot, the fade cut the contest from 21% to 6%.
+**The trade-off emerges from timing.** The later release gives a closeout more time. A fade wins against a defender who is already close and loses against a late closeout. At 15 ft, an open perfect release goes about 60% standing versus about 48% on a straight fade at fadeaway 70. In one test from the same spot, the fade cut the contest from 21% to 6%.
 
 ## Jumper contests
 
-A contest (0–1) is computed at the moment of release. It adds scatter and pushes the shot long; the timing window never changes.
+A contest (0–1) is computed at the moment of release. It adds scatter and raises the arc; the timing window never changes.
 
 ```latex
 c = \text{prox} \times \text{inline} \times \text{hand} \times (0.85 + 0.35 \cdot \text{closing}) \times \text{length}
@@ -148,9 +148,9 @@ c = \text{prox} \times \text{inline} \times \text{hand} \times (0.85 + 0.35 \cdo
 | closing | clamp(closing speed / 12 ft/s, 0, 1) | Running at the shooter is more disruptive than standing |
 | length | slider, 0.7–1.3 (rim protector fixed at 1.2) | Height and wingspan |
 
-- **Effects:** +6.0 × c in of lateral scatter and +2.5 × c in of push long (shooting over the hand).
-- **Several defenders** combine as c = 1 − Π(1 − cᵢ). The strongest one is used for block geometry.
-- **Blocks:** only when c > 0.8 and the defender is in front (cos > 0.6); chance = (c − 0.8) × 1.2, at most 24%.
+- **Effects:** +6.17 × c in of lateral scatter and up to 6° of extra arc (shooting over the hand). The arc replaced the old 2.5 in push long.
+- **Several defenders** combine as c = 1 − Π(1 − cᵢ).
+- **Blocks** are collisions, not rolls: every defender within 7 ft has a hand in the simulation, and a touch on the ball is a block (see Full physics).
 
 The curve was originally linear out to 6.5 ft and penalized 4 ft "open" looks at 50–60%. It was made steep to match NBA tracking, where open (4–6 ft) and wide-open threes differ by only a few points. The contest is still devastating within 2–3 ft.
 
@@ -164,13 +164,13 @@ Near the rim, the cursor picks the finish side, holding the button is a timing d
 
 **Hang.** Releasing the button before the rise ends releases at the rise. Holding past it hangs for up to 450 ms, at +0.9 in of scatter per 100 ms. Hang is measured from when the button actually came up.
 
-**Layup scatter (lateral, inches).** Depth scatter = 1.2 × lateral. Window ±5.0 × ±6.0 in, or ×1.2 from a 25–65° bank angle.
+**Layup scatter (lateral, inches).** Depth scatter = 1.2 × lateral. The total is multiplied by 1.40 (calibration) and converted into launch noise. A layup is launched at the rim's center; the finish side changes the contest and the scatter, not the target.
 
 | Component | Formula |
 | --- | --- |
-| Finisher | 1.8 + 0.045 × (95 − finishing) |
+| Universal floor | 2.48. The old finisher term at 80, now the same for everyone |
 | Speed | 0.35 × max(0, speed at the start of the finish − control limit); limit = 9 + 0.08 × (finishing − 50) ft/s, 11.4 at 80 |
-| Angle | 2.2 × max(0, −s × lateral momentum) + 0.8 × abs(s), where lateral momentum is clamp(sideways speed / 6) |
+| Angle | 2.2 × max(0, −s × lateral momentum) + 0.8 × abs(s), where lateral momentum is clamp(sideways speed / 6). Plus 0.6 per ft of euro step |
 | Hang | 0.9 per 100 ms |
 | Contest | 3.5 × rim contest |
 
@@ -185,19 +185,19 @@ Near the rim, the cursor picks the finish side, holding the button is a timing d
 
 **Outcomes.**
 
-- Layup block = 0.5 × c². Dunk block = clamp(c × (0.6 − (dunk − 70)/100), 0, 0.9).
-- Foul = c × (0.12 + 0.25 × clamp(defender speed / 10)). A fouled layup gets 1.15× scatter. Labeled as and-one or two free throws, but free throws are not awarded yet.
+- Layup blocks are collisions with a defender's hand (see Full physics). Dunk block = clamp(c × (0.6 − (dunk − 70)/100), 0, 0.9).
+- Foul = c × (0.12 + 0.25 × clamp(defender speed / 10)). A fouled layup gets 1.15× its speed, angle and hang scatter. Labeled as and-one or two free throws, but free throws are not awarded yet.
 - Dunks have no meaningful scatter: block roll, then a 4% fumble, then a make ("posterized" above 0.5 contest).
 
 ## Floaters
 
 The floater is the early release on a drive: a lenient timed shot whose arc clears a rim protector who stays home. Touch is the cost.
 
-- **Timing:** ideal 330 ms, auto-release 560 ms, perfect window ±20 ms plus the timing assist. Depth bias 0.07 in per ms. The perfect release bonus applies, with the same 40 ms fade.
+- **Timing:** ideal 330 ms, auto-release 560 ms, perfect window ±20 ms plus the timing assist. Timing error changes launch speed by the same 0.0158% per ms as a jumper: about 0.04 in of depth per ms at 10 ft. The perfect release bonus applies, with the same 40 ms fade.
 - **Motion:** a one-step stop. Momentum decays fast (τ = 0.12 s) with no steering, so the release happens about where you clicked.
 - **Aim:** cursor aim like a jumper, with aim assist. Carried momentum costs less: 0.6× lateral drift and 0.5× depth drift.
-- **Contest:** jumper-style, but prox = clamp((4 − d) / 2.5, 0, 1)^1.5, so the arc clears anyone more than \~4 ft away. Contest scatter 5.0 × c, push long 1.5 × c. Block only above c = 0.75 with the defender in front: (c − 0.75) × 1.2.
-- **Scatter (lateral):** touch (3.5 + 0.055 × (95 − floater touch)) × (1 − bonus × q), distance 0.10 × ft, movement 0.08 × ft/s, contest. Depth = 1.45 × lateral, since soft high arcs miss short or long. Window ±4.6 × ±5.6 in.
+- **Contest:** jumper-style without the closing-speed factor, and with prox = clamp((4 − d) / 2.5, 0, 1)^1.5, so the arc clears anyone more than \~4 ft away. Contest scatter 5.0 × c, plus up to 6° of extra arc. Blocks are collisions with a defender's hand.
+- **Scatter (lateral):** a universal floor of 4.6 in × (1 − bonus × q) (the old touch term at 75), movement 0.08 × ft/s, contest. No distance term. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.42 (calibration) and converted into launch noise.
 
 **Rim protector's read.** On each drive, the first time the ball handler is inside 17 ft and driving, the rim protector decides once:
 
@@ -260,7 +260,7 @@ At the defaults, that's about 0.25 s.
 **What they do with it.**
 
 - **Cushion:** the guarding distance (default 4.5 ft), plus 0.12 ft per ft/s the handler is driving at them, shrinking toward 1.9 ft as the pull-up threat rises. Never more than 0.6 × the handler's distance to the rim.
-- **Pull-up threat** = respect × range × slowness × (0.35 + 0.65 × how tight the ball is held). Respect comes from shooting ability; range is full within 27 ft and fades out by 32 ft. A poor shooter barely moves them.
+- **Pull-up threat** = respect × range × slowness × (0.35 + 0.65 × how tight the ball is held). Respect came from the shooter rating and is fixed at 0.75 (its value at 80) now that the slider is gone; range is full within 27 ft and fades out by 32 ft. A poor shooter barely moves them.
 - **Shading:** 0.8 ft toward the ball side they saw, so a crossover leaves them shaded the wrong way for one reaction time.
 - **Dead dribble:** with no drive threat left, they crowd to 2 ft with a hand up.
 - **Shots:** they react to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closing out, raising a hand, and, if close, sometimes leaving their feet (see Pump fakes).
@@ -331,8 +331,8 @@ Every shot carries a universal noise floor, the same for every body, plus situat
 
 **The feel problem.** Bricking a truly wide-open shot you executed perfectly feels terrible. Two measures:
 
-1. **Near-miss shaping:** on a clean look with a perfect release, misses are pulled in to at most 1.35 make-window radii, so they rim out but never brick or airball. Pulling a miss inward never turns it into a make, so the make rate is untouched. The cap loosens as cleanness or release quality drops, so a real brick still means something went wrong.
-2. **Clean-look premium:** a clean look is nobody within about 8 ft (phasing in from 5 ft), feet set (phasing in below 3 ft/s, full below 1 ft/s), and not a fade. Multiplied by release quality, it cuts scatter by up to 13%, taking an open perfect three from about 50% to about 60%. A 100,000-shot simulation gave 60.3%, with every miss a rim-out.
+1. **Near-miss shaping:** on a clean look with a perfect release, the noise is capped at 1.6 spreads, so misses rim out but never brick or airball. Under physics, pulling a shot inward can turn a near miss into a make, so the cap and the premium are tuned together. The cap loosens as cleanness or release quality drops, so a real brick still means something went wrong.
+2. **Clean-look premium:** a clean look is nobody within about 8 ft (phasing in from 5 ft), feet set (phasing in below 3 ft/s, full below 1 ft/s), and not a fade. Multiplied by release quality, it cuts scatter by up to 4%. With the cap, that takes an open perfect three from about 50% to about 59%. The calibration check gave 59.1% over 4,000 shots, with every miss near the rim and no airballs.
 
 | Ceiling for a clean look | Misses per 10 | Points per shot |
 | --- | --- | --- |
@@ -349,7 +349,7 @@ The panel shows "clean look" on the contest line when the premium applies. Float
 
 ## Frames instead of ratings
 
-Players are defined by their bodies, not by ratings. Height, wingspan and weight shape the mechanics, and the user's skill decides what to do with them. Players differ in what they can get away with, never in hidden accuracy. This is decided but not yet built; the prototype still uses rating sliders.
+Players are defined by their bodies, not by ratings. Height, wingspan and weight shape the mechanics, and the user's skill decides what to do with them. Players differ in what they can get away with, never in hidden accuracy. This is decided but not yet built. The prototype has dropped the shooter rating and floater touch sliders; the other rating sliders remain.
 
 | Frame | Helps | Costs |
 | --- | --- | --- |
@@ -415,7 +415,7 @@ Two things stay universal on purpose: the shot noise floor (no accuracy by body)
 | Slider today | Replaced by |
 | --- | --- |
 | Ball handling | Dribble height, rhythm and reach |
-| Finishing | Release reach and extension; the finishing floor becomes universal |
+| Finishing | Release reach and extension. The finishing floor is already universal; the slider now only sets the speed control limit |
 | Dunk | Dunk eligibility from reach and vertical; poster duels from reach and mass |
 | Fadeaway | A universal fade cost. Height still matters because taller frames release higher |
 | On-ball quickness | The defender's speed and acceleration from their frame |
@@ -469,16 +469,16 @@ Makes will be decided by a simulated ball hitting a real rim and backboard, not 
 
 All five milestones are done. Jumpers, floaters and layups in the prototype are simulated against a real rim and backboard; dunks keep their old resolution. The plan below is kept as the reference, with these results and changes:
 
-- **Launch mapping:** timing moves launch speed by 0.0154% per ms; the ball inherits 10.7% of the body's sideways velocity and 6.7% along the shot. Every input lands within 10% of the old model at 24 ft, and timing and drift errors shrink closer in.
-- **Release heights raised:** jumpers 9.6 ft and floaters 8.7 ft, near the top of the shooter's jump. At 9 ft, contesting defenders blocked 4 of 10 tight jumpers.
-- **Noise:** the old inch-based components are converted into launch-speed and direction noise using each shot's own sensitivities. Jumpers no longer have a distance term: a short shot comes down more steeply, so the rim is effectively bigger, and the old term double-counted that.
-- **Calibration:** jumper noise 1.23× the old values, floaters 1.41×, layups 1.40×; contest scatter 6.0 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses on the rim, no airballs), 15 ft 60.0%, 25 ms off 45.1%, heavy contest 15.0%, open 15 ft fade 47.5%, floater 50.7%, open layup at a sprint 80.6%.
-- **Live readouts:** a few simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
+- **Launch mapping:** timing moves launch speed by 0.0158% per ms; the ball inherits 10.6% of the body's sideways velocity and 6.6% along the shot. Every input lands within 10% of the old model at 24 ft, and timing and drift errors shrink closer in.
+- **Release heights raised:** jumpers and layups 9.6 ft, floaters 8.7 ft, near the top of the shooter's jump. At 9 ft, contesting defenders blocked 4 of 10 tight jumpers.
+- **Noise:** the old inch-based components are converted into launch-speed and direction noise using each shot's own sensitivities. Jumpers and floaters no longer have a distance term: a short shot comes down more steeply, so the rim is effectively bigger, and the old term double-counted that.
+- **Calibration:** jumper noise 1.23× the old values, floaters 1.42×, layups 1.40×; contest scatter 6.17 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.5%, open layup at a sprint 80.8%.
+- **Live readouts:** 14 simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
 - **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. A defender right on a jump shooter blocks about 1 in 12.
 - **Bank shots:** the cursor on the backboard beside the rim targets the glass, and a marker turns green where a bank can go in from your spot. From about 45° the working band is narrow and right beside the rim; from 63–65° it's over a foot wide; straight on, none.
 - **Ratings retired for shooting:** the shooter rating and floater touch sliders are gone; a universal floor replaces them.
 
-**Airballs come from mistakes.** Heavy contests first airballed 15% of the time: their large spread sent the noise's outer tail clean past the rim. Now noise alone can carry a shot at most 12.5 in from the rim's center (a hard clank off the edge, never past it), plus 1.6 in at full contest, so a heavily altered shot airballs about 4% of the time. Bad timing, aim or drift are biases, not noise, so they can still airball any shot. A cap measured in spreads didn't work: it piles outliers onto its boundary, so airballs jump from about 17% to zero depending on whether that boundary falls inside the rim's reach. Recalibrated with the cap: open three 50.1%, clean 59.1%, 15 ft 60.1%, heavy contest 15.3%, floater 50.5%, open layup 80.8%.
+**Airballs come from mistakes.** Heavy contests first airballed 15% of the time: their large spread sent the noise's outer tail clean past the rim. Now noise alone can carry a shot at most 12.5 in from the rim's center (a hard clank off the edge, never past it), plus 1.6 in at full contest, so a heavily altered shot airballs about 4% of the time. Bad timing, aim or drift are biases, not noise, so they can still airball any shot. A cap measured in spreads didn't work: it piles outliers onto its boundary, so airballs jump from about 17% to zero depending on whether that boundary falls inside the rim's reach. The calibration results above include this cap.
 
 Open items: how layups choose glass versus rim from the finish side is still open; dunks don't fly yet.
 
@@ -488,14 +488,14 @@ Open items: how layups choose glass versus rim from the finish side is still ope
 - **Launch speed** from timing: early is weak and short, late is strong and long, which is what the meter already means.
 - **Arc** from the shot type and the frame: jumpers around 45–50°, floaters much higher. Flatter shots get a smaller effective opening into the rim. A contest can raise the arc as the shooter goes over a hand.
 - **Release point** from the frame (height, wingspan).
-- **Noise** on speed, angle and direction: the universal floor plus situational components, combined as now. Near-miss shaping becomes the shape of this noise.
+- **Noise** on speed and direction: the universal floor plus situational components, combined as now. Launch-angle noise is left at zero. Near-miss shaping becomes the shape of this noise.
 
 **What then emerges:** bank shots (aim the cursor at the glass for a deliberate bank), rim rolls, back-iron misses, soft touch, and realistic caroms for rebounding. Blocks become collisions between the defender's hand and the ball's path.
 
 **Costs:**
 
 - **Recalibration.** Make rates come out of simulation, so the noise must be tuned against the targets with thousands of offline simulated shots. The targets themselves don't change.
-- **Live make-chance readouts** can't simulate thousands of full ball flights every frame. They'll come from precomputed tables.
+- **Live make-chance readouts** can't simulate thousands of full ball flights every frame. They average a few simulated shots per refresh instead.
 - **New feedback view:** a side-on view of the arc and what the ball hit, replacing the top-down landing chart.
 
 ### Geometry and constants
@@ -510,6 +510,7 @@ Coordinates stay in feet, with x and y on the court as in the prototype and z up
 | Gravity | 32.17 ft/s² |
 | Rim bounce | Restitution 0.6, friction 0.3 (starting values) |
 | Backboard bounce | Restitution 0.75, friction 0.2 (starting values) |
+| Floor bounce | Restitution 0.75, friction 0.1 (starting values) |
 | Air drag, spin lift | Off at first; added only if trajectories look wrong |
 
 The rim is modeled as a torus: a ring of radius 9 in made of a tube of radius 0.31 in. The net and the rim's mounting hardware are not modeled as solid at first.
@@ -518,11 +519,11 @@ The rim is modeled as a torus: a ring of radius 9 in made of a tube of radius 0.
 
 At release, the player's inputs and situation become a launch: release point, direction, angle and speed. Noise is then added in launch space.
 
-**Release point.** From the frame and shot type: roughly 9 ft high for jumpers, lower for floaters, near rim height for layups, placed about 0.7 ft in front of the body toward the target. Placeholder values until frames define them.
+**Release point.** From the frame and shot type: 9.6 ft high for jumpers and layups and 8.7 ft for floaters, placed 0.7 ft in front of the body toward the rim. Placeholder values until frames define them.
 
 **Target.** The rim center by default. With the cursor on the backboard, a point on the glass (see Bank shots).
 
-**Arc (launch angle).** From the shot type: about 48° for jumpers, about 60° for floaters, 55–65° for soft layups. A contest raises the arc by up to 6° at full strength, as the shooter goes over the hand. Dunks have no flight: the ball is placed through the rim unless blocked.
+**Arc (launch angle).** From the shot type: 48° for jumpers, 60° for floaters, 58° for layups. A contest raises the arc by up to 6° at full strength, as the shooter goes over the hand. Dunks have no flight: the ball is placed through the rim unless blocked.
 
 **Ideal speed.** The speed that carries the ball's center from the release point through the target at that angle, where d is the horizontal distance and Δz the height gain:
 
@@ -534,54 +535,57 @@ v^{*2} = \frac{g\,d^2}{2\cos^2\theta\,\left(d\tan\theta - \Delta z\right)}
 
 | Input | Becomes | Mapping |
 | --- | --- | --- |
-| Timing | Speed | v = v\*(1 + k × post-assist timing error). Early is short, late is long. k is set so depth sensitivity near 24 ft matches today's 0.09 in per ms |
+| Timing | Speed | v = v\*(1 + k × post-assist timing error). Early is short, late is long. k is set so depth sensitivity at 24 ft matches today's 0.09 in per ms: k = 0.000158 |
 | Aim | Direction | The signed angle between the shooter-to-cursor and shooter-to-target lines on the floor plane, as now |
-| Carried momentum | Added velocity | The ball inherits part of the body's velocity, tuned to match today's drift sensitivities (1.6 in lateral and 1.0 in depth per ft/s) |
-| Fades | Speed shift | The fixed release line still offsets the canned fade exactly; in physics it becomes the speed needed to make up the momentum lost by fading |
+| Carried momentum | Added velocity | The ball inherits part of the body's velocity, tuned to match today's drift sensitivities at 24 ft (1.6 in lateral and 1.0 in depth per ft/s): 10.6% sideways, 6.6% along the shot |
+| Fades | Aim offset | The fade's backward motion isn't added to the launch; the later release line stands in for it. Its sideways push becomes a fixed aim offset for the cursor to correct |
 
-The goal of this mapping is continuity: at the same inputs, a physics shot should land within about 10% of where today's model puts it, before calibration starts.
+The goal of this mapping is continuity: at the same inputs, a physics shot from 24 ft should land within about 10% of where today's model puts it, before calibration starts.
 
 ### Simulation and collisions
 
-The whole flight is simulated instantly at release and then replayed for the animation. Same launch, same path: the only randomness is the launch noise, drawn from a seeded generator so shots can be replayed and tested.
+The whole flight is simulated instantly at release and then replayed for the animation. Same launch, same path: the only randomness is the launch noise. Calibration and tests draw it from a seeded generator so results repeat; the prototype uses fresh random draws.
 
-- **Integration:** fixed 1 ms steps, semi-implicit Euler with gravity only, with finer substeps near the rim if contacts need them. A full flight is a few thousand steps.
+- **Integration:** exact free flight under gravity between contacts, in steps of 1 ms, 0.5 ms near the rim, and 10 ms where there is nothing to hit.
 - **Rim contact:** find the closest point on the rim's ring to the ball's center. Contact when they're closer than ball radius plus tube radius. The contact normal points from that ring point to the ball's center. Push the ball out, reverse its velocity along the normal times the rim restitution, and reduce the sideways part by friction.
 - **Backboard contact:** a plane at the board's front face, bounded by its width and height. Same response with the board's values. Edge hits are ignored at first.
-- **Floor:** bounces continue after a miss, so we know where the rebound goes.
+- **Floor:** the flight runs on through two floor bounces, so we know where the rebound goes.
 
-**Make detection.** A make is confirmed when the ball's center comes down through the rim plane inside the ring and reaches about 0.6 ft below the rim while still inside it, which is where the net takes over. Once in, the net damps the ball's speed for the animation. A miss is the ball dropping below the rim outside the ring, or 3 s passing without a make.
+**Make detection.** A make is confirmed when the ball's center comes down through the rim plane inside the ring and reaches about 0.6 ft below the rim while still inside it, which is where the net takes over. Once in, the net damps the ball's speed for the animation. Anything else is a miss; the simulation gives up after 3.5 s.
 
-**Outcome labels come from the contact log:** swish (no contact), in off the rim, bank (glass first), in and out, front rim, back iron, off the glass, airball (touched neither rim nor glass). This replaces today's labels, which are guessed from the landing point.
+**Outcome labels come from the contact log:** swish (no contact), in off the rim, bank (glass first), in and out (a miss off two or more rim hits), front rim, back iron, off the side, off the glass, airball (touched neither rim nor glass), blocked, and goaltending. This replaces today's labels, which are guessed from the landing point.
 
 ### Noise and calibration
 
-Noise moves into launch space: a spread on speed (as a fraction), launch angle and direction. Calibration tunes its size against the same targets as today, by simulating many shots offline.
+Noise moves into launch space: a spread on speed (as a fraction) and on direction. Launch-angle noise is left at zero. Calibration tunes its size against the same targets as today, by simulating many shots offline.
 
 **Noise components,** each combined the same way as today (added in quadrature) on each launch axis:
 
 - **Universal floor:** the same for every frame, replacing the rating term. The perfect release bonus still shrinks it by up to 30%.
-- **Distance:** largely falls out of the physics, since a fixed angle error grows with distance. An explicit term is added only if calibration needs it.
+- **Distance:** largely falls out of the physics, since a fixed angle error grows with distance. Calibration set the explicit term to zero.
 - **Movement and fades:** from speed at the start of the shot, and the fade cost.
 - **Contest:** spread grows with the contest, alongside the arc increase from the launch model.
 
-**Clean looks.** The premium still multiplies all noise by (1 − premium × cleanness × release quality), starting at 0.13. Near-miss shaping becomes a cap on how far, in units of spread, a clean perfect shot's noise can reach. One difference: unlike the ellipse model, pulling noise inward can turn a near miss into a make, so the premium and the cap are tuned together to land on 60%.
+**Clean looks.** The premium still multiplies all noise by (1 − premium × cleanness × release quality). It started at 0.13 and calibration set it to 0.04. Near-miss shaping becomes a cap on how far, in units of spread, a clean perfect shot's noise can reach: 1.6. One difference: unlike the ellipse model, pulling noise inward can turn a near miss into a make, so the premium and the cap are tuned together to land on 60%.
 
-**Procedure.** An offline script simulates about 20,000 shots for each cell of a grid: distance 2–28 ft in 1 ft steps, shot type, contest in 0.1 steps, movement, and clean or not. It records make rates and the mix of outcomes. Tuning order:
+**Procedure.** `sim/calibrate.js` solves each setting against its target, using 3,000 seeded shots per evaluation, and writes the results to `sim/calibration.js`. The planned grid of tables was not needed. Tuning order:
 
-1. Set the universal floor so an open, perfectly released, non-clean three at 24 ft goes in about 50%.
-2. Tune the premium and the cap together: clean perfect threes at 60%, with at least 95% of their misses touching the rim and no airballs.
-3. Check the rest and adjust component weights: open perfect 15 ft jumper, floaters around 50% open, layups around 80% open, heavy contests in the mid-teens, an open straight fade around 49%.
+1. Set the jumper noise multiplier, by bisection, so an open, perfectly released, non-clean three at 24 ft goes in 50%.
+2. Set the contest scatter, by bisection, so a fully contested three goes in about 15.5%. The contest tail (how far past the rim's edge a full contest can carry a shot) is raised in 0.1 in steps until those shots airball at least 3% of the time.
+3. Set the floater and layup multipliers, by bisection: a 10 ft floater at 12 ft/s at 50%, an open layup at a sprint at 80%.
+4. Tune the premium and the cap together, by grid search: the pair closest to 60% for a clean perfect three, with at least 95% of misses near the rim (within 11 in of its center) and no airballs.
 
-**Live readouts** come from the calibration tables (distance × total noise × bias), interpolated, instead of simulating shots every frame. The last-shot panel can afford a small simulation (a few hundred shots) once, at release.
+The script then prints every target at 4,000 shots, along with the open perfect 15 ft jumper, a three 25 ms off, and an open straight fade.
+
+**Live readouts** simulate 14 shots per refresh and blend them into a running average, instead of reading precomputed tables. The last-shot panel runs 80 shots once, at release.
 
 ### Blocks, bank shots and feedback
 
-**Blocks.** Each defender's hand becomes a sphere (about 0.35 ft) at their reach height: standing reach from the frame plus their current jump height, out in the direction they're contesting. It's checked against the ball at every simulation step. Contact while the ball is rising is a block, and the ball takes the hand's velocity. This replaces the block probability rolls entirely.
+**Blocks.** Each defender's hand becomes a sphere (0.3 ft in the prototype) at their reach height: standing reach plus their current jump height, out in the direction they're contesting. It's checked against the ball at every simulation step. Any touch that isn't goaltending is a block: the ball comes off the hand with most of its pace gone and heads down. This replaces the block probability rolls for everything except dunks.
 
-**Goaltending.** Touching the ball on its way down above rim height, or while it's in the cylinder above the rim, counts as a make.
+**Goaltending.** Touching the ball on its way down, above rim height and within 1.6 ft of the rim's center, counts as a make.
 
-**Bank shots.** In the top-down view the backboard is a line behind the rim, from x = 22 to 28. With the cursor on that line away from the rim, the target becomes a point on the glass, at the height that would send the ball in from the shooter's angle; the physics decides the rest. From the wing, a bank naturally beats a direct shot; straight on, it doesn't, because the glass already rescues long straight-on misses. No bonus is written in. Layups use the same targeting: the finish side picks glass or rim. While aiming at the glass, the target spot is shown on the board.
+**Bank shots.** In the top-down view the backboard is a line behind the rim, from x = 22 to 28. With the cursor on that line away from the rim, on a jumper or floater, the target becomes a point on the glass, at the height that would send the ball in from the shooter's angle; the physics decides the rest. From the wing, a bank naturally beats a direct shot; straight on, it doesn't, because the glass already rescues long straight-on misses. No bonus is written in. Layups don't use this yet: they always go at the rim's center (see the open items above). While aiming at the glass, the target spot is shown on the board.
 
 **Feedback view.** A side-on replay of each shot replaces the top-down landing chart: the arc from release to the rim, the rim and board drawn to scale, and markers where the ball touched. The court view keeps animating the ball from above.
 
@@ -591,21 +595,24 @@ This is the point where the prototype becomes a real project. The physics is bui
 
 **Modules:**
 
-- **Physics:** pure and deterministic. Steps the ball, resolves contacts, and simulates a whole shot from a launch into a path, a contact log and an outcome.
-- **Launch:** turns inputs and situation into the ideal launch, the biases and the noise.
-- **Calibration:** an offline script that runs the grid and writes tables to a data file.
-- **Game and rendering:** movement, dribbling, defense, input, the court view and the side-on replay.
-- **Data:** constants and calibration tables live in data files, not in code.
+- **Physics** (`sim/physics.js`): pure and deterministic. Steps the ball, resolves contacts, and simulates a whole shot from a launch into a path, a contact log and an outcome.
+- **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
+- **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
+- **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
+- **Game and rendering:** movement, dribbling, defense, input, the court view and the side-on replay. Still one inline script in `prototype/shot-model-lab.html`, which loads the modules above.
+- **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
-**Tests:**
+**Tests** (`sim/tests.js` and `sim/tests-launch.js`):
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
-- From 45°, the best bank beats shooting straight at the rim; straight on, it doesn't. (Measured at 12 ft with small errors: 76% vs 67% from 45°, 79% vs 81% straight on.)
+- From 45°, the best bank beats shooting straight at the rim; straight on, it doesn't. (Measured at 12 ft with small errors: 76% vs 68% from 45°, 58% vs 81% straight on.)
 - Small sideways errors produce some rim contacts that fall out (in-and-outs exist).
-- The same seed produces the identical path.
+- The same launch produces the identical path.
 - No bounce ever gains speed.
-- Before calibration, inputs land within about 10% of where today's model puts them.
+- A hand in the ball's path on the way up blocks it; a hand that stays low doesn't.
+- A touch on the way down over the rim is goaltending, and counts.
+- Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
 
 **Milestones:**
 
@@ -633,7 +640,7 @@ The defenders exist to exercise the model, not as a design for game AI; in the r
 | Default position | Between ball and rim at the cushion from the perception model (guarding distance default 4.5 ft), shaded 0.8 ft toward the ball side they saw | Home 3.25 ft in front of the rim; inside 16 ft, blends 60% toward a point min(4.5, 0.45 × distance) ft out on the drive line |
 | Speed | 13 ft/s, accel 50 ft/s², both scaling with quickness | 11 ft/s (12 when contesting a finish), accel 40 ft/s² |
 | On a shot | Reacts to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closes out to 1.8 ft in front at 15.5 ft/s | Finishes: blends 75% toward a point min(3, 0.6 × distance) ft out. Stay-home / step-up read on drives (see Floaters) |
-| Hand | Up once they react; 0.8 up against a pull-up threat or a dead dribble | Rises for jumpers and floaters within 8 ft |
+| Hand | Up once they react. Before that, 0.8 × the pull-up threat, or 0.64 against a dead dribble | Rises for jumpers and floaters within 8 ft |
 | Jumps | Within 5 ft of a shot they saw: 50%. On finishes, at a scheduled moment if within 7 ft | Within 7 ft of a shot they saw: 60%. Same finish jumps |
 | Body | Holds ground while you dribble: you can't run through them. 1.7 ft minimum separation | 2.2 ft minimum separation; length fixed at 1.2 |
 
@@ -641,9 +648,27 @@ For comparison, the ball handler dribbles at up to 13.5 ft/s (15 ft/s when not d
 
 ## Calibration
 
-With perfect input, a good shooter makes about half of open threes and everyone drops to the mid-teens under a heavy contest. The game balance holds as long as realized averages, not ceilings, stay near real basketball.
+With perfect input, a shooter makes about half of open threes and drops to the mid-teens under a heavy contest. The game balance holds as long as realized averages, not ceilings, stay near real basketball.
 
-**Model output at default settings** (computed from the formulas; jumpers include the 30% perfect release bonus):
+**Physics build** (simulated with `sim/noise.js` at 4,000 shots each, with the 30% perfect release bonus; no defenders' hands, so blocks are not included):
+
+| Situation | Make chance |
+| --- | --- |
+| Open three (24 ft), perfect | 50.1% |
+| Clean three, perfect | 59.1% |
+| Open three, \~25 ms off | 45.1% |
+| Three under full contest, perfect | 15.3%, with 3.8% airballs |
+| Open 15 ft jumper, perfect | 60.1% |
+| Open 15 ft straight fade, fadeaway 70, perfect | 47.9% |
+| Floater, 10 ft, moving, open and perfect | 50.5% |
+| Floater, 60 ms off | 37% |
+| Floater under full contest | 25% |
+| Layup at a full sprint, open | 80.8% |
+| Uncontested dunk | 96% |
+
+The floater under full contest was about 15% in the landing-point model. Floater contest scatter was not part of the calibration.
+
+**Landing-point model output at default settings** (the original resolver, computed from its formulas; jumpers include the 30% perfect release bonus). Kept for reference: the shooter rating and floater touch no longer exist, and their values at 80 and 75 became the universal floors.
 
 | Situation | Rating 95 | Rating 80 | Rating 60 |
 | --- | --- | --- | --- |
@@ -682,7 +707,7 @@ Midrange was mostly fadeaways, which landed a perfect release on the front rim b
 
 - **Midrange fades** now have a fixed release line, so a perfect fade no longer lands on the front rim.
 - **Clean-look target: 60%** for an open, perfectly released three, for every frame.
-- **These tables are rating-based.** They will be redone once frames and physics replace ratings and the landing-point resolver. The targets carry over; the formulas producing them don't.
+- **The landing-point tables are rating-based.** Physics has replaced that resolver and the shooter rating; the physics table above carries the same targets. Layups against a set rim protector have not been re-measured, since blocks are now collisions.
 
 ## Constants reference
 
@@ -713,11 +738,13 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | DSPEED / DACC | 13 ft/s / 50 ft/s² | On-ball defender guarding |
 | CLOSE\_SPEED / CLOSE\_ACC | 15.5 ft/s / 60 ft/s² | Closeouts |
 
+Under physics, some of these no longer decide outcomes, though they are still in the prototype's constants: the make windows (WIN, FIN, FL\_A / FL\_B), the push-long biases (CONTEST\_BIAS, FL\_CONTEST\_BIAS) and FL\_KT. CONTEST\_SIG is superseded by the calibrated CONTEST\_IN below. KT and the drift values still set the fade release line, and are the targets the launch mapping was fitted to at 24 ft.
+
 **Added since the first version:**
 
 | Constant | Value | Used for |
 | --- | --- | --- |
-| CLEAN\_PREMIUM / NEAR\_MISS\_CAP | 0.13 / 1.35 window radii | Clean-look scatter cut / furthest a clean perfect miss can land |
+| CLEAN\_PREMIUM / NEAR\_MISS\_CAP | 0.13 / 1.35 window radii | Landing-point clean-look values. Physics uses PREMIUM / CAP below |
 | COMMIT\_MS | 150 ms | Release before this and the shot is a pump fake |
 | STEP\_T / GATHER\_SPEED | 0.2 s / 6 ft/s | Gather step duration / speed that gives gather steps instead of a dead dribble |
 | DRIB\_SPEED | 13.5 ft/s | Dribbling top speed |
@@ -726,16 +753,35 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | Camera | 36 ft tall view, 7.5 ft lead, 60 ms smoothing | Follow camera |
 | Defender lag | 0.12–0.4 s (about 0.25 s at defaults) | On-ball perception delay |
 
-**Tuning sliders and defaults:** shooter rating 80, fadeaway rating 70, timing assist ±15 ms, perfect release bonus 30%, aim assist 40%, drift strength 1.0×, ball handling 80, finishing 80, floater touch 75, dunk 75, on-ball defender and rim protector on, rim protector steps up 50%, guarding distance 4.5 ft, on-ball quickness 70, on-ball steals 60, shot reaction time 250 ms, on-ball length 1.0×. The rating sliders are placeholders until frames replace them.
+**Physics build** (in `sim/`):
+
+| Constant | Value | Used for |
+| --- | --- | --- |
+| ELEV | 48° / 60° / 58° | Launch angle: jumper / floater / layup |
+| REL\_Z | 9.6 / 8.7 / 9.6 ft | Release height: jumper / floater / layup |
+| REL\_FWD | 0.7 ft | Release point in front of the body |
+| CONTEST\_ARC | 6° | Extra arc at full contest |
+| K\_SPEED | 0.000158 per ms | Launch speed change per ms of timing error, fitted at 24 ft |
+| F\_LAT / F\_DEP | 0.106 / 0.066 | Share of body velocity the ball inherits, sideways / along the shot, fitted at 24 ft |
+| FLOOR\_IN / FLOATER\_FLOOR\_IN / LAYUP\_FLOOR\_IN | 3.93 / 4.6 / 2.48 in | Universal noise floors: jumper / floater / layup |
+| MULT | 1.23 / 1.42 / 1.40 | Calibrated noise multipliers: jumper / floater / layup |
+| CONTEST\_IN | 6.17 in | Jumper contest scatter at full contest (calibrated) |
+| PREMIUM / CAP | 0.04 / 1.6 spreads | Clean-look noise cut / noise cap (calibrated) |
+| TAIL\_IN / CONTEST\_TAIL\_IN | 12.5 / 1.6 in | Furthest noise alone can carry a shot from the rim's center / extra at full contest |
+| DT / DT\_NEAR / DT\_FAR | 1 / 0.5 / 10 ms | Simulation step: normal / near the rim / nothing to hit |
+| T\_MAX / NET\_DEPTH | 3.5 s / 0.6 ft | Longest flight / depth below the rim that confirms a make |
+| Hands | 0.3 ft sphere; reach 8.2 ft (rim protector 8.9 ft); 2.2 ft jump | Block collisions. Placeholders until frames |
+
+**Tuning sliders and defaults:** fadeaway rating 70, timing assist ±15 ms, perfect release bonus 30%, aim assist 40%, drift strength 1.0×, ball handling 80, finishing 80, dunk 75, on-ball defender and rim protector on, rim protector steps up 50%, guarding distance 4.5 ft, on-ball quickness 70, on-ball steals 60, shot reaction time 250 ms, on-ball length 1.0×. The rating sliders are placeholders until frames replace them. The shooter rating and floater touch sliders are gone.
 
 ## Known gaps and roadmap
 
-Next up is full physics, then frames. The prototype should become a real project before passing and multiple players.
+Full physics is built; frames are next. The prototype should become a real project before passing and multiple players.
 
 **Known gaps:**
 
-- **Ratings still drive the prototype;** frames are decided but not built.
-- **Makes still come from the landing-point resolver;** the ball flight is cosmetic until physics lands. Blocks are probability rolls, not collisions.
+- **Ratings still drive everything except shooting accuracy;** frames are decided but not built.
+- **Dunks don't fly:** they keep the old block and fumble rolls. Layups always go at the rim's center; choosing glass versus rim from the finish side is still open.
 - **No free throws:** fouls and and-ones are labeled but award nothing, so rim attempts are undervalued.
 - **Forward momentum on pull-up jumpers** is still a depth bias with no clean correction, which conflicts with principle 4.
 - **Dribbling isn't final:** no between the legs, behind the back or spins yet.
@@ -745,7 +791,7 @@ Next up is full physics, then frames. The prototype should become a real project
 
 **Roadmap:**
 
-1. **Full physics:** standalone physics, calibration, then wiring into the game with a side-on feedback view.
+1. **Full physics:** done. Standalone physics, calibration, then wiring into the game with a side-on feedback view.
 2. **Frames:** height, wingspan and weight replace the rating sliders.
 3. **Fouls and free throws.**
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
@@ -753,6 +799,6 @@ Next up is full physics, then frames. The prototype should become a real project
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** WASD movement with the mouse for contests, steals and passing-lane deflections.
 
-**Engineering:** the single-file prototype is now well past 1,100 lines. The physics work is the natural point to split the resolver from rendering so it can be unit-tested and calibrated offline.
+**Engineering:** physics, launch and noise are now separate modules in `sim/`, unit-tested and calibrated offline, and the prototype loads them from there. The game and rendering script is still inline in the prototype, at about 1,460 lines.
 
-Prototype: [Shot model lab](https://claude.ai/artifact/DuHBqQzcuPA4ZuQT8VSBxf)
+Prototype: [Shot model lab](https://claude.ai/artifact/DuHBqQzcuPA4ZuQT8VSBxf). Source: [`prototype/shot-model-lab.html`](../prototype/shot-model-lab.html)

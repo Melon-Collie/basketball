@@ -6,7 +6,6 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 - [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. It loads the simulation from `sim/`, so keep the two folders side by side.
 - [`docs/shot-model-design.md`](docs/shot-model-design.md): the design doc, covering principles, the shot resolver, dribbling, defense, frames, physics, calibration and the roadmap.
-
 - [`sim/`](sim): the shot simulation. The prototype loads these files directly, and they also run in Node for tests and calibration.
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
