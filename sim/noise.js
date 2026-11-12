@@ -58,18 +58,20 @@ function sampleNoise(inp, sc, z) {
 function rngN(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
 function gaussN(r) { const a = Math.max(1e-9, r()), b = r(); return Math.sqrt(-2*Math.log(a))*Math.cos(2*Math.PI*b); }
 
-// Make rate (and outcome mix) for a situation, by simulation
+// Make rate (and outcome mix) for a situation, by simulation. situ.hands (defenders' hands, as physics takes them)
+// are optional: with them, blocks are real collisions and count as misses.
 const NEAR_MISS_IN = 11;
 function makeRate(situ, n = 3000, seed = 1) {
   const R = PLn.PHYS.RIM, r = rngN(seed), player = situ.player || { x: R.x, y: R.y + situ.dist };
   const base = { kind: situ.kind || "jumper", player, contest: situ.contest || 0, timingMs: situ.timingMs || 0, relZ: situ.relZ };
   const sc = { kind: base.kind, dist: situ.dist, q: situ.q ?? 1, move: situ.move || 0, contest: situ.contest || 0,
                clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0 };
-  let made = 0, near = 0, misses = 0, air = 0; const labels = {};
+  let made = 0, near = 0, misses = 0, air = 0, blocks = 0; const labels = {};
   for (let i = 0; i < n; i++) {
     const noise = sampleNoise(base, sc, [gaussN(r), gaussN(r)]);
-    const L = LLn.buildLaunch({ ...base, noise }), res = PLn.simulateShot(L, { quick: true });
+    const L = LLn.buildLaunch({ ...base, noise }), res = PLn.simulateShot(L, { quick: true, hands: situ.hands || [] });
     labels[res.label] = (labels[res.label] || 0) + 1;
+    if (res.blocked) blocks++;
     if (res.made) made++;
     else {
       misses++; if (res.label === "Airball") air++;
@@ -77,7 +79,7 @@ function makeRate(situ, n = 3000, seed = 1) {
       if (o && Math.hypot(o.lat, o.dep) <= NEAR_MISS_IN) near++;
     }
   }
-  return { rate: made/n, nearOfMisses: misses ? near/misses : 1, airballs: air, labels };
+  return { rate: made/n, blocks: blocks/n, nearOfMisses: misses ? near/misses : 1, airballs: air, labels };
 }
 
 if (typeof module !== "undefined") module.exports = { NOISE, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };

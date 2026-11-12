@@ -8,11 +8,13 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 - [`docs/shot-model-design.md`](docs/shot-model-design.md): the design doc, covering principles, the shot resolver, dribbling, defense, frames, physics, calibration and the roadmap.
 - [`sim/`](sim): the shot simulation. The prototype loads these files directly, and they also run in Node for tests and calibration.
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
+  - `situation.js`: the rules that read the floor: what a click would produce, contests, clean looks, finishing scatter and defenders' hands.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
   - `noise.js`: launch-space noise and simulated make rates.
   - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.js`.
   - `calibration.js`: the generated settings, applied to the noise model when the prototype loads.
-  - `tests.js`, `tests-launch.js`: physics tests and the launch continuity check.
+  - `measure.js`: reports make and block rates with defenders' hands in the simulation.
+  - `tests.js`, `tests-launch.js`, `tests-situation.js`: physics tests, the launch continuity check and the situation rules.
 
 ## Running the simulation
 
@@ -26,10 +28,20 @@ node sim/tests.js
 node sim/tests-launch.js
 ```
 
+```bash
+node sim/tests-situation.js
+```
+
 Calibration takes about a minute and rewrites `sim/calibration.js`:
 
 ```bash
 node sim/calibrate.js
+```
+
+The measurement with defenders' hands takes about two minutes and prints its tables:
+
+```bash
+node sim/measure.js
 ```
 
 ## Controls

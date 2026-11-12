@@ -474,7 +474,7 @@ All five milestones are done. Jumpers, floaters and layups in the prototype are 
 - **Noise:** the old inch-based components are converted into launch-speed and direction noise using each shot's own sensitivities. Jumpers and floaters no longer have a distance term: a short shot comes down more steeply, so the rim is effectively bigger, and the old term double-counted that.
 - **Calibration:** jumper noise 1.23× the old values, floaters 1.42×, layups 1.40×; contest scatter 6.17 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.5%, open layup at a sprint 80.8%.
 - **Live readouts:** 14 simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
-- **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. A defender right on a jump shooter blocks about 1 in 12.
+- **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. Blocks turned out to be all-or-nothing for a given defender position: see Calibration, where a standing jumper against the default on-ball defender was blocked 24% of the time, not the 1 in 12 first estimated.
 - **Bank shots:** the cursor on the backboard beside the rim targets the glass, and a marker turns green where a bank can go in from your spot. From about 45° the working band is narrow and right beside the rim; from 63–65° it's over a foot wide; straight on, none.
 - **Ratings retired for shooting:** the shooter rating and floater touch sliders are gone; a universal floor replaces them.
 
@@ -596,13 +596,15 @@ This is the point where the prototype becomes a real project. The physics is bui
 **Modules:**
 
 - **Physics** (`sim/physics.js`): pure and deterministic. Steps the ball, resolves contacts, and simulates a whole shot from a launch into a path, a contact log and an outcome.
+- **Situation** (`sim/situation.js`): the rules that read the floor. What a click would produce, the jumper, floater and rim contests, clean looks, finishing scatter, and where the defenders' hands are during the flight.
 - **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
 - **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
-- **Game and rendering:** movement, dribbling, defense, input, the court view and the side-on replay. Still one inline script in `prototype/shot-model-lab.html`, which loads the modules above.
+- **Measurement** (`sim/measure.js`): an offline script that reports make and block rates with defenders' hands in the simulation.
+- **Game and rendering:** movement, dribbling, the defenders' AI, input, the court view and the side-on replay. Still one inline script in `prototype/shot-model-lab.html`, which loads the modules above.
 - **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
-**Tests** (`sim/tests.js` and `sim/tests-launch.js`):
+**Tests** (`sim/tests.js`, `sim/tests-launch.js` and `sim/tests-situation.js`):
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
@@ -613,6 +615,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - A hand in the ball's path on the way up blocks it; a hand that stays low doesn't.
 - A touch on the way down over the rim is goaltending, and counts.
 - Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
+- The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' hands.
 
 **Milestones:**
 
@@ -668,6 +671,30 @@ With perfect input, a shooter makes about half of open threes and drops to the m
 
 The floater under full contest was about 15% in the landing-point model. Floater contest scatter was not part of the calibration.
 
+**With defenders' hands** (from `sim/measure.js`: the contest and the hands both come from one defender position at release, 4,000 shots each, perfect release). "In the air" means the defender jumped when they saw the shot, one reaction time in.
+
+| Situation | Made | Blocked |
+| --- | --- | --- |
+| Three, on-ball defender 4 ft away, hand up | 49% | 0% |
+| Three, defender 3 ft away, hand up | 37% | 0% |
+| Three, defender 2 ft away, hand up | 22% | 0% |
+| Three, defender 2.5 to 3.5 ft away, in the air | 0% | 100% |
+| Three, defender 2 ft away or closer, in the air | 20–22% | 0% |
+| 15 ft jumper, defender 3 ft away, hand up | 48% | 0% |
+| Floater from 10 ft, rim protector 3.5 ft away, hand up | 50% | 0% |
+| Floater from 10 ft, rim protector 3 ft away or closer, hand up | 0% | 100% |
+| Layup, standing rim protector 40° to one side: away / middle / into them | 78% / 76% / 72% | 0% |
+| Layup, that rim protector at the peak of a jump: away / middle / into them | 63% / 57% / 56% | 4–7% |
+| Layup, rim protector straight in front, in the air | 0% | 100% |
+
+What this shows:
+
+- **Blocks are all-or-nothing.** Launch noise barely moves the ball in its first few feet, so a hand is either in the path or it isn't: a given defender position blocks every shot or none. Block rates only come from the mix of positions and jumps a defender ends up in.
+- **A raised hand inside 3 ft blocks every floater.** The floater leaves at 8.7 ft and the rim protector's standing reach is 8.9 ft.
+- **A standing rim protector barely costs a layup:** 72–78%, against 81% open. The landing-point model had about 48% finishing away and 33% into them. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
+
+**In the prototype** (a scripted run at default settings: 300 standing jumpers with a perfect release against the on-ball defender, who starts at their usual cushion and reacts as normal): 24% were blocked and 33% went in (28% of 150 from 20.8 ft, 38% of 150 from 25.3 ft). The defender had closed to a contest of about 0.5 by the release. Half the time they leave their feet, and about half of those jumps put the hand in the path.
+
 **Landing-point model output at default settings** (the original resolver, computed from its formulas; jumpers include the 30% perfect release bonus). Kept for reference: the shooter rating and floater touch no longer exist, and their values at 80 and 75 became the universal floors.
 
 | Situation | Rating 95 | Rating 80 | Rating 60 |
@@ -707,7 +734,7 @@ Midrange was mostly fadeaways, which landed a perfect release on the front rim b
 
 - **Midrange fades** now have a fixed release line, so a perfect fade no longer lands on the front rim.
 - **Clean-look target: 60%** for an open, perfectly released three, for every frame.
-- **The landing-point tables are rating-based.** Physics has replaced that resolver and the shooter rating; the physics table above carries the same targets. Layups against a set rim protector have not been re-measured, since blocks are now collisions.
+- **The landing-point tables are rating-based.** Physics has replaced that resolver and the shooter rating; the physics table above carries the same targets, and the table with defenders' hands re-measures contested shots and layups against a rim protector.
 
 ## Constants reference
 
@@ -735,7 +762,7 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | DSPEED / DACC | 13 ft/s / 50 ft/s² | On-ball defender guarding |
 | CLOSE\_SPEED / CLOSE\_ACC | 15.5 ft/s / 60 ft/s² | Closeouts |
 
-Physics retired the make windows (WIN, FIN, FL\_A / FL\_B), the push-long biases (CONTEST\_BIAS, FL\_CONTEST\_BIAS) and the landing-point clean-look values (CLEAN\_PREMIUM, NEAR\_MISS\_CAP), and they have been removed from the prototype. KT and the drift values still set the fade release line and the last-shot readout, and are the targets the launch mapping was fitted to at 24 ft.
+The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situation.js`. Physics retired the make windows (WIN, FIN, FL\_A / FL\_B), the push-long biases (CONTEST\_BIAS, FL\_CONTEST\_BIAS) and the landing-point clean-look values (CLEAN\_PREMIUM, NEAR\_MISS\_CAP), and they have been removed from the prototype. KT and the drift values still set the fade release line and the last-shot readout, and are the targets the launch mapping was fitted to at 24 ft.
 
 **Added since the first version:**
 
@@ -784,6 +811,8 @@ Full physics is built; frames are next. The prototype should become a real proje
 - **Live-ball triple threat and jab steps** need passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **Floaters don't get the clean-look premium yet.**
+- **Blocks are all-or-nothing for a given defender position** (see Calibration). The frames target of about 1 in 12 tight contests can only come from the mix of positions and jumps, unless something adds variation to where the hand or the release point is.
+- **A standing rim protector barely costs a layup,** and a raised hand inside 3 ft blocks every floater (see Calibration).
 - **The live scatter breakdown bar still uses the landing-point component sizes,** including a distance share the physics no longer has. The scatter figure beside it comes from the noise model.
 
 **Roadmap:**
@@ -796,6 +825,6 @@ Full physics is built; frames are next. The prototype should become a real proje
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** WASD movement with the mouse for contests, steals and passing-lane deflections.
 
-**Engineering:** physics, launch and noise are now separate modules in `sim/`, unit-tested and calibrated offline, and the prototype loads them from there. The game and rendering script is still inline in the prototype, at about 1,400 lines.
+**Engineering:** physics, launch, noise and the situation rules are now separate modules in `sim/`, unit-tested and calibrated offline, and the prototype loads them from there. The game and rendering script is still inline in the prototype, at about 1,300 lines. Movement, dribbling and the defenders' AI are still in it, untested.
 
 Prototype: [Shot model lab](https://claude.ai/artifact/DuHBqQzcuPA4ZuQT8VSBxf). Source: [`prototype/shot-model-lab.html`](../prototype/shot-model-lab.html)
