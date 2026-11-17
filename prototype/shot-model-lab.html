@@ -67,7 +67,13 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .online .caption{max-width:80ch}
 .online kbd{font-family:inherit;font-weight:600;color:var(--ink);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px}
 .online .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.online [hidden]{display:none}
 .online label{display:block;margin-top:10px;font-size:.85rem;color:var(--muted)}
+.online input[type=text]{display:block;width:100%;margin-top:4px;font:13px/1.3 ui-monospace,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px}
+.online .row label{margin:0;align-self:center}
+.online .row input[type=text]{width:9em;margin:0;text-transform:uppercase}
+.online details{margin-top:12px}
+.online details summary{font-weight:400;color:var(--muted)}
 .online textarea{display:block;width:100%;margin-top:4px;font:12px/1.3 ui-monospace,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px;resize:vertical}
 .stats{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:flex-end;margin-top:16px;padding:14px 16px;background:var(--panel);border-radius:10px}
 .stat .v{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.9rem;line-height:1}
@@ -145,13 +151,27 @@ dd small{color:var(--muted)}
       </div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
-        <p class="caption">One player hosts and sends the other a code; the other joins with it and sends a code back. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump.</p>
-        <div class="row"><button id="netHost" type="button">Host a game</button><button id="netJoin" type="button">Join with their code</button><button id="netLeave" type="button" hidden>Leave the game</button></div>
-        <label>Their code<textarea id="netIn" rows="3" spellcheck="false"></textarea></label>
-        <label>Your code<textarea id="netOut" rows="3" readonly spellcheck="false"></textarea></label>
-        <div class="row"><button id="netCopy" type="button">Copy your code</button><button id="netConnect" type="button">Connect (host, after pasting theirs)</button></div>
+        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump.</p>
+        <div id="netSetup">
+          <div class="row"><button id="netHost" type="button">Host a game</button></div>
+          <div id="netInvite" hidden>
+            <label>Send this link to the other player<input id="netLink" type="text" readonly spellcheck="false"></label>
+            <div class="row"><button id="netCopy" type="button">Copy link</button><button id="netCancel" type="button">Stop hosting</button></div>
+            <p class="caption">If they already have this page open, they can enter the code <strong id="netCodeOut"></strong> there instead.</p>
+          </div>
+          <div class="row" id="netJoinRow"><label for="netCode">Have a code?</label><input id="netCode" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="ABC234"><button id="netJoin" type="button">Join</button></div>
+        </div>
+        <div class="row"><button id="netLeave" type="button" hidden>Leave the game</button></div>
         <p class="caption" id="netStatus" aria-live="polite">Not connected.</p>
         <p class="caption" id="netStats" hidden></p>
+        <details id="netManual">
+          <summary>Connect without the link</summary>
+          <p class="caption">The link relies on a free public service to introduce the two browsers. If it is down, you can do its job by hand: one player hosts and sends the other a long code; the other joins with it and sends a code back.</p>
+          <div class="row"><button id="manHost" type="button">Host with codes</button><button id="manJoin" type="button">Join with their code</button></div>
+          <label>Their code<textarea id="manIn" rows="3" spellcheck="false"></textarea></label>
+          <label>Your code<textarea id="manOut" rows="3" readonly spellcheck="false"></textarea></label>
+          <div class="row"><button id="manCopy" type="button">Copy your code</button><button id="manConnect" type="button">Connect (host, after pasting theirs)</button></div>
+        </details>
       </details>
     </div>
 
@@ -778,8 +798,8 @@ $("defOn").addEventListener("change", e => GM.setDefender(G, "defOn", e.target.c
 $("rimOn").addEventListener("change", e => GM.setDefender(G, "rimOn", e.target.checked));
 
 // ---------- Online: two players, one game each, kept together ----------
-// The two browsers talk directly over WebRTC. There is no server to introduce them, so the players pass two codes
-// between themselves by hand: the host's offer and the guest's answer. ../sim/rollback.js does the rest.
+// The two browsers talk directly over WebRTC, once they have been introduced (see Invite links, below).
+// ../sim/rollback.js keeps their games together.
 // Two channels: "game" always delivers, in order, and carries the start, fingerprints and resyncs. "inputs" never
 // resends or reorders, so a lost packet can't hold up the ones behind it; every packet repeats what might be missing.
 const RB = window.RollbackLib;
@@ -792,7 +812,7 @@ const QUERY = new URLSearchParams(location.search), queryNum = k => Math.max(0, 
 const FAKE = { lag: queryNum("lag"), jitter: queryNum("jitter"), loss: queryNum("loss")/100 };
 const setOnlineUi = on => {
   document.querySelectorAll("aside input").forEach(el => { el.disabled = on; });
-  $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netHost").hidden = on; $("netJoin").hidden = on;
+  $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netSetup").hidden = on; $("netManual").hidden = on;
   $("netStats").hidden = !on;
 };
 // wait until the browser has listed the routes the other side could reach us by, or three seconds
@@ -804,7 +824,7 @@ const gathered = pc => new Promise(done => {
 function connection(me) {
   drop();
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-  net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0 };
+  net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0, ice: [], remote: false, started: false };
   pc.addEventListener("connectionstatechange", () => { if (net && net.pc === pc && ["failed", "closed"].includes(pc.connectionState)) leave("The connection dropped."); });
   return pc;
 }
@@ -813,12 +833,15 @@ function attach(dc) {
   if (main) mine.dc = dc; else mine.fast = dc;
   dc.addEventListener("message", e => { if (net === mine) got(JSON.parse(e.data)); });
   if (!main) return;
-  dc.addEventListener("open", () => {
-    if (mine.me !== 0) return;
+  const opened = () => {
+    if (mine.me !== 0 || mine.started || net !== mine) return;
+    mine.started = true;
     const delay = QUERY.has("delay") ? clamp(Math.round(queryNum("delay")/1000/GM.TICK), 0, 12) : RB.DELAY;
     const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true }, delay };
     send(start); begin(start);
-  });
+  };
+  dc.addEventListener("open", opened);
+  if (dc.readyState === "open") opened();                               // a channel the other side made may arrive already open
   dc.addEventListener("close", () => { if (net === mine) leave("The other player left."); });
 }
 // Inputs go on the channel that may lose them; everything else on the one that can't. A whole game sent to resync is
@@ -842,6 +865,7 @@ function got(m) {
 }
 // both sides build the same game from the host's seed and settings
 function begin(start) {
+  closeLobby();                                                         // introductions are over
   GM.load(G, GM.snapshot(GM.create({ seed: start.seed, rules: true, duo: true })));
   Object.assign(params, start.params);
   for (const k of Object.keys(fmt)) { $(k).value = params[k]; $("o-" + k).textContent = fmt[k](String(params[k])); }
@@ -872,35 +896,142 @@ function drop() {
 }
 function leave(why) {
   const wasLive = net && net.live;
-  drop(); netSay(why); setOnlineUi(false);
+  drop();
+  // a guest who found the host's game but never got through: the host's link is still good for another try
+  if (!wasLive && lobby && lobby.host && lobby.open) { lobby.peer = null; return netSay("That didn't connect. Your link still works; waiting for the other player."); }
+  closeLobby(); netSay(why); setOnlineUi(false);
   if (wasLive) { G.duo = false; GM.newGame(G); shownLast = G.lastSeq; shownStats = G.statsSeq; clearLast(); renderBoard(); }   // carry on alone against the AI
 }
-$("netHost").addEventListener("click", async () => {
+
+// ---------- Invite links ----------
+// Two browsers can't find each other unaided: each has to be told how to reach the other. A free public service
+// (the one run for the PeerJS library, spoken to here directly) passes those few messages between them. The host
+// waits there under a six-character code, and the link carries the code. Once the two are connected the service is
+// dropped, and nothing of the game goes through it. ?broker=ws://localhost:9000/ points at another one.
+const BROKER = QUERY.get("broker") || "wss://0.peerjs.com/", ROOM = "hoops1v1-";
+const LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";                       // none that read as each other: no 0 O 1 I L
+const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => LETTERS[b % LETTERS.length]).join("");
+let lobby = null;                                                       // waiting on the service: { host, code, line, open, peer }
+// A line to the service under an id. on(type, message) is told what arrives, and "UNREACHABLE" or "CLOSED" if it goes.
+function brokerLine(id, on) {
+  const ws = new WebSocket(`${BROKER}${BROKER.endsWith("/") ? "" : "/"}peerjs?key=peerjs&id=${id}&token=${newCode()}&version=1.5.4`);
+  let opened = false, shut = false;
+  const beat = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: "HEARTBEAT" })); }, 5000);
+  ws.addEventListener("message", e => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (m.type === "OPEN") opened = true; if (!shut) on(m.type, m); });
+  ws.addEventListener("close", () => { clearInterval(beat); if (!shut) on(opened ? "CLOSED" : "UNREACHABLE", {}); });
+  return { say: (type, dst, payload) => { if (ws.readyState === 1) ws.send(JSON.stringify({ type, dst, payload })); },
+           close: () => { shut = true; clearInterval(beat); try { ws.close(); } catch (e) { /* already gone */ } } };
+}
+function closeLobby() {
+  if (!lobby) return;
+  clearTimeout(lobby.timer); lobby.line.close(); lobby = null;
+  $("netInvite").hidden = true; $("netHost").hidden = false; $("netJoinRow").hidden = false;
+}
+const serviceDown = () => { closeLobby(); drop(); $("netManual").open = true; netSay("Couldn't reach the invite service. You can still connect with codes, under Connect without the link."); };
+// each side tells the other the routes it finds as it finds them, so connecting doesn't wait for the full list
+const tellRoutes = (pc, to) => pc.addEventListener("icecandidate", e => { if (e.candidate && lobby) lobby.line.say("CANDIDATE", to, { candidate: e.candidate }); });
+const addRoute = (mine, c) => { if (mine.remote) mine.pc.addIceCandidate(c).catch(() => {}); else mine.ice.push(c); };
+async function setRemote(mine, sdp) {
+  await mine.pc.setRemoteDescription(sdp);
+  mine.remote = true;
+  for (const c of mine.ice.splice(0)) mine.pc.addIceCandidate(c).catch(() => {});
+}
+function hostByLink() {
+  closeLobby(); drop();
+  const code = newCode(), mine = lobby = { host: true, code, open: false, peer: null, line: null };
+  netSay("Getting your link ready…");
+  mine.line = brokerLine(ROOM + code, async (type, m) => {
+    if (lobby !== mine) return;
+    if (type === "OPEN") {
+      mine.open = true;
+      const link = new URL(location.href); link.hash = "join=" + code;
+      $("netLink").value = link.href; $("netCodeOut").textContent = code;
+      $("netInvite").hidden = false; $("netHost").hidden = true; $("netJoinRow").hidden = true;
+      netSay("Waiting for the other player to open your link.");
+    } else if (type === "ID-TAKEN") hostByLink();                        // somebody is already waiting under that code: take another
+    else if (type === "UNREACHABLE" || type === "ERROR" || type === "INVALID-KEY") serviceDown();
+    else if (type === "CLOSED") { closeLobby(); drop(); netSay("Lost touch with the invite service. Host again for a new link."); }
+    else if (type === "OFFER" && m.payload && m.payload.sdp) {            // the newest caller replaces one still trying; once a game starts this line is closed
+      mine.peer = m.src;
+      const pc = connection(0), con = net;
+      pc.addEventListener("datachannel", e => attach(e.channel));
+      tellRoutes(pc, m.src);
+      netSay("The other player is connecting…");
+      try {
+        await setRemote(con, m.payload.sdp);
+        await pc.setLocalDescription(await pc.createAnswer());
+        mine.line.say("ANSWER", m.src, { sdp: pc.localDescription });
+      } catch (e) { if (net === con) leave("That didn't connect."); }
+    } else if (type === "CANDIDATE" && m.src === mine.peer && net && m.payload) addRoute(net, m.payload.candidate);
+  });
+}
+function joinByCode(text) {
+  const code = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length !== 6) return netSay("Enter the six-character code from the host.");
+  closeLobby(); drop();
+  const host = ROOM + code, mine = lobby = { host: false, code, open: false, answered: false, line: null, timer: 0 };
+  const fail = why => { if (lobby !== mine) return; closeLobby(); drop(); netSay(why); };
+  netSay("Looking for the game…");
+  mine.line = brokerLine(`${host}-${newCode()}`, async (type, m) => {
+    if (lobby !== mine) return;
+    if (type === "OPEN") {
+      mine.open = true;
+      const pc = connection(1);
+      attach(pc.createDataChannel("game")); attach(pc.createDataChannel("inputs", { ordered: false, maxRetransmits: 0 }));
+      tellRoutes(pc, host);
+      await pc.setLocalDescription(await pc.createOffer());
+      mine.line.say("OFFER", host, { sdp: pc.localDescription });
+      mine.timer = setTimeout(() => fail(mine.answered ? "Found the game, but the two of you couldn't connect directly. One of your networks may not allow it."
+                                                       : "The host didn't answer. They may already be in a game."), 20000);
+    } else if (type === "ID-TAKEN") joinByCode(code);
+    else if (type === "UNREACHABLE" || type === "ERROR" || type === "INVALID-KEY") serviceDown();
+    else if (type === "CLOSED") fail("Lost touch with the invite service. Try the link again.");
+    else if (type === "EXPIRE") fail("Nobody is hosting under that code. Check it, or ask the host for a new link.");
+    else if (type === "ANSWER" && m.src === host && net && !net.remote && m.payload) { mine.answered = true; netSay("Found the game. Connecting…"); setRemote(net, m.payload.sdp).catch(() => fail("That didn't connect.")); }
+    else if (type === "CANDIDATE" && m.src === host && net && m.payload) addRoute(net, m.payload.candidate);
+  });
+}
+$("netHost").addEventListener("click", hostByLink);
+$("netJoin").addEventListener("click", () => joinByCode($("netCode").value));
+$("netCode").addEventListener("keydown", e => { if (e.key === "Enter") joinByCode($("netCode").value); });
+$("netCopy").addEventListener("click", () => { const box = $("netLink"); navigator.clipboard.writeText(box.value).then(() => netSay("Link copied. Waiting for the other player to open it."), () => box.select()); });
+$("netCancel").addEventListener("click", () => { closeLobby(); drop(); netSay("Not connected."); });
+$("netLeave").addEventListener("click", () => leave("You left the game."));
+// opened from an invite link: join straight away, and take the code out of the address so a reload doesn't try again
+{
+  const invited = /^#join=([A-Za-z0-9]{6})$/.exec(location.hash);
+  if (invited) { history.replaceState(null, "", location.pathname + location.search); $("online").open = true; $("netCode").value = invited[1].toUpperCase(); joinByCode(invited[1]); }
+}
+
+// ---------- Connecting by hand ----------
+// The same introduction with no service: the players carry the two messages themselves, as long codes.
+$("manHost").addEventListener("click", async () => {
+  closeLobby();
   const pc = connection(0);
   attach(pc.createDataChannel("game")); attach(pc.createDataChannel("inputs", { ordered: false, maxRetransmits: 0 }));
   netSay("Getting your code ready…");
   await pc.setLocalDescription(await pc.createOffer()); await gathered(pc);
-  $("netOut").value = encode(pc.localDescription);
+  $("manOut").value = encode(pc.localDescription);
   netSay("Send your code to the other player. When they send theirs back, paste it under Their code and press Connect.");
 });
-$("netJoin").addEventListener("click", async () => {
+$("manJoin").addEventListener("click", async () => {
   let offer;
-  try { offer = decode($("netIn").value); } catch (e) { return netSay("Paste the host's code under Their code first."); }
+  try { offer = decode($("manIn").value); } catch (e) { return netSay("Paste the host's code under Their code first."); }
+  closeLobby();
   const pc = connection(1);
   pc.addEventListener("datachannel", e => attach(e.channel));
   netSay("Getting your code ready…");
   try { await pc.setRemoteDescription(offer); } catch (e) { drop(); return netSay("That code didn't work. Ask the host for a fresh one."); }
   await pc.setLocalDescription(await pc.createAnswer()); await gathered(pc);
-  $("netOut").value = encode(pc.localDescription);
+  $("manOut").value = encode(pc.localDescription);
   netSay("Send your code back to the host. The game starts when they connect.");
 });
-$("netConnect").addEventListener("click", async () => {
-  if (!net || net.me !== 0 || net.live) return netSay("Press Host a game first, and send the other player your code.");
-  try { await net.pc.setRemoteDescription(decode($("netIn").value)); netSay("Connecting…"); }
+$("manConnect").addEventListener("click", async () => {
+  if (!net || net.me !== 0 || net.live) return netSay("Press Host with codes first, and send the other player your code.");
+  try { await net.pc.setRemoteDescription(decode($("manIn").value)); netSay("Connecting…"); }
   catch (e) { netSay("That code didn't work. Check you pasted all of it."); }
 });
-$("netCopy").addEventListener("click", () => { const box = $("netOut"); navigator.clipboard.writeText(box.value).catch(() => box.select()); });
-$("netLeave").addEventListener("click", () => leave("You left the game."));
+$("manCopy").addEventListener("click", () => { const box = $("manOut"); navigator.clipboard.writeText(box.value).catch(() => box.select()); });
 
 // ---------- Loop ----------
 readTheme();

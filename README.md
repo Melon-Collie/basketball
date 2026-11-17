@@ -4,7 +4,7 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
 
-Two people can play each other from the "Play online" panel under the court: one hosts and sends a code, the other joins and sends one back. Whoever doesn't have the ball controls the on-ball defender. Your own input always lands after 25 ms; the other player is guessed and corrected, so a slow connection doesn't make you wait. The design doc lists its limits.
+Two people can play each other from the "Play online" panel under the court: one presses Host a game and sends the other the link it gives, and the game starts when they open it. A free public service introduces the two browsers; if it is down, the panel offers a way to connect by passing codes by hand. Whoever doesn't have the ball controls the on-ball defender. Your own input always lands after 25 ms; the other player is guessed and corrected, so a slow connection doesn't make you wait. The design doc lists its limits.
 
 ## Contents
 
@@ -102,7 +102,9 @@ node tools/ingame.js
 node tools/online.js --lag 60 --jitter 20 --loss 5 --seconds 20
 ```
 
-To try a bad connection by hand, open the prototype in two windows with `?lag=80&jitter=20&loss=5` on the end of the address and connect them as usual.
+Add `--link` to have them connect by invite link, as players do, with the introduction service played by the script.
+
+To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss=5` on the end of the address, host, and open the link it gives in a second window. The link carries the same settings.
 
 ## Controls
 

@@ -699,9 +699,16 @@ Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke 
 - **Lost packets cost nothing.** Inputs go on a channel that never resends, so a lost packet can't hold up the ones behind it. Every packet carries all the inputs the other side has not yet acknowledged, so the next one fills the gap.
 - **Drift.** Every 60 ticks the two sides compare a short fingerprint of the game they have agreed on; if they differ, the host sends its whole game and the guest takes it. That covers the case where two browsers' maths differs in the last digit.
 
-**Connecting.** The browsers talk directly over WebRTC. With no server to introduce them, the players pass two codes between themselves by hand, each about 830 characters: the host's, then the guest's back. A public server (Google's STUN) is asked only for each browser's outside address.
+**Connecting.** The host presses Host a game and gets a link ending in a six-character code. The game starts when the other player opens it. Someone who already has the page open can type the code instead.
 
-**Trying a bad connection.** Under the codes, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed.
+The browsers talk directly over WebRTC, but two browsers can't find each other unaided: each has to be told how to reach the other. Two outside services help, and neither sees the game:
+
+- **An introduction service** passes those few messages between the two browsers. The page uses the free public one run for the PeerJS library, speaking its protocol directly, with no library loaded. The host waits there under the code; the guest calls that code; they exchange how to reach each other and the page hangs up on the service. Both players' network addresses pass through it, as they must for any service doing this job.
+- **A public address lookup** (Google's STUN) tells each browser its own outside address.
+
+If the introduction service can't be reached, the panel says so and opens the old way of connecting, which needs no service: the players carry the two messages themselves, as codes of about 830 characters, the host's first and then the guest's back. `?broker=wss://…/` on the page's address points it at a different introduction service that speaks the same protocol, such as one you run yourself.
+
+**Trying a bad connection.** Once a game starts, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed; with `--link` they connect by invite link, with the introduction service played by the script.
 
 **Measured** between two headless browsers on one machine, both players moving, pointing and shooting throughout:
 
@@ -714,7 +721,9 @@ The worst frames are the ones that replay a shot's release, which simulates the 
 
 **Limits, for now:**
 
-- **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other.
+- **The invite link has not been tried against the real introduction service.** It was built from that service's published server code and tested with a stand-in that behaves the same way, because the public one could not be reached from where this was written. It is also somebody else's free service: it can be down, slow or limited, and there is no promise it stays up.
+- **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other. The guest is told so after 20 seconds.
+- **A code is the only key.** Anyone who has the link can take the one open seat. Once a game has started the code is dead.
 - **Not yet played across the internet, or between two different browsers.** Everything above is two copies of Chromium on one machine with the lag faked. Two different browsers may drift and lean on resyncs.
 - **Corrections are not smoothed.** When a guess was wrong the other player snaps to where they really are. Blending that over a few frames is the obvious next thing to try once it has been played.
 - **A shot can change after release.** If the defender's real hand was somewhere other than guessed when you let go, the flight is worked out again. It settles within the lag, long before the ball arrives.

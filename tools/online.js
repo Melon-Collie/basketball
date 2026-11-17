@@ -1,9 +1,13 @@
 // Plays an online game between two headless browsers on this machine, over a real WebRTC connection with a bad link
 // faked on top, and checks the two stayed together. Unlike the other tools this one runs in real time.
 //
-//   node tools/online.js [--lag 60] [--jitter 20] [--loss 5] [--seconds 20] [--delay 25]
+//   node tools/online.js [--lag 60] [--jitter 20] [--loss 5] [--seconds 20] [--delay 25] [--link | --broker ws://localhost:9000/]
 //
 // lag and jitter are ms each way, loss is the percentage of input packets dropped, delay is the input delay in ms.
+// The two connect by exchanging codes, which needs nothing outside this machine. With --link they connect the way
+// players do, by an invite link, with the introduction service played by this script (see stand-in, below). With
+// --broker they use a real one at that address: after `npm install peer`, `npx peerjs --port 9000` runs one locally,
+// the same software as the public one the page uses by default.
 // Both players move, point and press throughout. At the end it compares the fingerprints the two sides took of the
 // game they have agreed on, and reports how often each went back, how long a frame took, and whether either had to
 // wait or be resynced. Exits 1 if they disagreed, or a page threw an error.
@@ -13,6 +17,25 @@ const { PROTOTYPE } = require('./harness.js');
 
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i < 0 ? def : +process.argv[i + 1]; };
 const opt = { lag: arg('lag', 60), jitter: arg('jitter', 20), loss: arg('loss', 5), seconds: arg('seconds', 20), delay: arg('delay', NaN) };
+const broker = process.argv.includes('--broker') ? process.argv[process.argv.indexOf('--broker') + 1] : null;
+const link = broker !== null || process.argv.includes('--link');
+
+// A stand-in for the introduction service, for --link: it answers the pages' connections to it without anything
+// leaving the browser, and does what the PeerJS server does. A new id is told OPEN and one in use ID-TAKEN; a message
+// is passed to the id it names with the sender's id added; one for an id nobody holds comes back as EXPIRE 5 s later.
+const waiting = new Map();
+const standIn = page => page.routeWebSocket(/\/peerjs\?/, ws => {
+  const id = new URL(ws.url()).searchParams.get('id');
+  if (waiting.has(id)) { ws.send(JSON.stringify({ type: 'ID-TAKEN' })); ws.close(); return; }
+  waiting.set(id, ws); ws.send(JSON.stringify({ type: 'OPEN' }));
+  ws.onMessage(text => {
+    const m = JSON.parse(text), to = waiting.get(m.dst);
+    if (m.type === 'HEARTBEAT') return;
+    if (to) to.send(JSON.stringify({ type: m.type, src: id, dst: m.dst, payload: m.payload }));
+    else setTimeout(() => { if (waiting.get(id) === ws) ws.send(JSON.stringify({ type: 'EXPIRE', src: m.dst, dst: id })); }, 5000);
+  });
+  ws.onClose(() => { if (waiting.get(id) === ws) waiting.delete(id); });
+});
 
 // Runs in each page before its own scripts: times every frame, and within it the part that is keeping in step.
 function install() {
@@ -28,7 +51,8 @@ function install() {
     const a = performance.now(); cb(now); t.cost.push(performance.now() - a);
   });
 }
-async function player(query) {
+// address: the page to open, or nothing for the prototype with `query` on the end
+async function player(query, address) {
   // real addresses in the connection codes, not .local names, which nothing here can look up
   const browser = await chromium.launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] });
   const page = await browser.newPage({ viewport: { width: 1300, height: 2600 } });
@@ -36,22 +60,35 @@ async function player(query) {
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/*', r => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.addInitScript(install);
-  await page.goto(pathToFileURL(PROTOTYPE).href + '?' + query);
-  await page.evaluate(() => { document.querySelector('#online').open = true; });
+  if (link && !broker) await standIn(page);
+  await page.goto(address || pathToFileURL(PROTOTYPE).href + '?' + query);
+  await page.evaluate(() => { document.querySelector('#online').open = true; document.querySelector('#netManual').open = true; });
   return { browser, page, errors };
 }
 const filled = (page, id) => page.waitForFunction(id => document.querySelector(id).value.length > 100, id, { timeout: 15000 });
 const pct = (list, q) => { const s = [...list].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(s.length*q))] : 0; };
 
 (async () => {
-  const query = `lag=${opt.lag}&jitter=${opt.jitter}&loss=${opt.loss}` + (Number.isNaN(opt.delay) ? '' : `&delay=${opt.delay}`);
-  const [host, guest] = await Promise.all([player(query), player(query)]);
+  const query = `lag=${opt.lag}&jitter=${opt.jitter}&loss=${opt.loss}` + (Number.isNaN(opt.delay) ? '' : `&delay=${opt.delay}`)
+              + (broker ? `&broker=${encodeURIComponent(broker)}` : '');
+  const host = await player(query);
+  let guest = null;
   try {
-    await host.page.click('#netHost'); await filled(host.page, '#netOut');
-    await guest.page.fill('#netIn', await host.page.inputValue('#netOut'));
-    await guest.page.click('#netJoin'); await filled(guest.page, '#netOut');
-    await host.page.fill('#netIn', await guest.page.inputValue('#netOut'));
-    await host.page.click('#netConnect');
+    if (link) {
+      // the host gets a link; the guest does nothing but open it
+      await host.page.click('#netHost');
+      await host.page.waitForFunction(() => document.querySelector('#netLink').value.includes('#join='), null, { timeout: 15000 });
+      const invite = await host.page.inputValue('#netLink');
+      console.log(`Invite link ends ${invite.slice(invite.indexOf('#'))}`);
+      guest = await player(query, invite);
+    } else {
+      guest = await player(query);
+      await host.page.click('#manHost'); await filled(host.page, '#manOut');
+      await guest.page.fill('#manIn', await host.page.inputValue('#manOut'));
+      await guest.page.click('#manJoin'); await filled(guest.page, '#manOut');
+      await host.page.fill('#manIn', await guest.page.inputValue('#manOut'));
+      await host.page.click('#manConnect');
+    }
     for (const p of [host, guest]) await p.page.waitForFunction(() => window.shotLab.net && window.shotLab.net.live, null, { timeout: 15000 });
     console.log(`Connected. Playing ${opt.seconds} s with ${opt.lag}–${opt.lag + opt.jitter} ms each way and ${opt.loss}% of input packets lost.`);
 
@@ -99,5 +136,8 @@ const pct = (list, q) => { const s = [...list].sort((a, b) => a - b); return s.l
     if (errors.length) console.log('Page errors:\n  ' + errors.join('\n  '));
     console.log(bad ? 'FAILED' : 'The two sides agreed throughout.');
     process.exitCode = bad ? 1 : 0;
-  } finally { await host.browser.close(); await guest.browser.close(); }
+  } catch (e) {
+    for (const [name, p] of [['Host', host], ['Guest', guest]]) if (p) console.log(`${name} page says: ${await p.page.textContent('#netStatus').catch(() => '?')}`);
+    throw e;
+  } finally { await host.browser.close(); if (guest) await guest.browser.close(); }
 })().catch(e => { console.error(e); process.exit(1); });
