@@ -133,7 +133,8 @@ function finishScatter(s) {
 // Defenders' hands during the ball's flight, for physics.simulateShot: where the hand is now, carried by their
 // motion, at standing reach if it's up, plus any jump in progress or already scheduled.
 // shotT: ms into the shooter's motion, or null if nobody is shooting.
-function handPaths(p, defs, shotT) {
+// handSpecs gives each hand as plain numbers, which can be kept or sent; handPath turns one into the moving hand.
+function handSpecs(p, defs, shotT) {
   const out = [];
   for (const d of defs) {
     const dist = Math.hypot(d.x - p.x, d.y - p.y);
@@ -143,16 +144,20 @@ function handPaths(p, defs, shotT) {
     const up = Math.max(d.hand, d.jumpT >= 0 ? 1 : 0);
     const z0 = SITU.HAND_LOW + (d.stand - SITU.HAND_LOW)*up;
     const jumpStart = d.jumpT >= 0 ? -d.jumpT : (d.jumpAt !== null && shotT !== null ? Math.max(0, (d.jumpAt - shotT)/1000) : null);
-    const vx = d.vx, vy = d.vy;
-    out.push({ r: SITU.HAND_R, at: t => {
-      const tt = Math.min(t, 0.35), jt = jumpStart === null ? -1 : t - jumpStart;
-      return { x: hx + vx*tt, y: hy + vy*tt, z: z0 + (jt >= 0 && jt < SITU.JUMP_T ? SITU.HAND_JUMP*Math.sin(Math.PI*jt/SITU.JUMP_T) : 0) };
-    } });
+    out.push({ r: SITU.HAND_R, hx, hy, vx: d.vx, vy: d.vy, z0, jumpStart });
   }
   return out;
 }
 
+function handPath({ r, hx, hy, vx, vy, z0, jumpStart }) {
+  return { r, at: t => {
+    const tt = Math.min(t, 0.35), jt = jumpStart === null ? -1 : t - jumpStart;
+    return { x: hx + vx*tt, y: hy + vy*tt, z: z0 + (jt >= 0 && jt < SITU.JUMP_T ? SITU.HAND_JUMP*Math.sin(Math.PI*jt/SITU.JUMP_T) : 0) };
+  } };
+}
+const handPaths = (p, defs, shotT) => handSpecs(p, defs, shotT).map(handPath);
+
 const SIT_EXPORTS = { SITU, frame, isThree, shotContext, combine, jumperContestOne, jumperContest, floaterContestOne, floaterContest,
-                       rimContestOne, rimContest, cleanLook, finishScatter, handPaths };
+                       rimContestOne, rimContest, cleanLook, finishScatter, handSpecs, handPath, handPaths };
 if (typeof module !== "undefined") module.exports = SIT_EXPORTS;
 else window.SituationLib = SIT_EXPORTS;

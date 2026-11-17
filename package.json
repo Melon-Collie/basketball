@@ -4,7 +4,8 @@
   "description": "Proof-of-concept basketball game: shot model prototype, simulation and design doc",
   "scripts": {
     "replay": "node tools/replay.js",
-    "ingame": "node tools/ingame.js"
+    "ingame": "node tools/ingame.js",
+    "online": "node tools/online.js"
   },
   "devDependencies": {
     "playwright": "1.63.0"

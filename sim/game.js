@@ -2,7 +2,8 @@
 // the prototype's page are here: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release.
 // Nothing in this file touches the page. The page feeds it input, steps it, and draws the state it finds.
 //
-// A game is one plain object made by create(): no functions, nothing shared, so it can be copied, saved or sent.
+// A game is one plain object made by create(): no functions, so it can be copied, saved or sent. Copies share only
+// the paths of balls already in flight, which are never changed once worked out.
 // step(game, input) advances it by one tick of TICK seconds. The same seed and the same inputs always produce the
 // same game, which is what replays, tests and networked play all rest on.
 //
@@ -137,8 +138,23 @@ function physRates(inp, sc, n, zs) {
   }
   return { make: m/n, block: b/n };
 }
-const physChance = (inp, sc, n, zs) => physRates(inp, sc, n, zs).make;
-const handPaths = () => SIT.handPaths(P, defenders(), shot.state === "shooting" ? shot.t : null);
+// A release used to run 80 simulated shots on the spot to report its odds, which made that one tick a thousand times
+// dearer than any other. Now it only takes the random draws those shots would have used and keeps them with what
+// went into the shot. lastOdds() runs them when the readout asks. The draws are the same ones, so so are the odds.
+// hands: the defenders' hands as numbers (handSpecs), since a game holds no functions.
+const oddsLater = (inp, sc, hands, n = 80) => ({ inp: { ...inp, hands }, sc, zs: Array.from({ length: n }, () => [gauss(), gauss()]) });
+const oddsCache = new Map();                         // outside any game: the odds follow from the draws, so they can be shared
+function lastOdds() {
+  const L = g.last;
+  if (!L) return null;
+  if (!L.odds) return { make: L.chance, block: L.block };
+  const key = JSON.stringify([L.odds, params.bonus]);
+  let r = oddsCache.get(key);
+  if (!r) { if (oddsCache.size > 20) oddsCache.clear(); r = physRates({ ...L.odds.inp, hands: L.odds.inp.hands.map(SIT.handPath) }, L.odds.sc, L.odds.zs.length, L.odds.zs); oddsCache.set(key, r); }
+  return r;
+}
+const handSpecs = () => SIT.handSpecs(P, defenders(), shot.state === "shooting" ? shot.t : null);
+const handPaths = () => handSpecs().map(SIT.handPath);
 function physOut(sr, layup) {
   if (!sr) return { make: false, big: "Miss", sub: layup ? "Blown layup" : "Airball" };
   const r = sr.res;
@@ -180,8 +196,11 @@ function decideTime(res) {
   for (let i = apex + 1; i < p.length; i++) if (p[i].z < 9.2) return p[i].t;
   return p[p.length - 1].t;
 }
+// A simulated flight is written once and only read after that, so copies of a game share it instead of copying it.
+const fixed = new WeakSet();
+const keep = res => { fixed.add(res.path); fixed.add(res.contacts); return res; };
 function startPathBall(L, res) {
-  const RR = PHX.PHYS.RIM;
+  const RR = PHX.PHYS.RIM; keep(res);
   g.ball = { phase: "path", t: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t,
            announced: false, relZ: L.pos.z, rimDist: Math.hypot(L.pos.x - RR.x, L.pos.y - RR.y) || 1 };
   g.lastPhys = { path: res.path, contacts: res.contacts, from: L.pos, made: res.made };
@@ -318,16 +337,17 @@ function releaseJumper() {
   // physics: the same inputs, as a launch. Clean-look shaping and calibration live in the noise model.
   const fadeAng = fade ? Math.atan(fadeLat/12/f.dist) : 0;
   const glass = glassAimFor("jumper");
+  const hs = handSpecs();
   const inp = { kind: "jumper", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : (clamp(aim.theta, -0.6, 0.6) + fadeAng)*assistK, timingMs: eEff,
-                body: liftBody(f, shot.bvx, shot.bvy, assistK, 1), contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+                body: liftBody(f, shot.bvx, shot.bvy, assistK, 1), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
   const sc = { kind: "jumper", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
-  const chance = physChance(inp, sc, 80);              // blocks are real collisions now, so they're in here
+  const odds = oddsLater(inp, sc, hs);                 // blocks are real collisions now, so they're in here
   const sig = NZX.scatterIn(sc);
   const shotRes = physShot(inp, sc), out = physOut(shotRes);
   const three = isThree({ x: shot.gx, y: shot.gy });   // zone is where you took off, not where you landed
   if (g.flow.on && g.flow.phase === "ft") recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, false);
   g.flow.value = three ? 3 : 2; g.flow.fouled = false;
-  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, chance, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
+  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
   g.meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
   if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, true, false, 0.4, 3);
   shot.state = "flight";
@@ -342,7 +362,7 @@ function releaseFinish() {
   const con = rimContest(side);
   const bank = bankOf(shot.gx, shot.gy);
   const foul = rnd() < foulChance(con);
-  let out, chance, block, sig = null, layupShot = null;
+  let out, chance, block, odds, sig = null, layupShot = null;
   if (dunk) {
     block = blockChanceDunk(con.c);
     chance = (1 - block)*(1 - C.DUNK_FUMBLE);
@@ -352,9 +372,9 @@ function releaseFinish() {
   } else {
     sig = finishSigma(shot.gatherSpeed, shot.vPerpG, side, hangMs, con.c);
     // physics: finish-side, speed and hang costs come through as extra scatter; contact costs a little more
-    const inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths() };
+    const hs = handSpecs(), inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: hs.map(SIT.handPath) };
     const sc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2])*(foul ? 1.15 : 1), contest: con.c };
-    const rates = physRates(inp, sc, 80); chance = rates.make; block = rates.block;
+    odds = oddsLater(inp, sc, hs);
     layupShot = physShot(inp, sc);
     out = physOut(layupShot, true);
   }
@@ -362,7 +382,7 @@ function releaseFinish() {
   if (foul && !blocked) out.sub = out.make ? "And one" : "Fouled, two free throws";
   record(out.make, 2, false, true);
   g.flow.value = 2; g.flow.fouled = foul && !blocked;
-  g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foulP: foulChance(con), chance, bank,
+  g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foulP: foulChance(con), chance, odds, bank,
            speed: shot.gatherSpeed, note: shot.note, dist: f.dist };
   g.lastSeq++; g.statsSeq++;
   if (blocked && !layupShot) g.fx.push({ kind: "text", text: "Blocked", t: 0 });
@@ -381,17 +401,17 @@ function releaseFloater() {
   const e = shot.t - C.FL_IDEAL, f = frame(P);
   const con = floaterContest(), q = floaterQ(e);
   const b = floaterBias(e, f, P.vx, P.vy);
-  const glass = glassAimFor("floater");
+  const glass = glassAimFor("floater"), hs = handSpecs();
   const inp = { kind: "floater", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, timingMs: b.eEff,
-                body: liftBody(f, P.vx, P.vy, 0.6*b.assistK, 0.5), contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
+                body: liftBody(f, P.vx, P.vy, 0.6*b.assistK, 0.5), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
   const sc = { kind: "floater", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c };
-  const rates = physRates(inp, sc, 80), chance = rates.make, block = rates.block;
+  const odds = oddsLater(inp, sc, hs);
   const sig = NZX.scatterIn(sc);
   const shotRes = physShot(inp, sc), out = physOut(shotRes);
   if (out.sub === "Swish") out.sub = "Dropped in soft";
   record(out.make, 2, false, false, true);
   g.flow.value = 2; g.flow.fouled = false;
-  g.last = { kind: "floater", out, e, q, b, con, sig, chance, block, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
+  g.last = { kind: "floater", out, e, q, b, con, sig, odds, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
   g.meterFlash = { e, t: 0.8, kind: "floater" };
   if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, true, false, 0.4, 3);
   shot.state = "flight";
@@ -909,7 +929,7 @@ function looseOffRim(f, blocked) {
   const side = rnd() < 0.5 ? -1 : 1, k = blocked ? { out: 3, across: 8, up: 1 } : { out: 5, across: 2, up: 4 };
   const pos = { x: HOOP.x - f.u.x*1.6, y: HOOP.y - f.u.y*1.6, z: PHX.PHYS.RIM.z + 0.3 };
   const vel = { x: -f.u.x*k.out + f.r.x*side*k.across, y: -f.u.y*k.out + f.r.y*side*k.across, z: k.up };
-  const res = PHX.simulateShot({ pos, vel }, { floorBounces: 8, tMax: 8 });
+  const res = keep(PHX.simulateShot({ pos, vel }, { floorBounces: 8, tMax: 8 }));
   g.ball = { phase: "path", t: 0, path: res.path, made: false, decideT: 0, endT: res.path[res.path.length - 1].t, announced: true, relZ: pos.z, rimDist: 1 };
   g.flow.loose = true; g.flow.lastTouch = blocked ? "d" : "o";
 }
@@ -1095,7 +1115,20 @@ function digest() {
   const r = v => Math.round(v*1000), fl = g.flow;
   return [g.tick, g.seed, r(P.x), r(P.y), r(D.x), r(D.y), r(R.x), r(R.y), fl.score[0], fl.score[1], fl.offense, fl.phase, shot.state, stats.fga].join(",");
 }
-const snapshot = () => JSON.parse(JSON.stringify({ ...g, view: undefined }));
+// The copy is made by hand, not through JSON: rolling back takes one every time a guess about the other player
+// turns out wrong, many times a second.
+function copyOf(v) {
+  if (v === null || typeof v !== "object" || fixed.has(v)) return v;
+  if (Array.isArray(v)) { const a = new Array(v.length); for (let i = 0; i < v.length; i++) a[i] = copyOf(v[i]); return a; }
+  const o = {};
+  for (const k in v) { const x = v[k]; if (x !== undefined) o[k] = copyOf(x); }
+  return o;
+}
+function snapshot() {
+  const o = {};
+  for (const k in g) if (k !== "view" && g[k] !== undefined) o[k] = copyOf(g[k]);
+  return o;
+}
 // Takes a snapshot into this game in place, so anything holding on to its parts (the page does) still sees them.
 function load(snap) {
   for (const k of Object.keys(snap)) {
@@ -1104,6 +1137,8 @@ function load(snap) {
     else if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) { for (const kk of Object.keys(a)) delete a[kk]; Object.assign(a, b); }
     else g[k] = b;
   }
+  if (g.ball && g.ball.path) fixed.add(g.ball.path);
+  if (g.lastPhys) keep(g.lastPhys);
 }
 function setDefender(which, on) {
   params[which] = on;
@@ -1117,7 +1152,7 @@ const on = fn => (game, ...args) => { use(game); return fn(...args); };
 return {
   C, HOOP, TICK, RULES, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
   step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats), setRules: on(setRules), newGame: on(newGame),
-  digest: on(digest), snapshot: on(snapshot), load: on(load),
+  digest: on(digest), snapshot: on(snapshot), load: on(load), lastOdds: on(lastOdds),
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), fadeSigmaFor: on(fadeSigmaFor),

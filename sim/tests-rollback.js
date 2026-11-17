@@ -1,0 +1,181 @@
+// Tests for two-player play: a player-controlled defender, and two copies of a game kept together over a link that
+// delivers messages late, out of order, or not at all. No browser and no network: the link here is a queue.
+const GM = require("./game.js"), RB = require("./rollback.js");
+
+const lockTests = [];
+function ltest(name, fn) { lockTests.push({ name, fn }); }
+function check(cond, msg) { if (!cond) throw new Error(msg); }
+const RIM = GM.HOOP, same = (a, b) => JSON.stringify({ ...a, view: null }) === JSON.stringify({ ...b, view: null });
+
+// Two copies of one game joined by a link. Each tick of the test both sides are given one tick of time and the input
+// their player is giving at that moment (from a script), as the page does once per drawn frame.
+//   lag, jitter   ticks each way, and up to this many more at random
+//   loss          the share of input packets that never arrive. The rest arrive in whatever order their lag gives.
+//   late          side 1 starts this many ticks after side 0, as a guest does who starts when the host's word arrives
+// Fingerprints and whole games take the same lag but always arrive, and in order, as on the page.
+function pair(seed, { lag = 0, jitter = 0, loss = 0, late = 0, delay } = {}) {
+  const games = [0, 1].map(() => GM.create({ seed, rules: true, duo: true })), wire = [], rand = RB_RAND(seed);
+  let clock = 0, sent = 0, bytes = 0, lastSure = [0, 0];
+  const peers = games.map((g, me) => RB.create(g, me, m => {
+    const text = JSON.stringify(m), loose = m.k === "i";
+    if (loose) { sent++; bytes += text.length; if (rand() < loss) return; }
+    let at = clock + lag + (loose ? Math.floor(rand()*(jitter + 1)) : jitter);
+    if (!loose) at = lastSure[me] = Math.max(at, lastSure[me]);
+    wire.push({ at, to: 1 - me, m: JSON.parse(text) });
+  }, { delay }));
+  const deliver = () => { for (let i = 0; i < wire.length;) { if (wire[i].at <= clock) { const w = wire.splice(i, 1)[0]; RB.receive(peers[w.to], w.m); } else i++; } };
+  const stats = { replayed: 0, deepest: 0, stood: [0, 0] }, given = [new Map(), new Map()];   // given: every input each side gave, by the tick it is used on
+  const tick = script => {
+    deliver();
+    for (const p of peers) {
+      if (p.me === 1 && clock < late) continue;
+      const was = p.clock, n = RB.frame(p, GM.TICK, () => { const i = script(p.me, p.clock); given[p.me].set(p.clock + p.delay, RB.unpack(RB.pack(i))); return i; });
+      if (p.clock === was) stats.stood[p.me]++;
+      stats.replayed += n; stats.deepest = Math.max(stats.deepest, n);
+    }
+    clock++;
+  };
+  // let everything in flight arrive, with nobody sampling, so both sides know every input and can be compared
+  const settle = () => { for (let i = 0; i < 400; i++) { clock++; deliver(); for (const p of peers) { RB.flush(p); RB.advance(p); } } };
+  return { games, peers, tick, settle, stats, given, run: (n, script) => { for (let i = 0; i < n; i++) tick(script); }, wire: () => ({ sent, bytes }) };
+}
+function RB_RAND(seed) { let s = seed | 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
+// The game these two sides should both have: a fresh one stepped with every input each of them actually gave.
+function truth(p, seed) {
+  const g = GM.create({ seed, rules: true, duo: true }), a = p.peers[0];
+  for (let t = 0; t < a.sure.tick; t++) GM.step(g, t < a.delay ? [RB.NEUTRAL, RB.NEUTRAL] : [p.given[0].get(t), p.given[1].get(t)]);
+  return g;
+}
+const idle = (x, y) => ({ ...RB.NEUTRAL, x, y });
+// side 0 has the ball first: it holds, shoots, drives; side 1 defends: moves, reaches, jumps
+function script(me, t) {
+  const s = t/120;
+  if (me === 0) return { ...idle(RIM.x + 3*Math.sin(s), RIM.y), u: s > 3 && s < 3.6, shot: (s > 1 && s < 1.52) || (s > 6 && s < 6.3), gather: s > 5 && s < 5.05, l: s > 7 && s < 7.5 };
+  return { ...idle(25 + 2*Math.cos(s*2), 28), d: s > 0.3 && s < 0.6, l: s > 2 && s < 2.4, r: s > 4 && s < 4.5, gather: (s > 1.3 && s < 1.35) || (s > 6.2 && s < 6.25), shot: s > 8 && s < 8.5 };
+}
+
+ltest("The side without the ball controls the on-ball defender: WASD moves, the cursor raises a hand, Space jumps", () => {
+  const g = GM.create({ seed: 1, rules: true, duo: true }), start = { ...g.D };
+  const step = (n, def, off = idle(g.P.x - 3, g.P.y + 3)) => { for (let i = 0; i < n; i++) GM.step(g, [off, def]); };   // the handler keeps the ball away
+  step(60, idle(g.D.x, g.D.y));
+  check(g.D.x === start.x && g.D.y === start.y && g.D.hand === 0, "with no input the defender should stand still with their hand down");
+  step(60, { ...idle(g.D.x, g.D.y), r: true });
+  check(g.D.x > start.x + 3 && Math.abs(g.D.y - start.y) < 1e-9, `moving right for half a second: x went from ${start.x} to ${g.D.x.toFixed(2)}`);
+  const moved = g.D.x - start.x;
+  step(1, idle(g.P.x, g.P.y));                                       // cursor on the ball handler, arm's length away
+  check(g.D.hand > 0.9, `pointing at the handler from range should raise the hand: ${g.D.hand.toFixed(2)}`);
+  step(1, idle(g.D.x, g.D.y - 6));                                   // cursor straight away from them
+  check(g.D.hand < 0.5, `pointing away should not: ${g.D.hand.toFixed(2)}`);
+  step(1, { ...idle(g.D.x, g.D.y), gather: true });
+  check(g.D.jumpT >= 0, "Space should jump");
+  step(70, idle(g.D.x, g.D.y));
+  check(g.D.jumpT < 0 && g.D.land > 0, "half a second later they should have landed");
+  return `moved ${moved.toFixed(1)} ft in half a second`;
+});
+
+ltest("A hand on the ball takes it, but not through the handler's body or inside the check-ball grace", () => {
+  // the handler dribbles out to their right; the defender either stays in front and reaches across, or comes round to the ball
+  const reach = side => {
+    const g = GM.create({ seed: 2, rules: true, duo: true });
+    for (let i = 0; i < 600; i++) {
+      const b = GM.dribbleBallPos(g), goal = side ? { x: g.P.x + 2.7, y: g.P.y } : { x: g.P.x, y: g.P.y - 2.4 }, dx = goal.x - g.D.x, dy = goal.y - g.D.y;
+      GM.step(g, [idle(g.P.x + 6, g.P.y), { ...idle(b.x, b.y), r: dx > 0.2, l: dx < -0.2, d: dy > 0.2, u: dy < -0.2 }]);
+      if (g.flow.phase === "dead") return { g, at: i/120 };
+    }
+    return { g, at: -1 };
+  };
+  const front = reach(false), beside = reach(true);
+  check(front.at < 0, `reaching across from in front should not get it: taken ${front.at} s in`);
+  check(beside.at >= 0 && beside.g.flow.why === "Stolen" && beside.g.stats.to === 1, `from the ball side: ${beside.g.flow.phase}, "${beside.g.flow.why}"`);
+  check(beside.at > GM.RULES.GRACE, `the steal came ${beside.at.toFixed(2)} s in, inside the grace`);
+  return `from the ball side, taken ${beside.at.toFixed(1)} s in; from in front, never`;
+});
+
+ltest("With no lag beyond the input delay nothing is guessed, and the two copies match a game played on one machine", () => {
+  const p = pair(3, { lag: 2 });
+  p.run(120*5, script); p.settle();
+  check(p.peers[0].rollbacks === 0 && p.peers[1].rollbacks === 0, `went back ${p.peers[0].rollbacks} and ${p.peers[1].rollbacks} times`);
+  check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 3)), "the copies should match each other and the game played straight through");
+  check(p.games[0].tick === 120*5, `fell behind: ${p.games[0].tick} of ${120*5} ticks`);
+  return `${p.games[0].tick} ticks, no guesses needed`;
+});
+
+ltest("Your own input lands after the same 25 ms however slow the link is", () => {
+  const when = lag => {
+    const p = pair(6, { lag }), x0 = p.games[0].P.x;
+    for (let t = 0; t < 120; t++) { p.tick((me, c) => ({ ...idle(RIM.x, RIM.y), r: me === 0 && c >= 40 })); if (p.games[0].P.x !== x0) return t - 40; }
+    return -1;
+  };
+  const near = when(2), far = when(24);
+  check(near === RB.DELAY && far === RB.DELAY, `moved ${near} ticks after the key on a fast link and ${far} on a 200 ms one; both should be ${RB.DELAY}`);
+  return `${RB.DELAY} ticks after the key at 17 ms and at 200 ms each way`;
+});
+
+ltest("Over 100 ms each way neither side waits, wrong guesses are replayed, and both end with the true game", () => {
+  const p = pair(3, { lag: 12 });
+  p.run(120*10, script); p.settle();
+  check(p.stats.stood[0] === 0 && p.stats.stood[1] === 0, `stood still for ${p.stats.stood} ticks`);
+  check(p.peers[0].rollbacks > 20 && p.peers[1].rollbacks > 20, `the script changes input often, so both should have gone back: ${p.peers[0].rollbacks}, ${p.peers[1].rollbacks}`);
+  check(p.stats.deepest <= 12 - RB.DELAY + 2, `a replay should be about the lag less the input delay: ${p.stats.deepest} ticks`);
+  check(p.games[0].tick === 120*10 && p.games[1].tick === 120*10, `ticks ${p.games[0].tick} and ${p.games[1].tick}`);
+  check(same(p.games[0], p.games[1]), "the two copies ended in different states");
+  check(same(p.games[0], truth(p, 3)), "going back and replaying should give the game that was actually played");
+  check(same(p.games[0], p.peers[0].sure) && p.peers[0].resyncs === 0 && p.peers[1].resyncs === 0, "no resync should have been needed");
+  check(p.games[0].stats.fga >= 1 && p.games[0].D.x !== 25, "the script should have produced a shot and a moving defender");
+  return `${p.games[0].tick} ticks, went back ${p.peers[0].rollbacks} and ${p.peers[1].rollbacks} times, at most ${p.stats.deepest} ticks; ${p.games[0].stats.fga} shots, score ${p.games[0].flow.score.join("-")}`;
+});
+
+ltest("Lost, late and out-of-order packets cost nothing but deeper replays", () => {
+  const p = pair(7, { lag: 6, jitter: 6, loss: 0.15 });                // 50 to 100 ms each way, one packet in seven lost
+  p.run(120*10, script); p.settle();
+  check(p.stats.stood[0] + p.stats.stood[1] === 0, `stood still for ${p.stats.stood} ticks`);
+  check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 7)), "the copies should match each other and the true game");
+  check(p.peers[0].resyncs === 0 && p.peers[1].resyncs === 0, "they should not have needed a resync");
+  const w = p.wire();
+  check(w.bytes/w.sent < 600, `packets averaged ${Math.round(w.bytes/w.sent)} characters`);
+  return `deepest replay ${p.stats.deepest} ticks; packets averaged ${Math.round(w.bytes/w.sent)} characters`;
+});
+
+ltest("When the link is slower than the limit on guessing, both wait and still end identical", () => {
+  const p = pair(4, { lag: 50 });                                      // 417 ms each way against 250 ms of guessing
+  p.run(120*6, script); p.settle();
+  check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 4)), "the copies should match each other and the true game");
+  check(p.stats.stood[0] > 60 && p.stats.stood[1] > 60, `expected both to stand still at times: ${p.stats.stood}`);
+  check(p.stats.deepest <= RB.MAX_AHEAD + 1, `no replay should be longer than the limit: ${p.stats.deepest}`);
+  return `${p.games[0].tick} of ${120*6} ticks played; stood still ${p.stats.stood.join(" and ")} ticks`;
+});
+
+ltest("A side whose clock is ahead slows until the two agree, so both guess about as much", () => {
+  const p = pair(8, { lag: 6, late: 18 });                             // the guest starts 150 ms after the host
+  p.run(120*2, script);
+  const early = p.peers[0].clock - p.peers[1].clock;
+  p.run(120*10, script);
+  const gap = p.peers[0].clock - p.peers[1].clock;
+  check(early < 18 && Math.abs(gap) <= 2, `the clocks were 18 ticks apart, ${early} after two seconds, and ${gap} at the end`);
+  check(p.peers[1].slow === 0 && p.peers[1].clock === 120*12 - 18, "the side that was behind should never have slowed");
+  p.settle();
+  check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 8)), "the copies should match each other and the true game");
+  return `18 ticks apart at the start, ${early} after two seconds, ${gap} at the end`;
+});
+
+ltest("If the copies drift, side 1 takes side 0's game and they are identical again", () => {
+  const p = pair(5, { lag: 8 });
+  p.run(120*2, script);
+  p.peers[1].sure.P.x += 0.25; p.peers[1].dirty = true;              // knock one copy out of step
+  p.run(120*3, script); p.settle();
+  check(p.peers[0].resyncs === 1 && p.peers[1].resyncs === 1, `resyncs: ${p.peers[0].resyncs} sent, ${p.peers[1].resyncs} taken`);
+  check(p.games[0].tick === p.games[1].tick && same(p.games[0], p.games[1]), "they should be identical again");
+  check(same(p.games[1], p.peers[1].sure), "the game on screen should have been brought back to the corrected one");
+  return "one resync";
+});
+
+if (require.main === module) {
+  let pass = 0;
+  for (const t of lockTests) {
+    try { const info = t.fn(); pass++; console.log(`PASS  ${t.name}\n      ${info || ""}`); }
+    catch (e) { console.log(`FAIL  ${t.name}\n      ${e.message}`); }
+  }
+  console.log(`\n${pass}/${lockTests.length} passed`);
+  if (pass < lockTests.length) process.exitCode = 1;
+}
+module.exports = { lockTests };
