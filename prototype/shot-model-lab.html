@@ -928,6 +928,7 @@ function begin(start) {
   setOnlineUi(true); clearLast(); renderBoard();
   netSay(`Connected. You are ${SIDES[net.me]}; ${SIDES[0]} has the ball first.`);
   $("board").scrollIntoView({ block: "start" }); court.focus({ preventScroll: true });   // the codes were exchanged further down the page
+  keepGoing();                                                          // the host's tab is often hidden when the guest opens the link
 }
 function netFrame(dt) {
   const peer = net.peer;
@@ -1055,11 +1056,21 @@ $("netCode").addEventListener("keydown", e => { if (e.key === "Enter") joinByCod
 $("netCopy").addEventListener("click", () => { const box = $("netLink"); navigator.clipboard.writeText(box.value).then(() => netSay("Link copied. Waiting for the other player to open it."), () => box.select()); });
 $("netCancel").addEventListener("click", () => { closeLobby(); drop(); netSay("Not connected."); });
 $("netLeave").addEventListener("click", () => leave("You left the game."));
-// opened from an invite link: join straight away, and take the code out of the address so a reload doesn't try again
-{
+// An invite link in the address: join straight away, and take the code out of the address so a reload doesn't try
+// again. The link may be opened as a new page, or pasted into a tab that already has this page, which the browser
+// does not reload, so the address is read on both.
+function joinFromAddress() {
   const invited = /^#join=([A-Za-z0-9]{6})$/.exec(location.hash);
-  if (invited) { history.replaceState(null, "", location.pathname + location.search); $("online").open = true; $("netCode").value = invited[1].toUpperCase(); joinByCode(invited[1]); }
+  if (!invited) return;
+  const code = invited[1].toUpperCase();
+  history.replaceState(null, "", location.pathname + location.search);
+  $("online").open = true;
+  if (net && net.live) return netSay("You are in a game. Leave it first to join another.");
+  if (lobby && lobby.host && lobby.code === code) return netSay("That is your own link. Send it to the other player; the game starts when they open it.");
+  $("netCode").value = code; joinByCode(code);
 }
+addEventListener("hashchange", joinFromAddress);
+joinFromAddress();
 
 // ---------- Connecting by hand ----------
 // The same introduction with no service: the players carry the two messages themselves, as long codes.
@@ -1112,6 +1123,25 @@ function loop(now) {
   draw(); drawInset();
   requestAnimationFrame(loop);
 }
+// A hidden tab is given no frames to draw, so the loop above stops. Offline that is a pause. Online it would leave
+// the other player waiting on this one's input, so while the page is hidden and a game is on, a worker's timer
+// keeps the game stepping (a hidden page's own timers are slowed to a crawl; a worker's are not). Nothing is drawn,
+// and with no keys held the player just stands there.
+let ticker = null;
+function keepGoing() {
+  const want = document.hidden && !!net && net.live;
+  if (!want) { if (ticker) { ticker.terminate(); ticker = null; } return; }
+  if (ticker) return;
+  try {
+    ticker = new Worker(URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 16)"], { type: "text/javascript" })));
+    ticker.onmessage = () => {
+      if (!document.hidden || !net || !net.live) return keepGoing();
+      const now = performance.now(), dt = clamp((now - prev)/1000, 0, 0.05); prev = now;
+      netFrame(dt);
+    };
+  } catch (e) { ticker = null; }                                        // no workers here: the other player waits, as before
+}
+document.addEventListener("visibilitychange", keepGoing);
 refreshLive(); renderStats(); renderBoard();
 requestAnimationFrame(loop);
 })();
