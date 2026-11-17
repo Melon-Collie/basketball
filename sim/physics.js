@@ -198,5 +198,5 @@ function labelFor(launch, contacts, made, madeAt) {
   return "Off the side";
 }
 
-if (typeof module !== "undefined") module.exports = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact };
-else window.PhysicsLib = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact };
+if (typeof module !== "undefined") module.exports = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact, armContact };
+else window.PhysicsLib = { PHYS, v3, bounce, idealSpeed, launchVelocity, simulateShot, rimContact, armContact };

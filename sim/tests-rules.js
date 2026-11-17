@@ -28,11 +28,10 @@ function shoot(g, ms, aim = AIM) { for (let i = 0, n = Math.round(ms/1000/GM.TIC
 // 80 estimates and then the shot itself, two normals each.
 const noNoise = g => g.forced.push(...Array(324).fill(1));
 const PERFECT = 517, EARLY = 380;                                // ms: on time, and early enough to come up well short
-// drive in with nobody home and dunk: a sure two unless the fumble roll comes up
-function dunk(g, rolls = [0.5, 0.5, 0.5]) {
+// drive in with nobody home and dunk: a sure two. Stops as the ball leaves the hand.
+function dunk(g) {
   until(g, TOWARD, x => distance(x) <= 8.5);
-  g.forced.push(...rolls);                                        // the foul, block and fumble rolls
-  run(g, 0.5, { ...TOWARD, shot: true, shift: true });
+  until(g, { ...TOWARD, shot: true, shift: true }, x => x.last && x.last.kind === "dunk", 1);
 }
 // run at a loose ball: toward where it can first be caught
 function chase(g) {
@@ -156,6 +155,25 @@ rtest("Boxing out: a player standing their ground keeps the spot, and the one ru
   return `the one standing moved ${b.stood.toFixed(2)} ft; the runner covered ${b.ran.toFixed(1)} ft and was stopped ${b.gap.toFixed(2)} ft away`;
 });
 
+rtest("Over the back: jumping into a player who has the spot gives them the ball", () => {
+  const toward = (x, body, tx, ty) => { const dx = tx - x[body].x, dy = ty - x[body].y; return { ...AIM, l: dx < -0.2, r: dx > 0.2, u: dy < -0.2, d: dy > 0.2 }; };
+  // away from the ball: one stands, the other runs at their back from 6 ft and leaves the floor just before getting there
+  const crash = runner => {
+    const stander = runner === "P" ? "D" : "P", at = { x: 8, y: 30 };
+    return rebound(4, x => { stand(x, stander, at.x, at.y); stand(x, runner, at.x, at.y + 6); }, (x, s, i) => {
+      const gap = Math.hypot(x.P.x - x.D.x, x.P.y - x.D.y), mine = { ...toward(x, runner, at.x, at.y), gather: gap < 3.2 };
+      return runner === "P" ? [mine, AIM] : [AIM, mine];
+    });
+  };
+  const byDefense = crash("D"), byOffense = crash("P");
+  check(byDefense.g.flow.why === "Over the back" && byDefense.g.flow.next === "keep", `the defender went over the shooter's back: ${describe(byDefense.g)}`);
+  check(byOffense.g.flow.why === "Over the back" && byOffense.g.flow.next === "change", `the shooter went over the defender's back: ${describe(byOffense.g)}`);
+  // running into their back without leaving the floor is not a foul: it just stops you
+  const ran = rebound(4, x => { stand(x, "P", 8, 30); stand(x, "D", 8, 36); }, (x, s, i) => i < ticks(1) ? [AIM, toward(x, "D", 8, 30)] : [AIM, AIM]);
+  check(ran.g.flow.why !== "Over the back", `staying on the floor should not be a foul: ${describe(ran.g)}`);
+  return "into the back in the air: the ball goes to the player who had the spot, whichever side they are";
+});
+
 rtest("Against the AI, a miss takes a reaction time to register before the defenders go after it", () => {
   const g = game(3); run(g, 0.5);
   g.forced.push(...Array(400).fill(1));
@@ -191,24 +209,34 @@ rtest("An airball out of bounds goes to the other side", () => {
   return `${g.last.out.sub}, out of bounds`;
 });
 
-rtest("A steal ends the possession", () => {
+rtest("Dribbling the ball into a defender's hand loses it, and that ends the possession", () => {
   const g = game(11);
-  // every steal roll comes up in the defender's favor
-  check(until(g, x => { x.forced.length = 0; x.forced.push(0); return AIM; }, dead, 8) && g.flow.why === "Stolen", describe(g));
-  check(g.stats.to === 1, `turnovers ${g.stats.to}`);
+  // straight at the defender with the ball out in front
+  check(until(g, TOWARD, dead, 8) && g.flow.why === "Stolen", describe(g));
+  check(g.stats.to === 1 && g.simT > RULES.GRACE, `turnovers ${g.stats.to}, ${g.simT.toFixed(2)} s in`);
   run(g, RULES.DEAD_T + 0.05);
   check(g.flow.offense === 1, describe(g));
+  // standing off with the ball, the same defender never gets it
+  const h = game(11); run(h, 10);
+  check(h.stats.to === 0 && h.flow.why !== "Stolen", `left alone at a distance the ball should be safe: ${describe(h)}`);
   return `picked ${g.simT.toFixed(1)} s in`;
 });
 
-rtest("A dunk that rattles out is a live ball off the rim; left alone it is whistled dead and given away", () => {
+rtest("A dunk met at the rim is a live ball; left alone it is whistled dead and given away", () => {
   const g = game(10, { defenders: false });
-  dunk(g, [0.5, 0.5, 0.01]);
-  check(g.last.out.sub === "Rattled out" && g.flow.loose && g.ball && g.ball.phase === "path", describe(g));
-  check(until(g, AIM, dead, 14) && g.flow.why === "Dead ball" && g.flow.score.join() === "0,0", describe(g));
+  until(g, TOWARD, x => distance(x) <= 8.5);
+  GM.setDefender(g, "rimOn", true);
+  for (let i = 0; i < 80 && !(g.last && g.last.kind === "dunk"); i++) {       // the rim protector in the way, at the top of a jump
+    const u = { x: (RIM.x - g.P.x)/distance(g), y: (RIM.y - g.P.y)/distance(g) };
+    Object.assign(g.R, { x: g.P.x + u.x*1.8, y: g.P.y + u.y*1.8, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
+    GM.step(g, { ...TOWARD, shot: true, shift: true });
+  }
+  check(g.last && g.last.out.sub === "Met at the rim" && g.ball && g.ball.phase === "path", `${JSON.stringify(g.last && g.last.out)}; ${describe(g)}`);
+  GM.setDefender(g, "rimOn", false);                               // and now nobody goes after it
+  check(until(g, x => ({ x: 3, y: 36, l: x.P.x > 4, d: x.P.y < 36 }), dead, 14) && ["Dead ball", "Out of bounds"].includes(g.flow.why) && g.flow.score.join() === "0,0", describe(g));
   run(g, RULES.DEAD_T + 0.05);
-  check(g.flow.offense === 1, describe(g));
-  return "loose, then dead";
+  check(g.flow.phase === "live", describe(g));
+  return `loose, then ${g.flow.why === "" ? "dead" : "whistled"}`;
 });
 
 rtest("A foul on a made finish is an and-one: one free throw, worth one, from a clean look at the line", () => {
@@ -240,8 +268,8 @@ rtest("A foul on a missed finish is two free throws; a miss at the line scores n
   until(h, TOWARD, x => distance(x) <= 6.5);
   run(h, 0.2, { ...TOWARD, shot: true });                          // going up for a layup
   check(h.shot.kind === "layup" && h.shot.state === "shooting", `expected a layup in progress: ${h.shot.kind}, ${h.shot.state}`);
-  // the foul roll, 80 estimates with no noise, then the layup itself with as much noise as there can be: a clank
-  h.forced.push(0.5, ...Array(320).fill(1), 1e-12, 0, 1e-12, 0);
+  // 80 estimates with no noise, then the layup itself with as much noise as there can be: a clank
+  h.forced.push(...Array(320).fill(1), 1e-12, 0, 1e-12, 0);
   check(until(h, AIM, x => x.shot.state === "flight", 1) && !h.last.out.make, `expected a missed layup in the air: ${JSON.stringify(h.last && h.last.out)}`);
   h.flow.fouled = true;                                            // call the foul by hand, as above
   check(until(h, AIM, dead, 4) && h.flow.why === "Foul" && h.flow.ft === 2 && !h.flow.loose, describe(h));

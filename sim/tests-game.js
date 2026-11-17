@@ -35,8 +35,8 @@ gtest("The same seed and inputs give the same game, and a different seed gives a
   check(a === b, "two runs from seed 11 ended in different states");
   check(a !== c, "seeds 11 and 12 ended in the same state");
   const g = session(fresh(11));
-  check(g.stats.fga >= 2, `the session should take a few shots, took ${g.stats.fga}`);
-  return `${ticks(15.1)} ticks, ${g.stats.fga} shots, ${a.length} bytes of state`;
+  check(g.stats.fga >= 1 && g.stats.fga + g.stats.to >= 3, `the session should take a shot and lose the ball a couple of times: ${g.stats.fga} shots, ${g.stats.to} turnovers`);
+  return `${ticks(15.1)} ticks, ${g.stats.fga} shots, ${g.stats.to} turnovers, ${a.length} bytes of state`;
 });
 
 gtest("A game is plain data: a copy made mid-shot, or sent as JSON, carries on identically", () => {
@@ -97,19 +97,29 @@ gtest("On a drive, clicking early is a floater, clicking late is a layup, and Sh
   return kinds.join(", ");
 });
 
-gtest("An open dunk goes down unless the fumble roll comes up", () => {
-  const dunk = forced => {
-    const g = fresh(71, { defenders: false });
-    until(g, TOWARD, x => distance(x) <= 8.5);
-    g.forced.push(...forced);                                     // the foul, block and fumble rolls, in that order
-    run(g, 0.5, { ...TOWARD, shot: true, shift: true }); run(g, 2);
-    return g;
-  };
-  const made = dunk([0.5, 0.5, 0.5]), fumbled = dunk([0.5, 0.5, 0.01]);
-  check(made.last.kind === "dunk" && made.last.out.make && made.stats.pts === 2, `expected a made dunk: ${JSON.stringify(made.last.out)}`);
-  check(!fumbled.last.out.make && fumbled.last.out.sub === "Rattled out", `expected a fumble: ${JSON.stringify(fumbled.last.out)}`);
-  check(made.forced.length === 0, "forced rolls should be used up");
-  return `${made.last.out.big} / ${made.last.out.sub}; with a low fumble roll, ${fumbled.last.out.sub}`;
+gtest("Nothing in the game is rolled except a shot's scatter", () => {
+  const src = require("fs").readFileSync(require("path").join(__dirname, "game.js"), "utf8");
+  const calls = src.split("\n").filter(line => /\brnd\(\)/.test(line) && !/^const rnd = /.test(line));
+  check(calls.length === 1 && /^function gauss\(\)/.test(calls[0]), `random numbers are drawn outside the bell curve a shot's scatter comes from:\n${calls.join("\n")}`);
+  return "the only draws are the two behind each normal deviate";
+});
+
+gtest("An open dunk always goes down; with a shot blocker's arm over the rim it is met there", () => {
+  const open = fresh(71, { defenders: false });
+  until(open, TOWARD, x => distance(x) <= 8.5);
+  run(open, 0.5, { ...TOWARD, shot: true, shift: true }); run(open, 2);
+  check(open.last.kind === "dunk" && open.last.out.make && open.stats.pts === 2 && !open.last.foul, `expected a made dunk: ${JSON.stringify(open.last.out)}`);
+  // the same dunk with the rim protector between the dunker and the rim, at the top of a jump as the ball gets there
+  const met = fresh(71, { defenders: false });
+  until(met, TOWARD, x => distance(x) <= 8.5);
+  GM.setDefender(met, "rimOn", true);
+  for (let i = 0; i < 80 && !(met.last && met.last.kind === "dunk"); i++) {
+    const u = { x: (RIM.x - met.P.x)/distance(met), y: (RIM.y - met.P.y)/distance(met) };
+    Object.assign(met.R, { x: met.P.x + u.x*1.8, y: met.P.y + u.y*1.8, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
+    GM.step(met, { ...TOWARD, shot: true, shift: true });
+  }
+  check(met.last && met.last.kind === "dunk" && met.last.out.big === "Blocked" && met.last.out.sub === "Met at the rim" && met.stats.pts === 0, `expected it met at the rim: ${JSON.stringify(met.last && met.last.out)}`);
+  return `open: ${open.last.out.big} / ${open.last.out.sub}; with an arm there: ${met.last.out.big} / ${met.last.out.sub}`;
 });
 
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
@@ -128,22 +138,27 @@ gtest("Gathering on the move gives two steps and then a dead dribble; gathering 
   return "two steps, then pivot";
 });
 
-gtest("The on-ball defender closes out on a shot they see, and about half the time leaves their feet", () => {
-  let shots = 0, jumped = 0, closer = 0;
-  for (let i = 0; i < 40; i++) {
-    const g = fresh(100 + i); run(g, 1);
-    const before = Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y);
-    for (let k = 0; k < 62; k++) GM.step(g, { ...AIM, shot: true });
-    if (g.shot.state !== "shooting") continue;                    // the dribble was picked before the shot got off
-    shots++;
-    if (g.D.jumpT >= 0) jumped++;
-    else if (Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y) < before - 0.5) closer++;
-    check(g.D.hand > 0.9 || g.D.jumpT >= 0, `defender neither raised a hand nor jumped (seed ${100 + i})`);
-  }
-  check(shots >= 30, `only ${shots} of 40 shots got off`);
-  check(jumped >= shots*0.3 && jumped <= shots*0.7, `jumped ${jumped} of ${shots}`);
-  check(closer === shots - jumped, `of ${shots - jumped} who stayed down, only ${closer} closed out`);
-  return `${shots} shots: ${jumped} times they left their feet; the rest they closed out with a hand up`;
+gtest("The AI closes out on a shot it sees, and leaves its feet only from where it could block it", () => {
+  // The handler either dribbles with the ball out in front, which keeps the defender at its cushion, or pulls it
+  // in tight for a second, which reads as a pull-up and brings the defender up close.
+  const from = tight => {
+    let shots = 0, jumped = 0, closer = 0;
+    for (let i = 0; i < 12; i++) {
+      const g = fresh(100 + i);
+      for (let k = 0; k < 120; k++) GM.step(g, tight ? { x: g.P.x + 0.3, y: g.P.y - 0.6 } : AIM);
+      const before = Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y);
+      for (let k = 0; k < 62; k++) GM.step(g, { ...AIM, shot: true });
+      if (g.shot.state !== "shooting") continue;
+      shots++;
+      if (g.D.jumpT >= 0 || g.D.land > 0) jumped++; else if (Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y) < before - 0.3) closer++;
+      check(g.D.hand > 0.9 || g.D.jumpT >= 0 || g.D.land > 0, `defender neither raised a hand nor jumped (seed ${100 + i})`);
+    }
+    return { shots, jumped, closer };
+  };
+  const usual = from(false), tight = from(true);
+  check(usual.shots === 12 && usual.jumped === 0 && usual.closer === 12, `from its cushion it is too far to get there, so it should keep its feet and close out: ${JSON.stringify(usual)}`);
+  check(tight.shots === 12 && tight.jumped === 12, `from inside ${GM.C.BITE_R} ft it should go up every time: ${JSON.stringify(tight)}`);
+  return `from its cushion: closed out ${usual.closer} of ${usual.shots}, never jumped. Brought in close: jumped ${tight.jumped} of ${tight.shots}`;
 });
 
 if (require.main === module) {

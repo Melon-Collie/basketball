@@ -135,6 +135,60 @@ ltest("The defender who gets a hand to a shot has to wait a moment before they c
   return `touched ${b.touchT.toFixed(2)} s into the flight, held no sooner than ${at.toFixed(2)} s`;
 });
 
+ltest("Reaching in is a foul: a hand that goes into the handler's body is whistled, one that was already there is not", () => {
+  // the defender is right up on a handler who keeps the ball away on the far side
+  const setup = () => {
+    const g = GM.create({ seed: 6, rules: true, duo: true });
+    Object.assign(g.P, { x: 25, y: 31 }); Object.assign(g.D, { x: 25, y: 31 - 1.8 }); g.flow.grace = 0;
+    return g;
+  };
+  const away = g => idle(g.P.x + 3, g.P.y + 5), near = g => idle(g.D.x, g.D.y + 0.7), through = g => idle(g.P.x, g.P.y + 2);
+  const reach = setup();
+  for (let i = 0; i < 30; i++) GM.step(reach, [away(reach), near(reach)]);          // hand up beside their own body: nothing
+  check(reach.flow.phase === "live", `standing close with the hand in should be fine: ${reach.flow.phase}, "${reach.flow.why}"`);
+  GM.step(reach, [away(reach), through(reach)]);                                     // then a stab through the handler at the ball
+  check(reach.flow.phase === "dead" && reach.flow.why === "Reach-in foul" && reach.flow.next === "keep", `expected a reach-in foul: ${reach.flow.phase}, "${reach.flow.why}"`);
+  for (let i = 0; i < Math.round((GM.RULES.DEAD_T + 0.05)/GM.TICK); i++) GM.step(reach, [away(reach), near(reach)]);
+  check(reach.flow.phase === "live" && reach.flow.offense === 0 && reach.flow.clock > GM.RULES.SHOT_CLOCK - 0.1 && reach.stats.to === 0, "the offense should keep the ball, from the top, with a fresh clock");
+  // the same hand, put there before the handler arrives, and left still while they walk into it
+  const still = setup(); Object.assign(still.P, { y: 31 + 3 });
+  const out = g => idle(g.D.x, g.D.y + 4);
+  for (let i = 0; i < 60; i++) GM.step(still, [away(still), out(still)]);
+  for (let i = 0; i < 90 && still.flow.phase === "live"; i++) GM.step(still, [{ ...away(still), u: true }, out(still)]);
+  const gap = Math.hypot(still.D.hx - still.P.x, still.D.hy - still.P.y);
+  check(still.flow.phase === "live" && gap < GM.C.BODY_R, `walking into a hand that was already out is no foul: ${still.flow.phase}, "${still.flow.why}", hand ${gap.toFixed(2)} ft from them`);
+  return `stab through the body: ${reach.flow.why || "Reach-in foul"}, offense keeps it; hand held still and walked into: play on`;
+});
+
+ltest("A hand on the shooter's arms is a foul and free throws; straight up beside the ball is a clean contest", () => {
+  const out = g => g.last.out;
+  const over = contested(1.8, 250, 3.0), up = contested(1.8, 250, 0.9), stood = contested(1.8, null, 3.0);
+  check(out(over).foul === "On the arm" && out(over).big === "Foul" && !out(over).make, `reaching over a shooter 1.8 ft away: ${JSON.stringify(out(over))}`);
+  check(!out(up).foul, `straight up from the same spot: ${JSON.stringify(out(up))}`);
+  check(out(stood).foul === "On the arm", `the arm doesn't have to be in the air: ${JSON.stringify(out(stood))}`);
+  const g = over;
+  for (let i = 0; i < 600 && g.flow.phase !== "dead"; i++) GM.step(g, [idle(RIM.x, RIM.y), idle(g.D.x, g.D.y)]);
+  check(g.flow.why === "Foul" && g.flow.next === "ft" && g.flow.ft === 2 && !g.flow.loose, `a fouled two that misses is two free throws: "${g.flow.why}", ${g.flow.ft} to shoot`);
+  return `reaching over: ${out(over).sub}; straight up: ${out(up).big} / ${out(up).sub}`;
+});
+
+ltest("A defender who is still running when they get to a shooter has fouled them; one who stops short has not", () => {
+  const run = stopAt => {
+    const g = GM.create({ seed: 8, rules: true, duo: true });
+    Object.assign(g.P, { x: 25, y: RIM.y + 15 }); Object.assign(g.D, { x: 25, y: RIM.y + 15 - 6 });
+    const press = 60, hold = 62;
+    for (let t = 0; t < 400 && !g.last; t++) {
+      const gap = g.P.y - g.D.y, go = t >= press && gap > stopAt;                      // sets off as the shot goes up
+      GM.step(g, [{ ...idle(RIM.x, RIM.y), shot: t >= press && t < press + hold }, { ...idle(g.D.x, g.D.y + 0.7), d: go }]);
+    }
+    return g;
+  };
+  const through = run(0), short = run(3.2);
+  check(through.last.out.foul === "Ran into the shooter", `ran straight into them: ${JSON.stringify(through.last.out)}`);
+  check(!short.last.out.foul, `pulled up 3 ft away: ${JSON.stringify(short.last.out)}`);
+  return `never stopped: ${through.last.out.sub}; pulled up short: ${short.last.out.big} / ${short.last.out.sub}`;
+});
+
 ltest("With no lag beyond the input delay nothing is guessed, and the two copies match a game played on one machine", () => {
   const p = pair(3, { lag: 2 });
   p.run(120*5, script); p.settle();
