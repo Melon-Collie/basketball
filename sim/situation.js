@@ -137,7 +137,7 @@ function finishScatter(s) {
 // the ball puts the hand sqrt(ARM^2 - reach^2) above the shoulder, against the full ARM when it goes straight up.
 // The hand is carried by the defender's motion, and rises with any jump in progress or already scheduled.
 // shotT: ms into the shooter's motion, or null if nobody is shooting.
-// own: a defender played by a person, whose hand is where their cursor put it (hx, hy). The others reach toward p.
+// own: a defender whose hand is where they put it (hx, hy), or true if that goes for all of them. The others reach toward p.
 // handSpecs gives each arm as plain numbers, which can be kept or sent; handPath turns one into the moving arm.
 function handSpecs(p, defs, shotT, own = null) {
   const out = [];
@@ -145,7 +145,7 @@ function handSpecs(p, defs, shotT, own = null) {
     const d = defs[i], dist = Math.hypot(d.x - p.x, d.y - p.y);
     if (dist > SITU.HAND_RANGE) continue;
     let dx = p.x - d.x, dy = p.y - d.y, reach = 0.85 + 0.75*Math.max(d.hand, d.h);
-    if (d === own && d.hx !== undefined) { dx = d.hx - d.x; dy = d.hy - d.y; reach = Math.hypot(dx, dy); }
+    if ((own === true || d === own) && d.hx !== undefined) { dx = d.hx - d.x; dy = d.hy - d.y; reach = Math.hypot(dx, dy); }
     const dl = Math.hypot(dx, dy) || 1;
     reach = Math.min(reach, SITU.ARM*0.95);
     const up = Math.max(d.hand, d.jumpT >= 0 ? 1 : 0), shoulder = d.stand - SITU.ARM;

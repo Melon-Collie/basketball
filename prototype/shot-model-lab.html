@@ -151,7 +151,7 @@ dd small{color:var(--muted)}
       </div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
-        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. After a miss, <kbd>Space</kbd> jumps for the ball for both of you.</p>
+        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. Reaching into the handler, getting a hand on a shooter’s arms or running into them is a foul. After a miss, <kbd>Space</kbd> jumps for the ball for both of you.</p>
         <div id="netSetup">
           <div class="row"><button id="netHost" type="button">Host a game</button></div>
           <div id="netInvite" hidden>
@@ -231,14 +231,14 @@ dd small{color:var(--muted)}
         <div class="slider"><label for="handle">Ball handling <output id="o-handle"></output></label><input id="handle" type="range" min="40" max="99" step="1" value="80"><div class="hint">Harder to read (adds to the defender’s reaction time), fewer steals.</div></div>
         <p class="sub-h">Finishing</p>
         <div class="slider"><label for="finish">Finishing rating <output id="o-finish"></output></label><input id="finish" type="range" min="40" max="99" step="1" value="80"><div class="hint">Touch, plus how much speed you can carry into a layup under control.</div></div>
-        <div class="slider"><label for="dunk">Dunk rating <output id="o-dunk"></output></label><input id="dunk" type="range" min="40" max="99" step="1" value="75"><div class="hint">Below 55, dunks are unavailable. Higher wins more duels with a shot blocker.</div></div>
+        <div class="slider"><label for="dunk">Dunk rating <output id="o-dunk"></output></label><input id="dunk" type="range" min="40" max="99" step="1" value="75"><div class="hint">Below 55, dunks are unavailable. A dunk goes down unless a shot blocker’s arm is there to meet it.</div></div>
         <p class="sub-h">Defense</p>
         <label class="check"><input id="defOn" type="checkbox" checked> On-ball defender</label>
         <label class="check"><input id="rimOn" type="checkbox" checked> Rim protector</label>
-        <div class="slider"><label for="stepUp">Rim protector steps up <output id="o-stepUp"></output></label><input id="stepUp" type="range" min="0" max="100" step="5" value="50"><div class="hint">Chance per drive that the big comes out to take away the floater, conceding the lane.</div></div>
+        <div class="slider"><label for="stepUp">Rim protector steps up <output id="o-stepUp"></output></label><input id="stepUp" type="range" min="0" max="100" step="5" value="50"><div class="hint">How readily the big comes out to help, conceding the lane: at 50%, once you are level with your defender. 0% never, 100% always.</div></div>
         <div class="slider"><label for="sag">Guarding distance <output id="o-sag"></output></label><input id="sag" type="range" min="3" max="12" step="0.5" value="4.5"></div>
         <div class="slider"><label for="dQuick">On-ball quickness <output id="o-dQuick"></output></label><input id="dQuick" type="range" min="40" max="99" step="1" value="70"><div class="hint">Reaction time, lateral speed and acceleration.</div></div>
-        <div class="slider"><label for="dSteal">On-ball steals <output id="o-dSteal"></output></label><input id="dSteal" type="range" min="40" max="99" step="1" value="60"></div>
+        <div class="slider"><label for="dSteal">On-ball steals <output id="o-dSteal"></output></label><input id="dSteal" type="range" min="40" max="99" step="1" value="60"><div class="hint">How soon the defender reaches for a ball left open in front of them, and how soon they reach again.</div></div>
         <div class="slider"><label for="react">Reaction time <output id="o-react"></output></label><input id="react" type="range" min="100" max="500" step="10" value="250"><div class="hint">Also sets roughly when shot blockers leave their feet on a finish.</div></div>
         <div class="slider"><label for="length">On-ball defender length <output id="o-length"></output></label><input id="length" type="range" min="0.7" max="1.3" step="0.05" value="1"></div>
       </section>
@@ -763,7 +763,7 @@ function renderLast() {
       <dt>Approach</dt><dd>${L.speed.toFixed(1)} ft/s<br><small>under control up to ${L.sig.limit.toFixed(1)}</small></dd>`}
       <dt>Contest at rim</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
       <dt>Block chance</dt><dd>${pct(odds.block)}</dd>
-      <dt>Foul chance</dt><dd>${pct(L.foulP)}</dd>
+      <dt>Contact</dt><dd>${L.foul ? `Foul: ${L.foul.toLowerCase()}` : "None"}</dd>
       <dt>Make chance</dt><dd><strong>${pct(odds.make)}</strong></dd>
     </dl>`;
 }

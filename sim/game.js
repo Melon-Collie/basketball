@@ -40,7 +40,16 @@ const C = {
   RISE_LAYUP: 320, RISE_DUNK: 380, MAX_HANG: 450,
   // floaters: lenient timed release, high arc
   FL_IDEAL: 330, FL_MAX: 560, FL_KT: 0.07, FL_PERFECT: 20, FL_CONTEST_SIG: 5.0,
-  DUNK_FUMBLE: 0.04
+  // contact: nothing here is rolled. A foul is a hand or a body that was somewhere it had no right to be
+  BODY_R: 0.75, ARM_HIT: 0.3,       // a hand within this of the handler's center is on their body; within this of their off arm, on the arm
+  REACH_V: 4,                       // ft/s: a hand that got there faster than this reached in. A hand that was already there did not
+  HAND_OFF: 0.95,                   // the AI keeps its hand at least this far from the handler's center
+  HAND_V: 14, REACH_T: 0.25, REACH_CD: 2,     // the AI's reach for the ball: hand speed, how long it stays out, and the wait before another
+  LEFT_OPEN: [0.12, 1.2],           // s the AI must have seen the ball left open before it reaches: under its nose, and at the end of its reach
+  CONTACT_R: 1.9, FOUL_V: 3.5,      // a defender this close to a shooter and still coming at them this fast has run into them
+  ARM_FOUL_R: 0.6,                  // a raised hand within this of a shooter's center is on their arms, not the ball (which leaves 0.7 ft out)
+  BITE_R: 3.2,                      // the AI goes up for a jumper only from inside this, where a block is possible; so only there does a fake get it in the air
+  SET_V: 0.5, OVER_V: 2,            // rebounding: a player moving this slowly is set; one in the air and coming into them this fast is over their back
 };
 const HOOP = { x: PHX.PHYS.RIM.x, y: PHX.PHYS.RIM.y };
 const TICK = 1/120;                                  // seconds per step
@@ -155,7 +164,7 @@ function lastOdds() {
   if (!r) { if (oddsCache.size > 20) oddsCache.clear(); r = physRates({ ...L.odds.inp, hands: L.odds.inp.hands.map(SIT.handPath) }, L.odds.sc, L.odds.zs.length, L.odds.zs); oddsCache.set(key, r); }
   return r;
 }
-const handSpecs = () => SIT.handSpecs(P, defenders(), shot.state === "shooting" ? shot.t : null, g.duo ? D : null);
+const handSpecs = () => SIT.handSpecs(P, defenders(), shot.state === "shooting" ? shot.t : null, true);   // every defender's hand is where they put it
 const handPaths = () => handSpecs().map(SIT.handPath);
 function physOut(sr, layup) {
   if (!sr) return { make: false, big: "Miss", sub: layup ? "Blown layup" : "Airball" };
@@ -222,7 +231,6 @@ function pathAt(b, t) {
 const pathPoint = b => pathAt(b, b.t);
 // Does the handler have the ball? Not while it is in the air, loose, or dead.
 const graceOver = () => !g.flow.on || g.flow.grace <= 0;
-const canSteal = () => !g.duo && graceOver();              // the AI's steal rolls; a player on defense has to get a hand on it
 const inPlay = () => !g.flow.on || g.flow.phase === "live" || g.flow.phase === "ft";
 const ballFree = () => inPlay() && !g.flow.loose && (!g.ball || (g.ball.phase === "path" && g.ball.announced));
 const LAYUP_LABEL = { "Swish": "Finished", "Bank": "Kissed off the glass", "In off the rim": "Rolled in", "In and out": "In and out",
@@ -296,8 +304,50 @@ function finishSigma(gatherSpeed, vPerpG, side, hangMs, c) {
   const euro = shot.state === "shooting" ? (shot.euro || 0) : hold.state === "steps" ? hold.euro : 0;
   return SIT.finishScatter({ speed: gatherSpeed, vPerp: vPerpG, side, hangMs, euro, contest: c, finishing: params.finish });
 }
-const blockChanceDunk = c => clamp(c*(0.6 - (params.dunk - 70)/100), 0, 0.9);
-const foulChance = con => con.c*(0.12 + 0.25*clamp(con.speed/10, 0, 1));
+// A shooting foul is contact, worked out at the release from where the defenders and their arms are:
+//   "Ran into the shooter"   a defender right on them and still coming
+//   "On the arm"             a raised hand that is on the shooter's arms and not out where the ball is
+// hs: the defenders' arms as numbers (handSpecs). Returns what the foul was, or null.
+function shotFoul(hs) {
+  for (const d of defenders()) {
+    const dx = P.x - d.x, dy = P.y - d.y, dist = Math.hypot(dx, dy) || 1;
+    if (dist <= C.CONTACT_R && (d.vx*dx + d.vy*dy)/dist > C.FOUL_V) return "Ran into the shooter";
+  }
+  for (const a of hs) {
+    if (a.z0 < 7 && !(a.jumpStart !== null && a.jumpStart <= 0.1)) continue;           // the arm is down
+    // where the hand is now and where it is carried in the next moment, against where the shooter is now: a hand
+    // that stays put is not at fault if the shooter goes into it
+    for (const t of [0, 0.05, 0.1]) if (Math.hypot(a.hx + a.vx*t - P.x, a.hy + a.vy*t - P.y) < C.ARM_FOUL_R) return "On the arm";
+  }
+  return null;
+}
+// What a foul does to a shot's outcome: nothing if it went in (an and-one), free throws if it did not.
+function fouledOut(out, foul, value) {
+  if (!foul) return out;
+  out.foul = foul;
+  if (out.make) out.sub = "And one"; else { out.big = "Foul"; out.sub = `${foul}: ${value === 3 ? "three" : "two"} free throws`; }
+  return out;
+}
+// A dunk is carried to the rim and put through it: no arc and no scatter. The only thing that stops it is an arm.
+// The ball goes with the hand from over the dunker's head to above the rim; an arm in the way there takes it as it
+// would take any ball. If nothing is, it goes down through the rim from just above it.
+function dunkShot(f, hs) {
+  const RR = PHX.PHYS.RIM, hands = hs.map(SIT.handPath);
+  const from = { x: P.x + f.u.x*0.7, y: P.y + f.u.y*0.7, z: 10.4 }, top = { x: RR.x - f.u.x*0.1, y: RR.y - f.u.y*0.1, z: RR.z + 0.75 };
+  const far = Math.hypot(top.x - from.x, top.y - from.y, top.z - from.z), T = far/14, vel = { x: (top.x - from.x)/T, y: (top.y - from.y)/T, z: (top.z - from.z)/T };
+  const opts = g.flow.on ? { floorBounces: 8, tMax: 8 } : { floorBounces: 2 };
+  let L = null, res = null;
+  for (let t = 0; t < T && !L; t += 0.004) {
+    const c = { x: from.x + vel.x*t, y: from.y + vel.y*t, z: from.z + vel.z*t };
+    if (hands.some(h => PHX.armContact(c, h, t))) {                    // met on the way: from here it is a ball hit by an arm
+      L = { pos: c, vel };
+      res = PHX.simulateShot(L, { ...opts, hands: hands.map(h => ({ r: h.r, at: u => h.at(u + t) })) });
+    }
+  }
+  if (!L) { L = { pos: top, vel: { x: 0, y: 0, z: -12 } }; res = PHX.simulateShot(L, { ...opts, hands: hands.map(h => ({ r: h.r, at: u => h.at(u + T) })) }); }
+  const arm = res.touchBy === null ? null : hs[res.touchBy];
+  return { L, res, toucher: arm ? (defenders()[arm.i] === D ? "D" : "R") : null };
+}
 
 // ---------- Floaters ----------
 const floaterContest = () => SIT.floaterContest(P, defenders());
@@ -326,8 +376,8 @@ function startShot(shift) {
   if (cx.kind === "jumper") { const fi = fadeIntent(f); if (fi) commitFade(fi); }
   D.jumpAt = null; R.jumpAt = null;
   if (cx.kind === "layup" || cx.kind === "dunk") {
-    // shot blockers pick a moment to leave their feet; the shooter can hang to wait them out
-    for (const d of defenders()) { if (g.duo && d === D) continue; d.jumpAt = rnd() < 0.25 ? null : params.react*0.5 + 40 + rnd()*180; }
+    // the AI's shot blockers leave their feet a set time into a finish; the shooter can hang to wait them out
+    for (const d of defenders()) { if (g.duo && d === D) continue; d.jumpAt = params.react*0.5 + 130; }
   }
 }
 
@@ -353,13 +403,14 @@ function releaseJumper() {
   const sc = { kind: "jumper", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
   const odds = oddsLater(inp, sc, hs);                 // blocks are real collisions now, so they're in here
   const sig = NZX.scatterIn(sc);
-  const shotRes = physShot(inp, sc, hs), out = physOut(shotRes);
   const three = isThree({ x: shot.gx, y: shot.gy });   // zone is where you took off, not where you landed
+  const foul = g.flow.on && g.flow.phase === "ft" ? null : shotFoul(hs);
+  const shotRes = physShot(inp, sc, hs), out = fouledOut(physOut(shotRes), foul, three ? 3 : 2);
   if (g.flow.on && g.flow.phase === "ft") recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, false);
-  g.flow.value = three ? 3 : 2; g.flow.fouled = false;
+  g.flow.value = three ? 3 : 2; g.flow.fouled = !!foul;
   g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
   g.meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
-  if (shotRes) startPathBall(shotRes); else launchBall(f, true, false, 0.4, 3);
+  if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
 }
@@ -371,39 +422,30 @@ function releaseFinish() {
   const side = finishSideOf(f);
   const con = rimContest(side);
   const bank = bankOf(shot.gx, shot.gy);
-  const foul = rnd() < foulChance(con);
-  let out, chance, block, odds, sig = null, layupShot = null;
+  const hs = handSpecs(), foul = shotFoul(hs);
+  let out, chance, block, odds, sig = null, res;
   if (dunk) {
-    block = blockChanceDunk(con.c);
-    chance = (1 - block)*(1 - C.DUNK_FUMBLE);
-    if (rnd() < block) out = { make: false, big: "Blocked", sub: "Met at the rim" };
-    else if (rnd() < C.DUNK_FUMBLE) out = { make: false, big: "Miss", sub: "Rattled out" };
-    else out = { make: true, big: "Dunk", sub: con.c > 0.5 ? "Posterized" : "Throwdown" };
+    res = dunkShot(f, hs);
+    out = res.res.blocked ? { make: false, big: "Blocked", sub: "Met at the rim", touched: true }
+        : res.res.made ? { make: true, big: "Dunk", sub: con.c > 0.5 ? "Posterized" : "Throwdown" }
+        : { make: false, big: "Miss", sub: res.res.tipped ? "Tipped" : res.res.label, touched: res.res.tipped };
+    block = res.res.blocked ? 1 : 0; chance = res.res.made ? 1 : 0;      // nothing was rolled: it went or it didn't
   } else {
     sig = finishSigma(shot.gatherSpeed, shot.vPerpG, side, hangMs, con.c);
     // physics: finish-side, speed and hang costs come through as extra scatter; contact costs a little more
-    const hs = handSpecs(), inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: hs.map(SIT.handPath) };
+    const inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: hs.map(SIT.handPath) };
     const sc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2])*(foul ? 1.15 : 1), contest: con.c };
     odds = oddsLater(inp, sc, hs);
-    layupShot = physShot(inp, sc, hs);
-    out = physOut(layupShot, true);
+    res = physShot(inp, sc, hs);
+    out = physOut(res, true);
   }
-  const blocked = out.big === "Blocked";
-  if (foul && !blocked) out.sub = out.make ? "And one" : "Fouled, two free throws";
+  fouledOut(out, foul, 2);
   record(out.make, 2, false, true);
-  g.flow.value = 2; g.flow.fouled = foul && !blocked;
-  g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foulP: foulChance(con), chance, odds, bank,
+  g.flow.value = 2; g.flow.fouled = !!foul;
+  g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foul, chance, odds, bank,
            speed: shot.gatherSpeed, note: shot.note, dist: f.dist };
   g.lastSeq++; g.statsSeq++;
-  if (blocked && !layupShot) g.fx.push({ kind: "text", text: "Blocked", t: 0 });
-  if (g.flow.on && dunk && !out.make) {
-    // under the rules a dunk that doesn't go down is a live ball off the rim, or free throws if it was a foul
-    shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;
-    if (!blocked) g.fx.push({ kind: "text", text: out.sub, t: 0 });
-    if (g.flow.fouled) shotDecided(false, false); else looseOffRim(f, blocked);
-    return;
-  }
-  if (layupShot) startPathBall(layupShot); else launchBall(f, blocked, out.make, dunk ? 0.18 : 0.38, dunk ? 1 : 3);
+  if (res) startPathBall(res); else launchBall(f, 0.38, 3);
   shot.state = "flight";
 }
 
@@ -417,13 +459,14 @@ function releaseFloater() {
   const sc = { kind: "floater", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c };
   const odds = oddsLater(inp, sc, hs);
   const sig = NZX.scatterIn(sc);
-  const shotRes = physShot(inp, sc, hs), out = physOut(shotRes);
+  const foul = shotFoul(hs), shotRes = physShot(inp, sc, hs), out = physOut(shotRes);
   if (out.sub === "Swish") out.sub = "Dropped in soft";
+  fouledOut(out, foul, 2);
   record(out.make, 2, false, false, true);
-  g.flow.value = 2; g.flow.fouled = false;
+  g.flow.value = 2; g.flow.fouled = !!foul;
   g.last = { kind: "floater", out, e, q, b, con, sig, odds, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
   g.meterFlash = { e, t: 0.8, kind: "floater" };
-  if (shotRes) startPathBall(shotRes); else launchBall(f, true, false, 0.4, 3);
+  if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
 }
@@ -433,24 +476,20 @@ function record(make, value, three, rim, floater = false) {
   stats.fga++; if (three) stats.a3++; if (rim) stats.ar++; if (floater) stats.af++;
   if (make) { stats.fgm++; stats.pts += value; if (three) stats.m3++; if (rim) stats.mr++; if (floater) stats.mf++; }
 }
-// Canned ball flight to the rim, for shots that aren't simulated: dunks, and a launch that can't reach its target.
-function launchBall(f, blocked, make, dur, hmax) {
-  const sx = P.x, sy = P.y;
-  if (blocked) {
-    const sd = rnd() < 0.5 ? -1 : 1;
-    g.ball = { phase: "flight", t: 0, dur: 0.4, sx, sy, tx: sx + f.r.x*sd*7 + f.u.x*1.5, ty: sy + f.r.y*sd*7 + f.u.y*1.5, hmax: 3, make: false, blocked: true };
-  } else {
-    g.ball = { phase: "flight", t: 0, dur, sx, sy, hmax, make, tx: HOOP.x, ty: HOOP.y, u: f.u };
-  }
+// Canned ball flight for a launch that can't reach its target: it comes up well short and goes out.
+function launchBall(f, dur, hmax) {
+  const sx = P.x, sy = P.y, sd = drib.side || 1;
+  g.ball = { phase: "flight", t: 0, dur, sx, sy, tx: sx + f.r.x*sd*7 + f.u.x*1.5, ty: sy + f.r.y*sd*7 + f.u.y*1.5, hmax, make: false, blocked: true };
 }
 
 // ---------- Simulation ----------
 // ---------- Dribbling: the cursor is the ball hand ----------
 // Nothing is triggered. The ball follows the cursor, the body follows WASD, and the defender reacts to
 // what they saw one reaction time ago. "Crossover" and "hesi" are names for what that produces.
+// The on-ball defender's hand: where their cursor put it, or where the AI has it (see The defender's hand, below).
 function defHand() {
-  if (g.duo && D.hx !== undefined) return { x: D.hx, y: D.hy };       // a player's hand is where their cursor puts it
-  const tx = P.x - D.x, ty = P.y - D.y, tl = Math.hypot(tx, ty) || 1, reach = 0.85 + 0.75*D.hand;
+  if (D.hx !== undefined) return { x: D.hx, y: D.hy };
+  const tx = P.x - D.x, ty = P.y - D.y, tl = Math.hypot(tx, ty) || 1, reach = Math.min(0.85 + 0.75*D.hand, Math.max(0.3, tl - C.HAND_OFF));
   return { x: D.x + tx/tl*reach, y: D.y + ty/tl*reach };
 }
 const stealFactor = () => clamp(1 + (params.dSteal - params.handle)/60, 0.3, 2);
@@ -487,12 +526,7 @@ function newBounce() {
   { const o = shoulder(f, drib.side), t = reachFrom(o, P.x + drib.to.x, P.y + drib.to.y, C.ARM); drib.to = { x: t.x - P.x, y: t.y - P.y }; }
   drib.len = len;
   drib.crossing = drib.side !== oldSide;
-  if (drib.crossing) onCross(f);
-  else if (params.defOn && canSteal()) {
-    const h = defHand(), dm = Math.hypot(h.x - (P.x + drib.to.x), h.y - (P.y + drib.to.y));
-    const bx = P.x + drib.to.x, by = P.y + drib.to.y;
-    if (dm < 1.6 && rnd() < 0.06*(1.6 - dm)/1.6*(len/1.5)*stealFactor()*armBarFactor(bx, by)) turnover("Reached in and picked an exposed dribble");
-  }
+  if (drib.crossing) drib.lastMove = "Crossover";
 }
 // ---------- Hands ----------
 // Two hands, each reaching from its own shoulder. The ball hand carries the dribble; on a crossover the ball
@@ -535,24 +569,11 @@ function armBarFactor(bx, by) {
   const d = Math.hypot(h.x + sx*t - off.x, h.y + sy*t - off.y);
   return d < 0.6 ? 0.4 : 1;
 }
-function onCross(f) {
-  drib.lastMove = "Crossover";
-  if (!params.defOn || !canSteal()) return;
-  const dd = Math.hypot(D.x - P.x, D.y - P.y);
-  if (dd > 8) return;
-  // the ball crosses in front of the body: the moment a close defender can poke it
-  const mx = P.x + f.u.x*0.9, my = P.y + f.u.y*0.9, h = defHand(), dm = Math.hypot(h.x - mx, h.y - my);
-  const cos = ((D.x - P.x)*f.u.x + (D.y - P.y)*f.u.y)/(dd || 1);
-  const exposure = (Math.hypot(drib.from.x, drib.from.y) + drib.len)/3;
-  const pSteal = dm < 2.4 && cos > 0.3 ? clamp((2.4 - dm)/2.4*0.22*stealFactor()*exposure, 0, 0.35) : 0;
-  if (pSteal > 0.005) drib.lastMove = `Crossover in front of a close defender: ${Math.round(pSteal*100)}% steal risk`;
-  if (rnd() < pSteal) turnover("Poked on the crossover");
-}
 function turnover(text) {
   stats.to++;
   const dx = P.x - D.x, dy = P.y - D.y, dl = Math.hypot(dx, dy) || 1;
   g.ball = { phase: "bounce", t: 0, bx: P.x + drib.to.x, by: P.y + drib.to.y,
-           vx: -dx/dl*9 + (rnd() - 0.5)*6, vy: -dy/dl*9 + (rnd() - 0.5)*6 };
+           vx: -dx/dl*9, vy: -dy/dl*9 };                                // it goes the way of whoever took it
   g.fx.push({ kind: "text", text: "Stolen", t: 0, x: P.x, y: P.y });
   drib.lastMove = text; shot.cooldown = 1.0; hold.state = "none";
   g.statsSeq++;
@@ -659,13 +680,6 @@ function pivotMove(dt) {
   if (ml <= stepL) { hold.free.x = tgt.x; hold.free.y = tgt.y; } else { hold.free.x += mx/ml*stepL; hold.free.y += my/ml*stepL; }
   hold.ext = Math.hypot(hold.free.x - base.x, hold.free.y - base.y);
   P.x = (hold.pivot.x + hold.free.x)/2; P.y = (hold.pivot.y + hold.free.y)/2;
-  // a held ball can be stripped if it's left where the defender's hand can reach
-  hold.stripT += dt;
-  if (hold.stripT > 0.25 && params.defOn && canSteal()) {
-    hold.stripT = 0;
-    const h = defHand(), b = heldBallPos(), dm = Math.hypot(h.x - b.x, h.y - b.y);
-    if (dm < 1.2 && rnd() < 0.12*(1.2 - dm)/1.2*stealFactor()) turnover("Stripped on a dead dribble");
-  }
 }
 function heldBallPos() {
   if (hold.state === "steps") return { x: P.x + hold.dir.x*0.6, y: P.y + hold.dir.y*0.6, h: 3.5 };
@@ -675,9 +689,17 @@ function heldBallPos() {
 // The defender's eyes: a short history of what the ball handler was doing.
 function recordSeen() {
   seen.push({ t: g.simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none",
-              rising: shot.state === "shooting" || hold.fakeT > 0,
+              rising: shot.state === "shooting" || hold.fakeT > 0, ...seenBall(),
               threat: shot.state === "idle" && ballFree() ? pullUpThreat() : 0 });
   while (seen.length > 2 && seen[1].t < g.simT - 0.7) seen.shift();
+}
+// Where the ball is, and whether a hand could get to it: in the handler's hands, past the first second of a
+// possession, and not behind their off arm.
+function seenBall() {
+  if (shot.state !== "idle" || !ballFree() || !graceOver()) return { bx: P.x, by: P.y, open: false };
+  const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
+  // a ball tucked away on the move, or up over the head in a fake, is out of a hand's way
+  return { bx: b.x, by: b.y, open: hold.state !== "steps" && !(hold.fakeT > 0) && armBarFactor(b.x, b.y) === 1 };
 }
 function perceived(lag) {
   for (let i = seen.length - 1; i >= 0; i--) if (seen[i].t <= g.simT - lag) return seen[i];
@@ -711,6 +733,9 @@ function moveDef(def, dt, sep = 1.7) {
       const kP = tot > 1e-6 ? aP/tot : 0.5, kD = 1 - kP;
       def.x += nx*over*kD; def.y += ny*over*kD; P.x -= nx*over*kP; P.y -= ny*over*kP;
       P.vx -= aP*nx; P.vy -= aP*ny; def.vx += aD*nx; def.vy += aD*ny;
+      // over the back: in the air and still coming, into a player who had the spot
+      if (def.jumpT >= 0 && aD > C.OVER_V && aP < C.SET_V) foulCall("Over the back", "keep");
+      else if (P.jumpT >= 0 && aP > C.OVER_V && aD < C.SET_V) foulCall("Over the back", "change");
     } else { def.x += nx*over; def.y += ny*over; }
   }
   def.x = clamp(def.x, 0.6, 49.4); def.y = clamp(def.y, 4.8, 40);
@@ -782,11 +807,11 @@ function update(dt) {
   const shooting = shot.state === "shooting", jumper = shot.kind === "jumper";
   const sawShot = !!(perceived(params.react/1000) || {}).rising;      // they react to the shooting motion they saw
   const reacted = sawShot || shot.state === "flight";
-  for (const d of defenders()) {                                       // close defenders may leave their feet, so a fake can get them in the air
-    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0 && !still && !(g.duo && d === D)) {
-      const dist = Math.hypot(d.x - P.x, d.y - P.y);
-      if (dist < (d === R ? 7 : 5) && rnd() < (d === R ? 0.6 : 0.5)) d.jumpT = 0;
-    }
+  // The AI goes up for a shot it sees only from where it could block it. Up close it has to respect the shot, so
+  // that is also where a fake gets it in the air; from further off it keeps its feet and gets a hand up.
+  for (const d of defenders()) {
+    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0 && !still && !(g.duo && d === D)
+        && Math.hypot(d.x - P.x, d.y - P.y) < C.BITE_R) d.jumpT = 0;
     d.sawPrev = sawShot;
   }
   for (const d of defenders()) {
@@ -823,6 +848,8 @@ function update(dt) {
     if (D.jumpT < 0) stepToward(D, tx, ty, maxS, acc, dt);
     moveDef(D, dt);
     D.hand = clamp(D.hand + clamp((loose ? 0 : reacted ? 1 : D.threat*0.8) - D.hand, -dt/0.15, dt/0.15), 0, 1);
+    aiHand(D, dt, true);
+    handOnHandler();
   }
   if (params.rimOn && !still) {
     const hx = P.x - HOOP.x, hy = P.y - HOOP.y, dP = Math.hypot(hx, hy) || 0.001, nx = hx/dP, ny = hy/dP;
@@ -831,7 +858,10 @@ function update(dt) {
     // once per drive the big decides: stay home (concede the floater) or step up (concede the lane)
     const drivingIn = -(P.vx*nx + P.vy*ny) >= SIT.SITU.DRIVE_SPEED;
     if (!R.mode && dP < 17 && drivingIn) {
-      R.mode = rnd()*100 < params.stepUp ? "up" : "home";
+      // Help when the on-ball defender is beaten. `beaten` is how far nearer the rim the handler is than their
+      // defender; the slider moves the line, from never (0) through level (50) to always (100).
+      const beaten = params.defOn ? Math.hypot(D.x - HOOP.x, D.y - HOOP.y) - dP : 99;
+      R.mode = params.stepUp >= 100 || (params.stepUp > 0 && beaten > (50 - params.stepUp)/12.5) ? "up" : "home";
       R.upDist = clamp(dP - 4.5, 6, 10); R.upX = HOOP.x + nx*R.upDist; R.upY = HOOP.y + ny*R.upDist;
     }
     if (R.mode && dP > 19 && shot.state === "idle") R.mode = null;
@@ -849,6 +879,7 @@ function update(dt) {
     moveDef(R, dt, 2.2);
     const handUp = shooting && !isFin(shot.kind) && shot.t >= (shot.kind === "floater" ? params.react*0.6 : params.react) && Math.hypot(R.x - P.x, R.y - P.y) < 8;
     R.hand = clamp(R.hand + clamp((handUp ? 1 : 0) - R.hand, -dt/0.15, dt/0.15), 0, 1);
+    aiHand(R, dt, false);
   }
 
   tickBall(dt);
@@ -895,9 +926,77 @@ function tickBall(dt) {
   g.fx = g.fx.filter(o => (o.t += dt) < 1.1);
 }
 
+// ---------- The defender's hand ----------
+// Every defender has one hand, at (hx, hy), moving at (hvx, hvy). A player's is where their cursor puts it. The AI's
+// rests toward the handler, held off their body, and goes for the ball when it has seen it left open.
+// What the hand meets decides what happens, for the AI and a player alike:
+//   the ball, with nothing in the way        a steal
+//   the handler's off arm, or their body     a reach-in foul, if the hand was moving into them. A hand that was
+//                                            already there, which the handler ran into, is no foul
+function setHand(d, x, y, dt) {
+  const was = d.hx === undefined ? { x, y } : { x: d.hx, y: d.hy };
+  d.hx = x; d.hy = y; d.hvx = (x - was.x)/dt; d.hvy = (y - was.y)/dt;
+}
+// The AI's hand. reaches: whether this defender goes for the ball (the on-ball defender does; the rim protector doesn't).
+function aiHand(d, dt, reaches) {
+  const tx = P.x - d.x, ty = P.y - d.y, dist = Math.hypot(tx, ty) || 1;
+  const rest = Math.min(0.85 + 0.75*Math.max(d.hand, d.h), Math.max(0.3, dist - C.HAND_OFF));
+  let gx = d.x + tx/dist*rest, gy = d.y + ty/dist*rest;
+  if (d.reachCd > 0) d.reachCd -= dt;
+  if (reaches && d.reach) {                                            // going for it: the hand is out at the spot for a moment, then comes back
+    d.reach.t += dt;
+    if (d.reach.t >= C.REACH_T) { d.reach = null; d.reachCd = C.REACH_CD/stealFactor(); }
+    else { const rx = d.reach.x - d.x, ry = d.reach.y - d.y, rl = Math.hypot(rx, ry) || 1, r = Math.min(rl, 1.6); gx = d.x + rx/rl*r; gy = d.y + ry/rl*r; }
+  } else if (reaches && !(d.reachCd > 0) && d.jumpT < 0 && shot.state === "idle" && ballFree() && graceOver()) {
+    // It acts on what it saw a reaction time ago: a ball within reach, with neither an arm nor the handler's body
+    // in front of it. One look is not enough: the ball has to have been left there, for longer the further away it
+    // is. Then it reaches for where that ball would be now if the handler had done nothing since. If they have,
+    // the hand finds an arm, or nothing.
+    const lag = defLag(), was = perceived(lag), far = was ? Math.hypot(was.bx - d.x, was.by - d.y) : 99;
+    let open = !!was && was.open && g.simT - was.t <= lag + 0.05 && far <= 1.6 + C.STEAL_R;
+    if (open) {                                                        // is their body on the way to it?
+      const ax = was.bx - d.hx, ay = was.by - d.hy, t = clamp(((was.x - d.hx)*ax + (was.y - d.hy)*ay)/(ax*ax + ay*ay || 1), 0, 1);
+      open = Math.hypot(d.hx + ax*t - was.x, d.hy + ay*t - was.y) >= C.BODY_R + 0.1;
+    }
+    d.openT = open ? (d.openT || 0) + dt : 0;
+    if (open && d.openT >= (C.LEFT_OPEN[0] + (C.LEFT_OPEN[1] - C.LEFT_OPEN[0])*clamp((far - 1)/1.15, 0, 1))/stealFactor())
+      { d.reach = { t: 0, x: was.bx + (P.x - was.x), y: was.by + (P.y - was.y) }; d.openT = 0; }
+  } else d.openT = 0;
+  // the hand travels; it doesn't jump
+  const hx = d.hx === undefined ? gx : d.hx, hy = d.hy === undefined ? gy : d.hy, mx = gx - hx, my = gy - hy, ml = Math.hypot(mx, my), go = C.HAND_V*dt;
+  setHand(d, ml <= go ? gx : hx + mx/ml*go, ml <= go ? gy : hy + my/ml*go, dt);
+}
+// What the on-ball defender's hand has met this tick.
+function handOnHandler() {
+  if (D.foulT > 0) D.foulT -= TICK;
+  if (shot.state !== "idle" || !ballFree() || !graceOver()) return;
+  const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
+  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1) return turnover(hold.state === "none" ? "Picked clean" : "Stripped");
+  // what else is there to hit: their body, or the arm they are holding out to guard the ball
+  let hit = Math.hypot(D.hx - P.x, D.hy - P.y) < C.BODY_R ? { x: P.x, y: P.y } : null;
+  const hp = hit ? null : handPositions();
+  if (hp && hp.guard) {
+    const o = shoulder(frame(P), -drib.side), off = drib.side > 0 ? hp.L : hp.R, ax = off.x - o.x, ay = off.y - o.y;
+    const t = clamp(((D.hx - o.x)*ax + (D.hy - o.y)*ay)/(ax*ax + ay*ay || 1), 0, 1), q = { x: o.x + ax*t, y: o.y + ay*t };
+    if (Math.hypot(D.hx - q.x, D.hy - q.y) < C.ARM_HIT) hit = q;
+  }
+  if (!hit || D.foulT > 0) return;
+  const dx = hit.x - D.hx, dy = hit.y - D.hy, dl = Math.hypot(dx, dy) || 1, into = dl < 1e-6 ? Math.hypot(D.hvx, D.hvy) : (D.hvx*dx + D.hvy*dy)/dl;
+  if (into > C.REACH_V) foulCall("Reach-in foul", "keep");
+}
+// A foul away from a shot: the whistle, and the ball stays with or goes to whoever was fouled. With the rules off
+// it is only called out.
+function foulCall(why, next) {
+  D.foulT = 1;
+  g.fx.push({ kind: "text", text: "Foul", t: 0, x: P.x, y: P.y });
+  drib.lastMove = why; g.statsSeq++;
+  if (g.flow.on) whistle(why, next);
+}
+
 // ---------- A player on defense ----------
-// WASD moves, the cursor is the hand, Space jumps. How far the cursor is from the body is how far the arm is out;
-// pointing it at the ball handler raises it into a contest, and getting it onto the ball takes the ball.
+// WASD moves, the cursor is the hand, Space jumps. Pointing the cursor at the ball handler is a hand up, which is
+// what a contest reads. How far the cursor is from the body is how far the arm reaches: close in it goes nearly
+// straight up, further away it reaches out, and lower. With the cursor on their own body the hand is down.
 function playerDefender(dt) {
   const i = g.defIn;
   if (D.jumpT < 0) {                                                   // no steering in the air
@@ -906,14 +1005,11 @@ function playerDefender(dt) {
     if (el <= st) { D.vx += ex; D.vy += ey; } else { D.vx += ex/el*st; D.vy += ey/el*st; }
   }
   moveDef(D, dt);
-  const cx = i.x - D.x, cy = i.y - D.y, cd = Math.hypot(cx, cy) || 1, out = clamp((cd - 1)/2, 0, 1);
+  const cx = i.x - D.x, cy = i.y - D.y, far = Math.hypot(cx, cy), cd = far || 1, out = clamp((far - 1)/2, 0, 1);
   const px = P.x - D.x, py = P.y - D.y, pd = Math.hypot(px, py) || 1;
-  D.hand = out*Math.max(0, (cx*px + cy*py)/(cd*pd));
-  D.hx = D.x + cx/cd*(0.85 + 0.75*out); D.hy = D.y + cy/cd*(0.85 + 0.75*out);
-  // a hand on a ball that is being dribbled or held takes it, unless the handler's off arm is in the way
-  if (shot.state !== "idle" || !ballFree() || !graceOver()) return;
-  const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
-  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1) turnover(hold.state === "none" ? "Picked clean" : "Stripped");
+  D.hand = far < 0.5 ? 0 : Math.max(0, (cx*px + cy*py)/(cd*pd));
+  setHand(D, D.x + cx/cd*(0.85 + 0.75*out), D.y + cy/cd*(0.85 + 0.75*out), dt);
+  handOnHandler();
 }
 function defenderJump() { if (D.jumpT < 0 && D.land <= 0) D.jumpT = 0; }
 function handlerJump() { if (P.jumpT < 0 && P.land <= 0 && shot.state !== "shooting") P.jumpT = 0; }
@@ -950,15 +1046,6 @@ function shotDecided(made, blocked) {
     else whistle("Score", "change");
   } else if (fl.fouled) { fl.ft = fl.value; whistle("Foul", "ft"); }
   else { fl.loose = true; fl.looseT = 0; fl.lastTouch = blocked ? "d" : "o"; }
-}
-// A dunk that was blocked or rattled out: the ball comes off the front of the rim, live.
-function looseOffRim(f, blocked) {
-  const side = rnd() < 0.5 ? -1 : 1, k = blocked ? { out: 3, across: 8, up: 1 } : { out: 5, across: 2, up: 4 };
-  const pos = { x: HOOP.x - f.u.x*1.6, y: HOOP.y - f.u.y*1.6, z: PHX.PHYS.RIM.z + 0.3 };
-  const vel = { x: -f.u.x*k.out + f.r.x*side*k.across, y: -f.u.y*k.out + f.r.y*side*k.across, z: k.up };
-  const res = keep(PHX.simulateShot({ pos, vel }, { floorBounces: 8, tMax: 8 }));
-  g.ball = { phase: "path", t: 0, path: res.path, made: false, decideT: 0, endT: res.path[res.path.length - 1].t, announced: true, relZ: pos.z, rimDist: 1 };
-  g.flow.loose = true; g.flow.looseT = 0; g.flow.lastTouch = blocked ? "d" : "o";
 }
 // Where a loose ball can first be caught: the spot it comes down to reaching height, or where it is now.
 function looseTarget() {
@@ -1003,8 +1090,10 @@ function looseTick() {
 // Put everyone in place with the ball in the handler's hands and nothing in progress.
 function place(p, d, r) {
   Object.assign(P, { x: p.x, y: p.y, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0 });
-  Object.assign(D, { x: d.x, y: d.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, shade: 0, threat: 0, sawPrev: false });
-  Object.assign(R, { x: r.x, y: r.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, mode: null, sawPrev: false });
+  Object.assign(D, { x: d.x, y: d.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, shade: 0, threat: 0, sawPrev: false,
+                     hx: d.x, hy: d.y + 0.85, hvx: 0, hvy: 0, reach: null, reachCd: 0, openT: 0, foulT: 0 });
+  Object.assign(R, { x: r.x, y: r.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, mode: null, sawPrev: false,
+                     hx: r.x, hy: r.y + 0.85, hvx: 0, hvy: 0, reach: null, reachCd: 0 });
   Object.assign(shot, { state: "idle", kind: "jumper", t: 0, held: false, note: "", cooldown: 0.4, fade: false });
   Object.assign(hold, { state: "none", fakeT: 0, prints: [] });
   Object.assign(drib, { phase: 0, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9, hold: 0, crossing: false });
@@ -1097,9 +1186,9 @@ function previewNow(shift) {
     const vp = shot.state === "shooting" ? shot.vPerpG : P.vx*f.r.x + P.vy*f.r.y;
     const hang = shot.state === "shooting" && shot.kind === "layup" ? Math.max(0, shot.t - C.RISE_LAYUP) : 0;
     if (cx.kind === "dunk") {
-      const block = blockChanceDunk(con.c);
+      const met = dunkShot(f, handSpecs()).res;                           // nothing rolled: with the arms where they are now, it goes or it is met
       live = { cx, f, con, side, sig: { lat: 1.2, dep: 1.2, parts: [1, 0, 0, 0] },
-               v1: (1 - block)*(1 - C.DUNK_FUMBLE), v2: block, three: false };
+               v1: met.made ? 1 : 0, v2: met.blocked ? 1 : 0, three: false };
     } else {
       const sig = finishSigma(gs, vp, side, hang, con.c);
       const lsc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2]), contest: con.c };

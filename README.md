@@ -117,6 +117,8 @@ Mouse and keyboard:
 
 On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
 
+Nothing but a shot's scatter is left to chance. Reaching into the handler, getting a hand on a shooter's arms, running into a shooter and jumping over a rebounder's back are fouls, called from what the bodies and hands actually did, and the AI is held to the same rules.
+
 After a miss the ball is live. **Space** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there.
 
 The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.

@@ -68,25 +68,28 @@ layupTable("Layup from 3 ft, rim protector 2.3 ft away, straight between the sho
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, 40 degrees to the shooter's right", 40);
 
 // In play: a fresh game per shot, a second to settle, then a jumper held 517 ms (a perfect release) aimed at the rim.
-function inPlay(label, shots, { back = 0, guard = null } = {}) {
+// tight: during that second the ball is pulled in close, not dribbled out in front where a near defender can take it.
+function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
   const aim = { x: R.x, y: R.y }, t = s => Math.round(s/GM.TICK);
-  let off = 0, made = 0, blocked = 0, jumped = 0, dist = 0;
+  let off = 0, made = 0, blocked = 0, fouled = 0, jumped = 0, dist = 0;
   for (let i = 0; i < shots; i++) {
     const g = GM.create({ seed: 5000 + i });
     if (guard !== null) g.params.sag = guard;
     for (let k = 0; k < t(back); k++) GM.step(g, { ...aim, d: true });
-    for (let k = 0; k < t(1); k++) GM.step(g, aim);
+    for (let k = 0; k < t(1); k++) GM.step(g, tight ? { x: g.P.x + 0.3, y: g.P.y - 0.6 } : aim);
     for (let k = 0; k < 62; k++) GM.step(g, { ...aim, shot: true });
-    if (g.shot.state !== "shooting") continue;                    // the dribble was picked first
-    if (g.D.jumpT >= 0) jumped++;
+    if (g.shot.state !== "shooting") continue;                    // the ball was taken first
+    if (g.D.jumpT >= 0 || g.D.land > 0) jumped++;
     GM.step(g, aim);
-    off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++;
+    off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++; if (g.last.out.foul) fouled++;
   }
-  const pct = x => `${(x/off*100).toFixed(0).padStart(3)}%`;
-  console.log(`${label.padEnd(34)}${(dist/off).toFixed(1).padStart(5)} ft  ${String(off).padStart(4)} shots  made ${pct(made)}  blocked ${pct(blocked)}  defender jumped ${pct(jumped)}`);
+  const pct = x => off ? `${(x/off*100).toFixed(0).padStart(3)}%` : "   –";
+  console.log(`${label.padEnd(40)}${(off ? (dist/off).toFixed(1) : "–").padStart(5)} ft  ball taken first ${String(shots - off).padStart(3)}  shots ${String(off).padStart(3)}  made ${pct(made)}  blocked ${pct(blocked)}  fouled ${pct(fouled)}  defender jumped ${pct(jumped)}`);
 }
 console.log("\nIn play: standing jumpers with a perfect release, the on-ball defender reacting on their own");
 inPlay("default guarding distance (4.5 ft)", 600);
 inPlay("the same, from behind the arc", 600, { back: 0.45 });
-inPlay("guarded tight (3 ft)", 600, { guard: 3 });
+inPlay("the same, ball pulled in first", 600, { tight: true });
+inPlay("guarded tight (3 ft), ball out in front", 600, { guard: 3 });
+inPlay("guarded tight (3 ft), ball pulled in", 600, { guard: 3, tight: true });
 inPlay("guarded loose (7 ft)", 600, { guard: 7 });
