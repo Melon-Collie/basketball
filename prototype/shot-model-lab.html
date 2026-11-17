@@ -213,6 +213,12 @@ dd small{color:var(--muted)}
       </section>
 
       <section>
+        <h2>Display</h2>
+        <label class="check" style="margin-top:0"><input id="meterAtCursor" class="own" type="checkbox"> Shot meter follows the cursor</label>
+        <p class="caption">Puts the meter beside your cursor, with its release line level with it, so you can time a shot without looking away from your aim. Off, it stays beside your player.</p>
+      </section>
+
+      <section>
         <h2>Tuning</h2>
         <label class="check" style="margin-top:0"><input id="rules" type="checkbox" checked> Game rules: score, shot clock, possessions</label>
         <p class="sub-h">Jump shooting</p>
@@ -264,6 +270,8 @@ const dribbleBallPos = () => GM.dribbleBallPos(G), heldBallPos = () => GM.heldBa
 const tightness = () => GM.tightness(G), fadeSigmaFor = type => GM.fadeSigmaFor(G, type);
 let live = null, shiftDown = false;                   // the live readout's preview of a shot from here; whether Shift is held
 let net = null;                                       // an online game in progress, or being set up
+let meterAtCursor = false;                            // draw the shot meter beside the cursor, not the player
+try { meterAtCursor = localStorage.getItem("shotLab.meterAtCursor") === "1"; } catch (e) { /* no storage here: starts off */ }
 
 
 const VIEW = { w: 53, h: 41.5 };                    // canvas aspect
@@ -570,11 +578,22 @@ function draw() {
     }
   }
 
-  // meters
-  const mx = px + ppf*1.9, mh = ppf*4.2, mw = ppf*0.55, mtop = py - mh*0.75;
+  // meters: beside the player, or beside the cursor if that was asked for and the shot is yours
+  const mh = ppf*4.2, mw = ppf*0.55;
+  let mx = px + ppf*1.9, mtop = py - mh*0.75;
+  const atCursor = meterAtCursor && pointer.fx !== undefined && (!net || !net.live || G.flow.offense === net.me);
+  // line: how far down the meter its release line is. Beside the cursor, that line sits level with the cursor, and
+  // the meter goes to the cursor's right, or its left where there is no room.
+  const place = line => {
+    if (!atCursor) return;
+    const cx = pointer.fx*court.width, cy = pointer.fy*court.height, gap = ppf*1.3;
+    mx = cx + gap + mw + ppf*0.3 <= court.width ? cx + gap : cx - gap - mw;
+    mtop = clamp(cy - mh*line, ppf*0.3, Math.max(ppf*0.3, court.height - mh - ppf*0.3));
+  };
   if (shot.state === "shooting" && shot.kind === "layup") {
     // rise, then hang: the red part is control you are spending to wait out the block
     const total = C.RISE_LAYUP + C.MAX_HANG, yOf = t => mtop + mh*(1 - clamp(t, 0, total)/total);
+    place(1 - C.RISE_LAYUP/total);
     ctx.save(); ctx.fillStyle = "rgba(20,32,43,.75)"; ctx.fillRect(mx, mtop, mw, mh);
     ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = 0.85;
     ctx.fillRect(mx + mw*0.2, yOf(Math.min(shot.t, C.RISE_LAYUP)), mw*0.6, mtop + mh - yOf(Math.min(shot.t, C.RISE_LAYUP)));
@@ -591,6 +610,7 @@ function draw() {
   const timed = shot.state === "shooting" && (shot.kind === "jumper" || shot.kind === "floater");
   const showT = timed ? shot.t : (G.meterFlash ? MT.ideal + G.meterFlash.e : null);
   if (showT !== null) {
+    place(1 - MT.ideal/MT.max);
     const alpha = shot.state === "shooting" ? 1 : Math.min(1, G.meterFlash.t/0.3);
     const yOf = t => mtop + mh*(1 - clamp(t, 0, MT.max)/MT.max);
     ctx.save(); ctx.globalAlpha = alpha;
@@ -807,6 +827,9 @@ for (const k of Object.keys(fmt)) {
   el.addEventListener("input", sync); sync();
 }
 $("defOn").addEventListener("change", e => GM.setDefender(G, "defOn", e.target.checked));
+// where the shot meter is drawn is the player's own choice, remembered by this browser where it can be
+$("meterAtCursor").checked = meterAtCursor;
+$("meterAtCursor").addEventListener("change", e => { meterAtCursor = e.target.checked; try { localStorage.setItem("shotLab.meterAtCursor", meterAtCursor ? "1" : "0"); } catch (err) { /* not remembered */ } });
 $("rimOn").addEventListener("change", e => GM.setDefender(G, "rimOn", e.target.checked));
 
 // ---------- Online: two players, one game each, kept together ----------
@@ -841,7 +864,7 @@ function slide(peer, dt) {
   for (const k of Object.keys(ease)) if (SLIDE <= 0 || Math.hypot(ease[k].x, ease[k].y) > SNAP) ease[k].x = ease[k].y = ease[k].h = 0;
 }
 const setOnlineUi = on => {
-  document.querySelectorAll("aside input").forEach(el => { el.disabled = on; });
+  document.querySelectorAll("aside input:not(.own)").forEach(el => { el.disabled = on; });   // the game's settings are the host's; how it is drawn stays your own
   $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netSetup").hidden = on; $("netManual").hidden = on;
   $("netStats").hidden = !on;
 };
