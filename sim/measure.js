@@ -1,8 +1,9 @@
 // Make and block rates with defenders' hands in the simulation.
 // calibrate.js tunes the noise with nobody's hand in the way, so its numbers leave blocks out. Here the contest and
 // the hands both come from where the defender is at release (situation.js), and a hand on the ball is a real block.
-// Each cell is one defender state at the moment of release; nothing here plays out the defender's reaction.
-const N = require('./noise.js'), SIT = require('./situation.js'), P = require('./physics.js');
+// The tables take one defender state at the moment of release. The last section plays whole shots through the game,
+// so the on-ball defender reads the shot, closes out and jumps on their own.
+const N = require('./noise.js'), SIT = require('./situation.js'), P = require('./physics.js'), GM = require('./game.js');
 Object.assign(N.NOISE, require('./calibration.js'));
 const R = P.PHYS.RIM, n = 4000, seed = 7;
 
@@ -65,3 +66,27 @@ timedTable("Jumper from 15 ft, on-ball defender between the shooter and the rim"
 timedTable("Floater from 10 ft at 12 ft/s, rim protector between the shooter and the rim", "floater", 10, 12, BIG, [5, 4, 3.5, 3, 2.5, 2.2]);
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, straight between the shooter and the rim", 0);
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, 40 degrees to the shooter's right", 40);
+
+// In play: a fresh game per shot, a second to settle, then a jumper held 517 ms (a perfect release) aimed at the rim.
+function inPlay(label, shots, { back = 0, guard = null } = {}) {
+  const aim = { x: R.x, y: R.y }, t = s => Math.round(s/GM.TICK);
+  let off = 0, made = 0, blocked = 0, jumped = 0, dist = 0;
+  for (let i = 0; i < shots; i++) {
+    const g = GM.create({ seed: 5000 + i });
+    if (guard !== null) g.params.sag = guard;
+    for (let k = 0; k < t(back); k++) GM.step(g, { ...aim, d: true });
+    for (let k = 0; k < t(1); k++) GM.step(g, aim);
+    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, shot: true });
+    if (g.shot.state !== "shooting") continue;                    // the dribble was picked first
+    if (g.D.jumpT >= 0) jumped++;
+    GM.step(g, aim);
+    off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++;
+  }
+  const pct = x => `${(x/off*100).toFixed(0).padStart(3)}%`;
+  console.log(`${label.padEnd(34)}${(dist/off).toFixed(1).padStart(5)} ft  ${String(off).padStart(4)} shots  made ${pct(made)}  blocked ${pct(blocked)}  defender jumped ${pct(jumped)}`);
+}
+console.log("\nIn play: standing jumpers with a perfect release, the on-ball defender reacting on their own");
+inPlay("default guarding distance (4.5 ft)", 600);
+inPlay("the same, from behind the arc", 600, { back: 0.45 });
+inPlay("guarded tight (3 ft)", 600, { guard: 3 });
+inPlay("guarded loose (7 ft)", 600, { guard: 7 });

@@ -44,7 +44,9 @@ async function session(file) {
   // 3. on-ball defender off so the lane is open: drive and click early for a floater
   await page.locator('#defOn').uncheck(); await at(0.5, 0.3); await step(5);
   for (const frames of [20, 24]) { await retreat(); await page.keyboard.down('KeyW'); await until(/Floater/); await snap('floater ready'); await click(frames); await page.keyboard.up('KeyW'); await step(220); await snap(`after floater ${frames}`); }
-  // 4. keep driving and click late: layups released on the rise and with hang, to either side
+  // 4. keep driving and click late: layups released on the rise and with hang, to either side.
+  //    The rim protector is told to stay home from here on, so a step-up can't stop the drive short of the rim.
+  await page.locator('#stepUp').fill('0');
   for (const [frames, fx] of [[12, 0.5], [34, 0.42], [26, 0.58]]) { await retreat(); await at(fx, 0.3); await page.keyboard.down('KeyW'); await until(/Layup/); await snap('layup ready'); await click(frames); await page.keyboard.up('KeyW'); await step(220); await snap(`after layup ${frames}`); }
   // 5. Shift on the drive: dunks against the rim protector
   for (let i = 0; i < 3; i++) { await retreat(); await at(0.5, 0.3); await page.keyboard.down('Shift'); await page.keyboard.down('KeyW'); await until(/Dunk attempt/); await snap('dunk ready'); await click(30); await page.keyboard.up('KeyW'); await page.keyboard.up('Shift'); await step(220); await snap(`after dunk ${i}`); }
@@ -52,7 +54,7 @@ async function session(file) {
   await page.locator('#rimOn').uncheck();
   for (let i = 0; i < 3; i++) {
     await retreat(); await at(0.5, 0.3); await page.keyboard.down('Shift'); await page.keyboard.down('KeyW'); await until(/Dunk attempt/);
-    if (i === 2) await page.evaluate(() => window.__forceLow(3));
+    if (i === 2) await page.evaluate(() => window.shotLab && window.shotLab.game.forced.push(0.01, 0.01, 0.01));   // refs from before the game had its own random stream have no such hook
     await click(30); await page.keyboard.up('KeyW'); await page.keyboard.up('Shift');
     await step(12); await snap(`dunk in flight ${i}`); await step(40); await snap(`dunk bounce ${i}`); await step(170); await snap(`after open dunk ${i}`);
   }
@@ -60,7 +62,7 @@ async function session(file) {
   // 7. gather on the move and go up off the steps, with a euro step
   await retreat(); await page.keyboard.down('KeyW'); await until(/Floater/); await page.keyboard.press('Space'); await step(13); await page.keyboard.down('KeyD'); await step(8); await snap('gather steps'); await click(24); await page.keyboard.up('KeyD'); await page.keyboard.up('KeyW'); await step(220); await snap('after gather finish');
   // 8. defender back on: dead dribble, pump fake, pivot, then a set shot
-  await page.locator('#defOn').check(); await retreat(); await key('KeyW', 30); await step(30); await at(0.5, 0.3);
+  await page.locator('#stepUp').fill('50'); await page.locator('#defOn').check(); await retreat(); await key('KeyW', 30); await step(30); await at(0.5, 0.3);
   await page.keyboard.press('Space'); await step(10); await click(5); await step(20); await snap('pump fake'); await key('KeyA', 12); await snap('pivot'); await click(31); await step(220); await snap('after set shot');
   // 9. crossovers while moving, then a pull-up
   for (let i = 0; i < 6; i++) { await at(i % 2 ? 0.62 : 0.38, 0.5); await key(i % 2 ? 'KeyA' : 'KeyD', 22); }

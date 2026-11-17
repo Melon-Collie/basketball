@@ -1,5 +1,6 @@
 // Drives the prototype in headless Chromium so a scripted session plays out the same way every time:
-// Math.random is seeded, and the clock only advances when a script steps it, one 60 Hz frame at a time.
+// Math.random is seeded (the page draws its game's seed from it), and the clock only advances when a script steps
+// it, one 60 Hz frame at a time. The page exposes its game as window.shotLab.game.
 // Needs Playwright: npm install, then npx playwright install chromium.
 const { chromium } = require('playwright');
 const path = require('path');
@@ -9,10 +10,8 @@ const PROTOTYPE = path.join(__dirname, '..', 'prototype', 'shot-model-lab.html')
 
 // Runs in the page before its own scripts.
 function install(seed) {
-  let a = seed, force = 0;
-  window.__forceLow = n => { force = n; };               // the next n random numbers come up 0.01, to force a rare roll
+  let a = seed;
   Math.random = () => {
-    if (force > 0) { force--; return 0.01; }
     a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0)/4294967296;
   };
