@@ -4,6 +4,8 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
 
+Two people can play each other from the "Play online" panel under the court: one hosts and sends a code, the other joins and sends one back. Whoever doesn't have the ball controls the on-ball defender. It is a first, bare-bones version; the design doc lists its limits.
+
 ## Contents
 
 - [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. The page only handles input and drawing; the game itself is loaded from `sim/`, so keep the two folders side by side.
@@ -14,10 +16,11 @@ The prototype opens as a game: two sides take turns with the ball against an AI 
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
   - `game.js`: the game itself: movement, dribbling, the defenders' AI, shots and the rules, advanced in fixed ticks from plain input. Deterministic for a given seed.
   - `noise.js`: launch-space noise and simulated make rates.
+  - `lockstep.js`: keeps two copies of a game in step over a connection, for online play.
   - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.js`.
   - `calibration.js`: the generated settings, applied to the noise model when the prototype loads.
   - `measure.js`: reports make and block rates with defenders' hands in the simulation.
-  - `tests.js`, `tests-launch.js`, `tests-situation.js`, `tests-game.js`, `tests-rules.js`: physics tests, the launch continuity check, the situation rules, the game played from scripted input, and the rules of a game.
+  - `tests.js`, `tests-launch.js`, `tests-situation.js`, `tests-game.js`, `tests-rules.js`, `tests-lockstep.js`: physics tests, the launch continuity check, the situation rules, the game played from scripted input, the rules of a game, and two-player play.
 
 ## Running the simulation
 
@@ -41,6 +44,10 @@ node sim/tests-game.js
 
 ```bash
 node sim/tests-rules.js
+```
+
+```bash
+node sim/tests-lockstep.js
 ```
 
 Calibration takes about a minute and rewrites `sim/calibration.js`:
@@ -97,5 +104,7 @@ Mouse and keyboard:
 - **Hold left mouse** to start a shot, **release** to let it go. Releasing before 150 ms is a pump fake.
 - **Shift** at the click attacks the rim (dunk attempt).
 - **Space** gathers the ball.
+
+On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps.
 
 See the design doc for how context picks the shot type.
