@@ -21,6 +21,8 @@ const SITU = {
   STEP_THROUGH_EXT: 1.2, STEP_THROUGH_RANGE: 8,
   // defenders' hands (reach heights are placeholders until frames)
   HAND_RANGE: 7, HAND_R: 0.3, HAND_LOW: 6.2, HAND_JUMP: 2.2, JUMP_T: 0.5,
+  ARM: 2.6,                        // shoulder to hand. Standing reach is the arm straight up, so the shoulder is this far below it
+  ARM_FOR: 0.6,                    // s after the release that an arm is in the shot. Past that nobody knows where the defender will be
   // finishing
   RIM_CONTEST_SIG: 3.5,
 };
@@ -130,32 +132,38 @@ function finishScatter(s) {
 }
 
 // ---------- Hands ----------
-// Defenders' hands during the ball's flight, for physics.simulateShot: where the hand is now, carried by their
-// motion, at standing reach if it's up, plus any jump in progress or already scheduled.
+// Defenders' arms during the ball's flight, for physics.simulateShot.
+// An arm is a fixed length from the shoulder, so a hand cannot be both far out and high: reaching `reach` ft toward
+// the ball puts the hand sqrt(ARM^2 - reach^2) above the shoulder, against the full ARM when it goes straight up.
+// The hand is carried by the defender's motion, and rises with any jump in progress or already scheduled.
 // shotT: ms into the shooter's motion, or null if nobody is shooting.
-// handSpecs gives each hand as plain numbers, which can be kept or sent; handPath turns one into the moving hand.
-function handSpecs(p, defs, shotT) {
+// own: a defender played by a person, whose hand is where their cursor put it (hx, hy). The others reach toward p.
+// handSpecs gives each arm as plain numbers, which can be kept or sent; handPath turns one into the moving arm.
+function handSpecs(p, defs, shotT, own = null) {
   const out = [];
-  for (const d of defs) {
-    const dist = Math.hypot(d.x - p.x, d.y - p.y);
+  for (let i = 0; i < defs.length; i++) {
+    const d = defs[i], dist = Math.hypot(d.x - p.x, d.y - p.y);
     if (dist > SITU.HAND_RANGE) continue;
-    const tl = dist || 1, reach = 0.85 + 0.75*Math.max(d.hand, d.h);
-    const hx = d.x + (p.x - d.x)/tl*reach, hy = d.y + (p.y - d.y)/tl*reach;
-    const up = Math.max(d.hand, d.jumpT >= 0 ? 1 : 0);
-    const z0 = SITU.HAND_LOW + (d.stand - SITU.HAND_LOW)*up;
+    let dx = p.x - d.x, dy = p.y - d.y, reach = 0.85 + 0.75*Math.max(d.hand, d.h);
+    if (d === own && d.hx !== undefined) { dx = d.hx - d.x; dy = d.hy - d.y; reach = Math.hypot(dx, dy); }
+    const dl = Math.hypot(dx, dy) || 1;
+    reach = Math.min(reach, SITU.ARM*0.95);
+    const up = Math.max(d.hand, d.jumpT >= 0 ? 1 : 0), shoulder = d.stand - SITU.ARM;
+    const z0 = SITU.HAND_LOW + (shoulder + Math.sqrt(SITU.ARM*SITU.ARM - reach*reach) - SITU.HAND_LOW)*up;
     const jumpStart = d.jumpT >= 0 ? -d.jumpT : (d.jumpAt !== null && shotT !== null ? Math.max(0, (d.jumpAt - shotT)/1000) : null);
-    out.push({ r: SITU.HAND_R, hx, hy, vx: d.vx, vy: d.vy, z0, jumpStart });
+    out.push({ r: SITU.HAND_R, hx: d.x + dx/dl*reach, hy: d.y + dy/dl*reach, vx: d.vx, vy: d.vy, z0, jumpStart, sx: d.x, sy: d.y, sz: shoulder, i });   // i: which of defs this is
   }
   return out;
 }
-
-function handPath({ r, hx, hy, vx, vy, z0, jumpStart }) {
+function handPath({ r, hx, hy, vx, vy, z0, jumpStart, sx, sy, sz }) {
   return { r, at: t => {
+    if (t > SITU.ARM_FOR) return null;                              // a ball that comes back out later is a loose ball, not a block
     const tt = Math.min(t, 0.35), jt = jumpStart === null ? -1 : t - jumpStart;
-    return { x: hx + vx*tt, y: hy + vy*tt, z: z0 + (jt >= 0 && jt < SITU.JUMP_T ? SITU.HAND_JUMP*Math.sin(Math.PI*jt/SITU.JUMP_T) : 0) };
+    const up = jt >= 0 && jt < SITU.JUMP_T ? SITU.HAND_JUMP*Math.sin(Math.PI*jt/SITU.JUMP_T) : 0;
+    return { x: hx + vx*tt, y: hy + vy*tt, z: z0 + up, from: { x: sx + vx*tt, y: sy + vy*tt, z: sz + up } };
   } };
 }
-const handPaths = (p, defs, shotT) => handSpecs(p, defs, shotT).map(handPath);
+const handPaths = (p, defs, shotT, own) => handSpecs(p, defs, shotT, own).map(handPath);
 
 const SIT_EXPORTS = { SITU, frame, isThree, shotContext, combine, jumperContestOne, jumperContest, floaterContestOne, floaterContest,
                        rimContestOne, rimContest, cleanLook, finishScatter, handSpecs, handPath, handPaths };

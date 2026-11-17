@@ -87,6 +87,89 @@ rtest("With nobody else there, the shooter can run down their own miss and play 
   return `clock ${before.toFixed(1)} back to ${RULES.SHOT_CLOCK}`;
 });
 
+// ---------- Two players: rebounding ----------
+// A two-player game with a miss in the air: side 0 shoots early from the top and it comes up short. `set` is called once,
+// the moment the ball comes loose, to put the two players where the test wants them. Returns what happened.
+function rebound(seed, set, inputs) {
+  const g = GM.create({ seed, rules: true, duo: true });
+  run(g, 0.5, [AIM, AIM]);
+  g.forced.push(...Array(400).fill(1));
+  for (let i = 0, n = Math.round(EARLY/1000/GM.TICK); i < n; i++) GM.step(g, [{ ...AIM, shot: true }, AIM]);
+  GM.step(g, [AIM, AIM]); g.forced.length = 0;
+  if (!until(g, [AIM, AIM], x => x.flow.loose, 4)) throw new Error(`the miss never came loose: ${describe(g)}`);
+  const b = g.ball, spot = b.path.find(q => q.t >= b.t && q.z <= RULES.CATCH_Z) || b.path[b.path.length - 1];   // where it comes down to standing reach
+  set(g, spot);
+  const start = { P: { ...g.P }, D: { ...g.D } };
+  let z = null;
+  for (let i = 0; i < ticks(6) && g.flow.loose; i++) { z = GM.pathPoint(g.ball).z; GM.step(g, inputs(g, spot, i)); }
+  return { g, spot, start, z, who: g.flow.loose ? "nobody" : g.flow.phase === "dead" ? "defense" : "offense" };
+}
+const stand = (g, body, x, y) => Object.assign(g[body], { x, y, vx: 0, vy: 0 });
+
+rtest("Two players: there is no rim protector, and the on-ball defender is the only other body", () => {
+  const g = GM.create({ seed: 1, rules: true, duo: true }), solo = game(1);
+  check(g.params.rimOn === false && solo.params.rimOn === true, `two players: ${g.params.rimOn}; one: ${solo.params.rimOn}`);
+  // a miss with both players out of the way: one against the AI the rim protector goes and gets it; here nobody does
+  let home = null;
+  const r = rebound(2, (x, s) => { stand(x, "P", 3, 36); stand(x, "D", 47, 36); home = { ...x.R }; }, (x, s, i) => i < ticks(1.5) ? [{ x: 3, y: 36 }, { x: 47, y: 36 }] : [{ x: 3, y: 36, u: true }, { x: 47, y: 36 }]);
+  check(r.g.R.x === home.x && r.g.R.y === home.y, "the rim protector should not have moved");
+  check(r.g.flow.why !== "Defensive rebound", `nobody on defense was near it: ${describe(r.g)}`);
+  return `the ball was left alone: ${r.who === "nobody" ? "still loose" : describe(r.g)}`;
+});
+
+rtest("Space goes up for a loose ball, and the player in the air takes it before it comes down to the other", () => {
+  // both stand the same distance from where it is coming down, either side of it
+  const either = (x, s) => { stand(x, "P", s.x + 1, s.y); stand(x, "D", s.x - 1, s.y); };
+  const none = rebound(3, either, () => [AIM, AIM]);
+  const offense = rebound(3, either, (x, s, i) => [{ ...AIM, gather: i === 0 }, AIM]);
+  const defense = rebound(3, either, (x, s, i) => [AIM, { ...AIM, gather: i === 0 }]);
+  check(none.who !== "nobody" && none.z <= RULES.CATCH_Z + 0.2, `standing, it is caught at standing reach: ${none.who} at ${none.z.toFixed(2)} ft`);
+  check(offense.who === "offense" && offense.g.drib.lastMove === "Offensive rebound" && offense.z > RULES.CATCH_Z + 0.3, `the shooter went up: ${offense.who} at ${offense.z.toFixed(2)} ft`);
+  check(defense.who === "defense" && defense.g.flow.why === "Defensive rebound" && defense.z > RULES.CATCH_Z + 0.3, `the defender went up: ${defense.who} at ${defense.z.toFixed(2)} ft, ${describe(defense.g)}`);
+  check(offense.g.P.jumpT >= 0 || offense.g.P.land > 0, "the shooter should be in the air or just landed");
+  // a jump is half a second up and down with no steering, and then a moment before another
+  const g = offense.g; run(g, 0.6, [AIM, AIM]);
+  check(g.P.jumpT < 0 && g.P.h === 0, "half a second later they should be back on the floor");
+  return `nobody jumps: ${none.who} at ${none.z.toFixed(1)} ft. Shooter jumps: theirs at ${offense.z.toFixed(1)} ft. Defender jumps: theirs at ${defense.z.toFixed(1)} ft`;
+});
+
+rtest("Boxing out: a player standing their ground keeps the spot, and the one running into their back is stopped", () => {
+  const toward = (x, body, tx, ty) => { const dx = tx - x[body].x, dy = ty - x[body].y; return { ...AIM, l: dx < -0.2, r: dx > 0.2, u: dy < -0.2, d: dy > 0.2 }; };
+  // away from the ball, so it is only the two bodies: one stands, the other runs at them from 6 ft for a second
+  const bump = runner => {
+    const stander = runner === "P" ? "D" : "P", at = { x: 8, y: 30 };
+    const r = rebound(4, x => { stand(x, stander, at.x, at.y); stand(x, runner, at.x, at.y + 6); },
+                      (x, s, i) => i >= ticks(1) ? [{ ...AIM, shot: false }, AIM] : runner === "P" ? [toward(x, "P", at.x, at.y), AIM] : [AIM, toward(x, "D", at.x, at.y)]);
+    const moved = body => Math.hypot(r.g[body].x - r.start[body].x, r.g[body].y - r.start[body].y);
+    return { stood: moved(stander), ran: moved(runner), gap: Math.hypot(r.g.P.x - r.g.D.x, r.g.P.y - r.g.D.y) };
+  };
+  for (const runner of ["D", "P"]) {
+    const b = bump(runner);
+    check(b.stood < 0.05, `with ${runner} running in, the one standing was moved ${b.stood.toFixed(2)} ft`);
+    check(b.ran > 3.5 && b.gap >= 1.69 && b.gap < 2.6, `${runner} should have run to their back and stopped there: ran ${b.ran.toFixed(1)} ft, ended ${b.gap.toFixed(2)} ft away`);
+  }
+  // and under the ball: the one on the spot has it, with the other at their back
+  const off = rebound(4, (x, s) => { stand(x, "P", s.x, s.y); stand(x, "D", s.x, s.y + 1.8); }, (x, s) => [AIM, toward(x, "D", s.x, s.y)]);
+  const def = rebound(4, (x, s) => { stand(x, "D", s.x, s.y); stand(x, "P", s.x, s.y + 1.8); }, (x, s) => [toward(x, "P", s.x, s.y), AIM]);
+  check(off.who === "offense" && def.who === "defense", `the one on the spot should get it: ${off.who}, then ${def.who}`);
+  const b = bump("D");
+  return `the one standing moved ${b.stood.toFixed(2)} ft; the runner covered ${b.ran.toFixed(1)} ft and was stopped ${b.gap.toFixed(2)} ft away`;
+});
+
+rtest("Against the AI, a miss takes a reaction time to register before the defenders go after it", () => {
+  const g = game(3); run(g, 0.5);
+  g.forced.push(...Array(400).fill(1));
+  shoot(g, EARLY); g.forced.length = 0;
+  check(until(g, AIM, x => x.flow.loose, 4), describe(g));
+  const at0 = { x: g.R.x, y: g.R.y }, wait = g.params.react/1000;
+  run(g, wait - 0.05);
+  const early = Math.hypot(g.R.x - at0.x, g.R.y - at0.y);
+  run(g, 0.4);
+  const later = Math.hypot(g.R.x - at0.x, g.R.y - at0.y);
+  check(early < 0.5 && later > 1, `the rim protector moved ${early.toFixed(2)} ft in the first ${(wait - 0.05).toFixed(2)} s and ${later.toFixed(2)} ft soon after`);
+  return `${early.toFixed(2)} ft before reacting, ${later.toFixed(1)} ft after`;
+});
+
 rtest("The shot clock runs while the handler has the ball, and running out gives it away", () => {
   const g = game(8, { defenders: false });
   run(g, 5);

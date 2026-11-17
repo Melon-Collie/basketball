@@ -4,7 +4,7 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
 
-Two people can play each other from the "Play online" panel under the court: one presses Host a game and sends the other the link it gives, and the game starts when they open it. A free public service introduces the two browsers; if it is down, the panel offers a way to connect by passing codes by hand. Whoever doesn't have the ball controls the on-ball defender. Your own input always lands after 25 ms; the other player is guessed and corrected, so a slow connection doesn't make you wait. The design doc lists its limits.
+Two people can play each other, one against one with no rim protector, from the "Play online" panel under the court: one presses Host a game and sends the other the link it gives, and the game starts when they open it. A free public service introduces the two browsers; if it is down, the panel offers a way to connect by passing codes by hand. Whoever doesn't have the ball controls the on-ball defender. Your own input always lands after 25 ms; the other player is guessed and corrected, so a slow connection doesn't make you wait. The design doc lists its limits.
 
 ## Contents
 
@@ -115,7 +115,9 @@ Mouse and keyboard:
 - **Shift** at the click attacks the rim (dunk attempt).
 - **Space** gathers the ball.
 
-On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps.
+On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
+
+After a miss the ball is live. **Space** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there.
 
 The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.
 

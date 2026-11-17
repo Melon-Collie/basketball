@@ -151,7 +151,7 @@ dd small{color:var(--muted)}
       </div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
-        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump.</p>
+        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. After a miss, <kbd>Space</kbd> jumps for the ball for both of you.</p>
         <div id="netSetup">
           <div class="row"><button id="netHost" type="button">Host a game</button></div>
           <div id="netInvite" hidden>
@@ -518,8 +518,11 @@ function draw() {
   if (params.rimOn) drawDefender(R, T.defender2, 1.25);
   if (params.defOn) drawDefender(D, T.defender, 1.05);
 
+  // the handler, lifted off their shadow when they go up for a loose ball
+  const ph = Math.max(0, P.h + ease.P.h);
+  if (ph > 0.02) { ctx.globalAlpha = 0.25; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(px, py, ppf*1.05, ppf*0.63, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1; }
   ctx.fillStyle = T.player; ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.14;
-  ctx.beginPath(); ctx.arc(px, py, ppf*1.05, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py - ph*ppf*1.1, ppf*1.05*(1 + 0.2*ph), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   if (shot.state === "idle" && hold.state === "pivot") drawFeet();   // on top, so the pivot foot is always readable
   else if (shot.state === "idle" && hold.state === "steps") drawGatherFeet();
   if (shot.state === "idle" && ballFree()) drawHands();
@@ -852,7 +855,7 @@ const FAKE = { lag: queryNum("lag"), jitter: queryNum("jitter"), loss: queryNum(
 // drawing lags; the game, and what counts as a contest or a hand on the ball, is always the corrected one.
 // ?smooth=150 sets the time in ms; ?smooth=0 turns it off.
 const SLIDE = (QUERY.has("smooth") ? queryNum("smooth") : 100)/1000, SNAP = 5;   // a correction of more than SNAP ft is a move to a new spot, not a slide
-const WATCHED = [["P", "x"], ["P", "y"], ["D", "x"], ["D", "y"], ["D", "h"], ["R", "x"], ["R", "y"], ["R", "h"]];
+const WATCHED = [["P", "x"], ["P", "y"], ["P", "h"], ["D", "x"], ["D", "y"], ["D", "h"], ["R", "x"], ["R", "y"], ["R", "h"]];
 const watch = g => WATCHED.map(([who, what]) => g[who][what]);
 const settle = () => { for (const k of Object.keys(ease)) ease[k].x = ease[k].y = ease[k].h = 0; };
 function slide(peer, dt) {
@@ -874,12 +877,62 @@ const gathered = pc => new Promise(done => {
   const timer = setTimeout(done, 3000);
   pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(timer); done(); } });
 });
+// Routes. Two browsers connect directly when their networks allow it: each asks a public server what its own outside
+// address is, and they try each other there. Some networks don't allow it, and then the only way is through a relay:
+// a server both can reach that passes the (still encrypted) traffic between them. A relay needs an account somewhere,
+// so there is none by default. RELAY_URL, or ?relay=<address> on the page, is an address that answers with a list of
+// servers in the form browsers take (what Metered's and Cloudflare's credential addresses return).
+// ?relayonly connects only through the relay, to check that it works.
+const LOOKUPS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];   // two, to tell when a network answers each differently
+const RELAY_URL = QUERY.get("relay") || "", RELAY_ONLY = QUERY.has("relayonly");
+const relay = { servers: [], at: 0, asked: null };
+function relayReady() {                                                 // resolves once the relay's servers are known, or it is clear they won't be
+  if (!RELAY_URL) return Promise.resolve();
+  if (relay.asked && Date.now() - relay.at < 600000) return relay.asked;
+  relay.at = Date.now();
+  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 3000);
+  relay.asked = fetch(RELAY_URL, { signal: stop.signal }).then(r => r.json())
+    .then(j => { relay.servers = (Array.isArray(j) ? j : j && j.iceServers ? [].concat(j.iceServers) : []).filter(x => x && x.urls); })
+    .catch(() => { relay.servers = []; }).finally(() => clearTimeout(timer));
+  return relay.asked;
+}
 function connection(me) {
   drop();
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-  net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0, ice: [], remote: false, started: false };
-  pc.addEventListener("connectionstatechange", () => { if (net && net.pc === pc && ["failed", "closed"].includes(pc.connectionState)) leave("The connection dropped."); });
+  const pc = new RTCPeerConnection({ iceServers: [...LOOKUPS, ...relay.servers], iceTransportPolicy: RELAY_ONLY ? "relay" : "all" });
+  const mine = net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0, ice: [], remote: false, started: false, via: "",
+                       routes: { outside: [], relayed: 0 } };            // what this browser found of its own: outside addresses, and routes through a relay
+  pc.addEventListener("icecandidate", e => {
+    const c = e.candidate;
+    if (c && c.type === "srflx") mine.routes.outside.push(`${c.address}:${c.port}`); else if (c && c.type === "relay") mine.routes.relayed++;
+  });
+  pc.addEventListener("connectionstatechange", () => {
+    if (!net || net.pc !== pc || !["failed", "closed"].includes(pc.connectionState)) return;
+    leave(net.live ? "The connection dropped." : `Couldn't connect to the other player. ${whyNot(net)}`);
+  });
   return pc;
+}
+// Why a connection that never got going may have failed, from what this browser could find out about its own network.
+function whyNot(n) {
+  const seen = new Map();                                               // each outside address, and the ports it was seen with
+  for (const a of n.routes.outside) { const i = a.lastIndexOf(":"), ip = a.slice(0, i); seen.set(ip, (seen.get(ip) || new Set()).add(a.slice(i + 1))); }
+  const shifting = [...seen.values()].some(ports => ports.size > 1);
+  if (RELAY_ONLY) return n.routes.relayed ? "The relay was reached, but the connection through it did not come up." : "The relay gave this browser no route: check the relay address.";
+  const here = !seen.size ? "This network would not show an outside address, so nothing can reach this browser directly."
+             : shifting ? "This network gives a different outside address to every destination, so the other player can't reach this browser directly."
+             : "This network looks open to direct connections, so the other player's is probably the one in the way.";
+  const help = !relay.servers.length ? "No relay is set up to carry the connection instead."
+             : n.routes.relayed ? "The relay was tried as well and did not get through." : "The relay could not be reached either.";
+  return `${here} ${help}`;
+}
+// Whether the connection that came up goes through a relay or straight to the other player.
+async function routeKind(pc) {
+  try {
+    const stats = await pc.getStats(); let pair = null;
+    stats.forEach(x => { if (x.type === "transport" && x.selectedCandidatePairId) pair = stats.get(x.selectedCandidatePairId); });
+    stats.forEach(x => { if (!pair && x.type === "candidate-pair" && x.nominated && x.state === "succeeded") pair = x; });
+    const a = pair && stats.get(pair.localCandidateId), b = pair && stats.get(pair.remoteCandidateId);
+    return !a || !b ? "" : a.candidateType === "relay" || b.candidateType === "relay" ? "relay" : "direct";
+  } catch (e) { return ""; }
 }
 function attach(dc) {
   const mine = net, main = dc.label === "game";
@@ -890,7 +943,7 @@ function attach(dc) {
     if (mine.me !== 0 || mine.started || net !== mine) return;
     mine.started = true;
     const delay = QUERY.has("delay") ? clamp(Math.round(queryNum("delay")/1000/GM.TICK), 0, 12) : RB.DELAY;
-    const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true }, delay };
+    const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true, rimOn: false }, delay };   // one against one: no rim protector
     send(start); begin(start);
   };
   dc.addEventListener("open", opened);
@@ -924,6 +977,7 @@ function begin(start) {
   for (const k of Object.keys(fmt)) { $(k).value = params[k]; $("o-" + k).textContent = fmt[k](String(params[k])); }
   $("rules").checked = true; $("defOn").checked = true; $("rimOn").checked = params.rimOn;
   net.peer = RB.create(G, net.me, send, { delay: start.delay, watch }); net.live = true; settle();
+  { const mine = net; routeKind(net.pc).then(kind => { mine.via = kind; }); }
   CAM = CAMS.game; cam.x = D.x; cam.y = (net.me === 0 ? P.y : D.y) - CAM.lead; resize();
   setOnlineUi(true); clearLast(); renderBoard();
   netSay(`Connected. You are ${SIDES[net.me]}; ${SIDES[0]} has the ball first.`);
@@ -939,7 +993,7 @@ function netFrame(dt) {
   if ((net.statsT -= dt) <= 0) {
     net.statsT = 0.5;
     const i = RB.info(peer), ms = t => Math.round(t*GM.TICK*1000);
-    $("netStats").textContent = `Round trip about ${i.ping} ms. Your input lands after ${ms(peer.delay)} ms. Guessing ${ms(i.ahead)} ms ahead of the other player`
+    $("netStats").textContent = `${net.via === "relay" ? "Connected through a relay. " : net.via === "direct" ? "Connected directly. " : ""}Round trip about ${i.ping} ms. Your input lands after ${ms(peer.delay)} ms. Guessing ${ms(i.ahead)} ms ahead of the other player`
       + `${FAKE.lag || FAKE.jitter || FAKE.loss ? ` (with ${FAKE.lag}${FAKE.jitter ? `–${FAKE.lag + FAKE.jitter}` : ""} ms and ${Math.round(FAKE.loss*100)}% loss added here)` : ""}.`
       + `${i.resyncs ? ` Resynced ${i.resyncs} time${i.resyncs > 1 ? "s" : ""}.` : ""}`;
   }
@@ -954,9 +1008,9 @@ function leave(why) {
   const wasLive = net && net.live;
   drop();
   // a guest who found the host's game but never got through: the host's link is still good for another try
-  if (!wasLive && lobby && lobby.host && lobby.open) { lobby.peer = null; return netSay("That didn't connect. Your link still works; waiting for the other player."); }
+  if (!wasLive && lobby && lobby.host && lobby.open) { lobby.peer = null; lobby.con = null; return netSay(`${why} Your link still works if they want to try again.`); }
   closeLobby(); netSay(why); setOnlineUi(false);
-  if (wasLive) { G.duo = false; GM.newGame(G); shownLast = G.lastSeq; shownStats = G.statsSeq; clearLast(); renderBoard(); }   // carry on alone against the AI
+  if (wasLive) { G.duo = false; GM.setDefender(G, "rimOn", true); $("rimOn").checked = true; GM.newGame(G); shownLast = G.lastSeq; shownStats = G.statsSeq; clearLast(); renderBoard(); }   // carry on alone against the AI
 }
 
 // ---------- Invite links ----------
@@ -970,7 +1024,7 @@ function leave(why) {
 const BROKER = QUERY.get("broker") || "wss://0.peerjs.com/", ROOM = "hoops1v1-";
 const LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";                       // none that read as each other: no 0 O 1 I L
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => LETTERS[b % LETTERS.length]).join("");
-let lobby = null;                                                       // waiting on the service: { host, code, line, open, peer }
+let lobby = null;                                                       // waiting on the service: { host, code, line, open, peer, con, early }
 // A line to the service under an id. on(type, message) is told what arrives, and "UNREACHABLE" or "CLOSED" if it goes.
 function brokerLine(id, on) {
   const ws = new WebSocket(`${BROKER}${BROKER.endsWith("/") ? "" : "/"}peerjs?key=peerjs&id=${id}&token=${newCode()}&version=1.5.4`);
@@ -997,8 +1051,9 @@ async function setRemote(mine, sdp) {
 }
 function hostByLink() {
   closeLobby(); drop();
-  const code = newCode(), mine = lobby = { host: true, code, open: false, peer: null, line: null };
+  const code = newCode(), mine = lobby = { host: true, code, open: false, peer: null, con: null, early: [], line: null };
   netSay("Getting your link ready…");
+  relayReady();
   mine.line = brokerLine(ROOM + code, async (type, m) => {
     if (lobby !== mine) return;
     if (type === "OPEN") {
@@ -1011,17 +1066,24 @@ function hostByLink() {
     else if (type === "UNREACHABLE" || type === "ERROR" || type === "INVALID-KEY") serviceDown();
     else if (type === "CLOSED") { closeLobby(); drop(); netSay("Lost touch with the invite service. Host again for a new link."); }
     else if (type === "OFFER" && m.payload && m.payload.sdp) {            // the newest caller replaces one still trying; once a game starts this line is closed
-      mine.peer = m.src;
-      const pc = connection(0), con = net, call = m.payload.connectionId;
+      mine.peer = m.src; mine.con = null;
+      netSay("The other player is connecting…");
+      await relayReady();
+      if (lobby !== mine || mine.peer !== m.src) return;                // stopped hosting, or another caller, while that was fetched
+      const pc = connection(0), con = mine.con = net, call = m.payload.connectionId;
       pc.addEventListener("datachannel", e => attach(e.channel));
       tellRoutes(pc, m.src, call);
-      netSay("The other player is connecting…");
+      for (const e of mine.early.splice(0)) if (e.src === m.src) addRoute(con, e.c);   // routes of theirs that got here before the offer did
+      setTimeout(() => { if (net === con && !con.live) leave(`Couldn't connect to the other player. ${whyNot(con)}`); }, 25000);   // some failures never announce themselves
       try {
         await setRemote(con, m.payload.sdp);
         await pc.setLocalDescription(await pc.createAnswer());
         mine.line.say("ANSWER", m.src, { sdp: pc.localDescription, type: "data", connectionId: call });
       } catch (e) { if (net === con) leave("That didn't connect."); }
-    } else if (type === "CANDIDATE" && m.src === mine.peer && net && m.payload) addRoute(net, m.payload.candidate);
+    } else if (type === "CANDIDATE" && m.payload) {
+      if (mine.con && net === mine.con && m.src === mine.peer) addRoute(net, m.payload.candidate);
+      else if (mine.early.length < 60) mine.early.push({ src: m.src, c: m.payload.candidate });   // ahead of its offer: keep it for when that arrives
+    }
   });
 }
 function joinByCode(text) {
@@ -1035,12 +1097,14 @@ function joinByCode(text) {
     if (lobby !== mine) return;
     if (type === "OPEN") {
       mine.open = true;
+      await relayReady();
+      if (lobby !== mine) return;
       const pc = connection(1), call = "dc_" + newCode().toLowerCase();
       attach(pc.createDataChannel("game")); attach(pc.createDataChannel("inputs", { ordered: false, maxRetransmits: 0 }));
       tellRoutes(pc, host, call);
       await pc.setLocalDescription(await pc.createOffer());
       mine.line.say("OFFER", host, { sdp: pc.localDescription, type: "data", connectionId: call, label: call, reliable: true, serialization: "json" });
-      mine.timer = setTimeout(() => fail(mine.answered ? "Found the game, but the two of you couldn't connect directly. One of your networks may not allow it."
+      mine.timer = setTimeout(() => fail(mine.answered ? `Found the game, but couldn't connect to the other player. ${net ? whyNot(net) : ""}`
                                                        : "The host didn't answer. They may already be in a game."), 20000);
     } else if (type === "ID-TAKEN") joinByCode(code);
     else if (type === "UNREACHABLE" || type === "ERROR" || type === "INVALID-KEY") serviceDown();
@@ -1075,7 +1139,7 @@ joinFromAddress();
 // ---------- Connecting by hand ----------
 // The same introduction with no service: the players carry the two messages themselves, as long codes.
 $("manHost").addEventListener("click", async () => {
-  closeLobby();
+  closeLobby(); await relayReady();
   const pc = connection(0);
   attach(pc.createDataChannel("game")); attach(pc.createDataChannel("inputs", { ordered: false, maxRetransmits: 0 }));
   netSay("Getting your code ready…");
@@ -1086,7 +1150,7 @@ $("manHost").addEventListener("click", async () => {
 $("manJoin").addEventListener("click", async () => {
   let offer;
   try { offer = decode($("manIn").value); } catch (e) { return netSay("Paste the host's code under Their code first."); }
-  closeLobby();
+  closeLobby(); await relayReady();
   const pc = connection(1);
   pc.addEventListener("datachannel", e => attach(e.channel));
   netSay("Getting your code ready…");
