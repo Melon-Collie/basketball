@@ -1,9 +1,10 @@
 // Plays an online game between two headless browsers on this machine, over a real WebRTC connection with a bad link
 // faked on top, and checks the two stayed together. Unlike the other tools this one runs in real time.
 //
-//   node tools/online.js [--lag 60] [--jitter 20] [--loss 5] [--seconds 20] [--delay 25] [--link | --broker ws://localhost:9000/]
+//   node tools/online.js [--lag 60] [--jitter 20] [--loss 5] [--seconds 20] [--delay 25] [--smooth 100] [--link | --broker ws://localhost:9000/]
 //
-// lag and jitter are ms each way, loss is the percentage of input packets dropped, delay is the input delay in ms.
+// lag and jitter are ms each way, loss is the percentage of input packets dropped, delay is the input delay in ms,
+// and smooth is how long a correction takes to slide away, in ms (0 turns sliding off).
 // The two connect by exchanging codes, which needs nothing outside this machine. With --link they connect the way
 // players do, by an invite link, with the introduction service played by this script (see stand-in, below). With
 // --broker they use a real one at that address: after `npm install peer`, `npx peerjs --port 9000` runs one locally,
@@ -16,7 +17,7 @@ const { pathToFileURL } = require('url');
 const { PROTOTYPE } = require('./harness.js');
 
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i < 0 ? def : +process.argv[i + 1]; };
-const opt = { lag: arg('lag', 60), jitter: arg('jitter', 20), loss: arg('loss', 5), seconds: arg('seconds', 20), delay: arg('delay', NaN) };
+const opt = { lag: arg('lag', 60), jitter: arg('jitter', 20), loss: arg('loss', 5), seconds: arg('seconds', 20), delay: arg('delay', NaN), smooth: arg('smooth', NaN) };
 const broker = process.argv.includes('--broker') ? process.argv[process.argv.indexOf('--broker') + 1] : null;
 const link = broker !== null || process.argv.includes('--link');
 
@@ -39,7 +40,7 @@ const standIn = page => page.routeWebSocket(/\/peerjs\?/, ws => {
 
 // Runs in each page before its own scripts: times every frame, and within it the part that is keeping in step.
 function install() {
-  const raf = window.requestAnimationFrame.bind(window), t = { cost: [], gap: [], net: [], last: 0 };
+  const raf = window.requestAnimationFrame.bind(window), t = { cost: [], gap: [], net: [], last: 0, moved: [], drawn: [], seen: null };
   addEventListener('load', () => {
     const lib = window.RollbackLib, frame = lib.frame;
     lib.frame = (...args) => { const a = performance.now(), r = frame(...args); t.net.push(performance.now() - a); return r; };
@@ -49,6 +50,15 @@ function install() {
     if (t.last) t.gap.push(now - t.last);
     t.last = now;
     const a = performance.now(); cb(now); t.cost.push(performance.now() - a);
+    // how far the other player moved since the last frame: as the game has them, and as they are drawn
+    const lab = window.shotLab, n = lab && lab.net;
+    if (!n || !n.live) return;
+    const g = lab.game, who = g.flow.offense === n.me ? 'D' : 'P', b = g[who], e = lab.ease[who];
+    const cur = { who, live: g.flow.phase === 'live', now, x: b.x, y: b.y, dx: b.x + e.x, dy: b.y + e.y }, was = t.seen;
+    if (was && was.who === who && was.live && cur.live && now - was.now < 30) {
+      t.moved.push(Math.hypot(cur.x - was.x, cur.y - was.y)); t.drawn.push(Math.hypot(cur.dx - was.dx, cur.dy - was.dy));
+    }
+    t.seen = cur;
   });
 }
 // address: the page to open, or nothing for the prototype with `query` on the end
@@ -65,11 +75,12 @@ async function player(query, address) {
   await page.evaluate(() => { document.querySelector('#online').open = true; document.querySelector('#netManual').open = true; });
   return { browser, page, errors };
 }
+const STRIDE = 0.45;   // ft: more than anyone runs between two frames, so a bigger move is a correction
 const filled = (page, id) => page.waitForFunction(id => document.querySelector(id).value.length > 100, id, { timeout: 15000 });
 const pct = (list, q) => { const s = [...list].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(s.length*q))] : 0; };
 
 (async () => {
-  const query = `lag=${opt.lag}&jitter=${opt.jitter}&loss=${opt.loss}` + (Number.isNaN(opt.delay) ? '' : `&delay=${opt.delay}`)
+  const query = `lag=${opt.lag}&jitter=${opt.jitter}&loss=${opt.loss}` + (Number.isNaN(opt.delay) ? '' : `&delay=${opt.delay}`) + (Number.isNaN(opt.smooth) ? '' : `&smooth=${opt.smooth}`)
               + (broker ? `&broker=${encodeURIComponent(broker)}` : '');
   const host = await player(query);
   let guest = null;
@@ -128,6 +139,8 @@ const pct = (list, q) => { const s = [...list].sort((a, b) => a - b); return s.l
         + `frames over 25 ms apart: ${r.frames.gap.filter(x => x > 25).length} of ${r.frames.gap.length}`);
       const line = (what, list) => `${what} median ${pct(list, 0.5).toFixed(2)} ms, 99th ${pct(list, 0.99).toFixed(2)} ms, worst ${Math.max(0, ...list).toFixed(1)} ms`;
       console.log(`       ${line('a whole frame', r.frames.cost)}; ${line('of which keeping in step', r.frames.net)}`);
+      const far = list => `${Math.max(0, ...list).toFixed(2)} ft at most, over ${STRIDE} ft in ${list.filter(x => x > STRIDE).length} of ${list.length} frames`;
+      console.log(`       the other player, frame to frame: ${far(r.frames.moved)} as the game has them; ${far(r.frames.drawn)} as drawn`);
       console.log(`       page says: ${r.status} ${r.stats}`);
     }
     console.log(`Score ${a.score}, ${a.shots} shots. Fingerprints compared: ${common}, different: ${differ}. Clocks ${a.clock} and ${b.clock}.`);
