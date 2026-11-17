@@ -4,17 +4,18 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
 
 ## Contents
 
-- [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. It loads the simulation from `sim/`, so keep the two folders side by side.
+- [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. The page only handles input and drawing; the game itself is loaded from `sim/`, so keep the two folders side by side.
 - [`docs/shot-model-design.md`](docs/shot-model-design.md): the design doc, covering principles, the shot resolver, dribbling, defense, frames, physics, calibration and the roadmap.
 - [`sim/`](sim): the shot simulation. The prototype loads these files directly, and they also run in Node for tests and calibration.
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
   - `situation.js`: the rules that read the floor: what a click would produce, contests, clean looks, finishing scatter and defenders' hands.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
+  - `game.js`: the game itself: movement, dribbling, the defenders' AI and shots, advanced in fixed ticks from plain input. Deterministic for a given seed.
   - `noise.js`: launch-space noise and simulated make rates.
   - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.js`.
   - `calibration.js`: the generated settings, applied to the noise model when the prototype loads.
   - `measure.js`: reports make and block rates with defenders' hands in the simulation.
-  - `tests.js`, `tests-launch.js`, `tests-situation.js`: physics tests, the launch continuity check and the situation rules.
+  - `tests.js`, `tests-launch.js`, `tests-situation.js`, `tests-game.js`: physics tests, the launch continuity check, the situation rules, and the game played from scripted input.
 
 ## Running the simulation
 
@@ -32,13 +33,17 @@ node sim/tests-launch.js
 node sim/tests-situation.js
 ```
 
+```bash
+node sim/tests-game.js
+```
+
 Calibration takes about a minute and rewrites `sim/calibration.js`:
 
 ```bash
 node sim/calibrate.js
 ```
 
-The measurement with defenders' hands takes about two minutes and prints its tables:
+The measurement with defenders' hands takes about three minutes and prints its tables:
 
 ```bash
 node sim/measure.js

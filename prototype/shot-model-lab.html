@@ -193,12 +193,13 @@ dd small{color:var(--muted)}
 (() => {
 "use strict";
 
-// The page: canvas, input, drawing and readouts. The game itself is ../sim/game.js; this feeds it input, steps it
-// and draws the state it finds.
+// The page: canvas, input, drawing and readouts. The game itself is ../sim/game.js; this samples input, steps the
+// game at its fixed tick and draws the state it finds.
 const GM = window.GameLib, PHX = window.PhysicsLib;
 const { C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint } = GM;
-const G = GM.create({ rng: () => Math.random() });
-const { P, D, R, shot, hold, drib, stats, params, mouse } = G;
+const G = GM.create({ seed: Math.floor(Math.random()*4294967296) });
+const { P, D, R, shot, hold, drib, stats, params } = G;
+window.shotLab = { game: G };                         // for the console and for tools/
 const handPositions = () => GM.handPositions(G), shoulder = (f, s) => GM.shoulder(G, f, s), stepFoot = k => GM.stepFoot(G, k);
 const dribbleBallPos = () => GM.dribbleBallPos(G), heldBallPos = () => GM.heldBallPos(G), ballFree = () => GM.ballFree(G);
 const tightness = () => GM.tightness(G), fadeSigmaFor = type => GM.fadeSigmaFor(G, type);
@@ -211,10 +212,11 @@ const cam = { x: 25, y: 26 - 7.5 };
 const CACHE = { x0: -14, y0: -16, w: 78, h: 72 };     // world area pre-drawn into the court image
 
 // top-down drawing height: rises off the release and comes back to the rim's plane, then shows only height above the rim
+let atRim = null;                                       // the ball that has got to the rim, if it is still in flight
 function pathVisH(b, p) {
   const RR = PHX.PHYS.RIM, hd = Math.hypot(p.x - RR.x, p.y - RR.y);
-  if (hd < 1.2) b.reached = true;
-  if (b.reached) return Math.max(0, p.z - RR.z);
+  if (hd < 1.2) atRim = b;
+  if (atRim === b) return Math.max(0, p.z - RR.z);
   const sProg = clamp(1 - hd/b.rimDist, 0, 1);
   return Math.max(0, p.z - (b.relZ + (RR.z - b.relZ)*sProg));
 }
@@ -276,7 +278,11 @@ function buildCourt() {
 }
 
 // ---------- Input ----------
+// Events only record what is held. The loop turns that into one input per tick, so the game never sees an event.
+const mouse = { x: 25, y: 5.25 };                       // the cursor, in court coordinates
 const pointer = { fx: undefined, fy: undefined };       // where the cursor is on the canvas, as fractions of its size
+const held = { u: false, d: false, l: false, r: false, shot: false, gather: false };
+const tapped = { shot: false, gather: false };          // pressed since the last tick, even if already let go
 function setMouse(e) {
   const r = court.getBoundingClientRect();
   pointer.fx = (e.clientX - r.left)/r.width; pointer.fy = (e.clientY - r.top)/r.height;
@@ -287,25 +293,35 @@ function mouseToWorld() {
   if (pointer.fx === undefined) return;
   mouse.x = cam.x + (pointer.fx - 0.5)*court.width/ppf; mouse.y = cam.y + (pointer.fy - 0.5)*court.height/ppf;
 }
+function tickInput() {
+  const input = { u: held.u, d: held.d, l: held.l, r: held.r, x: mouse.x, y: mouse.y, shift: shiftDown,
+                  shot: held.shot || tapped.shot, gather: held.gather || tapped.gather };
+  tapped.shot = tapped.gather = false;
+  return input;
+}
 court.addEventListener("pointermove", e => { setMouse(e); shiftDown = e.shiftKey; });
 court.addEventListener("pointerdown", e => {
   if (e.button !== 0) return;
   court.focus({ preventScroll: true });
-  setMouse(e);
-  GM.startShot(G, e.shiftKey); syncPanels();
+  setMouse(e); shiftDown = e.shiftKey;
+  held.shot = tapped.shot = true;
   e.preventDefault();
 });
-window.addEventListener("pointerup", e => { if (e.button === 0) { GM.releaseShot(G); syncPanels(); } });
+window.addEventListener("pointerup", e => { if (e.button === 0) held.shot = false; });
 court.addEventListener("contextmenu", e => e.preventDefault());
 const KEYMAP = { KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r" };
 window.addEventListener("keydown", e => {
   if (e.key === "Shift") shiftDown = true;
   if (e.target.tagName === "INPUT" && e.target.type === "range" && e.code.startsWith("Arrow")) return;
-  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) { GM.gather(G); syncPanels(); } return; }
-  if (KEYMAP[e.code]) { G.keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) held.gather = tapped.gather = true; return; }
+  if (KEYMAP[e.code]) { held[KEYMAP[e.code]] = true; e.preventDefault(); }
 });
-window.addEventListener("keyup", e => { if (e.key === "Shift") shiftDown = false; if (KEYMAP[e.code]) G.keys[KEYMAP[e.code]] = false; });
-window.addEventListener("blur", () => { shiftDown = false; GM.dropInput(G); syncPanels(); });
+window.addEventListener("keyup", e => {
+  if (e.key === "Shift") shiftDown = false;
+  if (e.code === "Space") held.gather = false;
+  if (KEYMAP[e.code]) held[KEYMAP[e.code]] = false;
+});
+window.addEventListener("blur", () => { shiftDown = false; for (const k of Object.keys(held)) held[k] = false; });
 
 // ---------- Drawing ----------
 function drawBall(x, y, h, alpha) {
@@ -693,13 +709,15 @@ new ResizeObserver(resize).observe(court);
 resize();
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readTheme(); buildCourt(); });
 const refreshLive = () => { live = GM.preview(G, shiftDown); renderLive(); };
-let prev = performance.now(), liveTimer = 0;
+let prev = performance.now(), owed = 0, liveTimer = 0;
 function loop(now) {
   const dt = clamp((now - prev)/1000, 0, 0.05); prev = now;
   const ck = 1 - Math.exp(-dt/CAM.tau);
   cam.x += (P.x - cam.x)*ck; cam.y += (P.y - CAM.lead - cam.y)*ck;
   mouseToWorld();
-  GM.update(G, dt); syncPanels();
+  // the game advances in whole ticks; time left over carries to the next frame
+  for (owed += dt; owed >= GM.TICK - 1e-9; owed -= GM.TICK) GM.step(G, tickInput());
+  syncPanels();
   liveTimer -= dt; if (liveTimer <= 0) { refreshLive(); liveTimer = 0.08; }
   draw(); drawInset();
   requestAnimationFrame(loop);

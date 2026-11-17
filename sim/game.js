@@ -2,11 +2,15 @@
 // the prototype's page are here: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release.
 // Nothing in this file touches the page. The page feeds it input, steps it, and draws the state it finds.
 //
-// A game is one plain object made by create(). Every exported function takes the game first. Inside the module,
-// use(game) points the working names below (P, D, shot, ...) at that game's parts, so the rules read as they always
-// have. State that gets replaced, not just changed, is reached through g (g.ball, g.last, ...).
+// A game is one plain object made by create(): no functions, nothing shared, so it can be copied, saved or sent.
+// step(game, input) advances it by one tick of TICK seconds. The same seed and the same inputs always produce the
+// same game, which is what replays, tests and networked play all rest on.
 //
-// Units: feet, seconds, and ms where noted. Randomness comes from game.rng.
+// Every exported function takes the game first. Inside the module, use(game) points the working names below
+// (P, D, shot, ...) at that game's parts, so the rules read as they always have. State that gets replaced, not just
+// changed, is reached through g (g.ball, g.last, ...).
+//
+// Units: feet, seconds, and ms where noted.
 const GAME_EXPORTS = (() => {
 "use strict";
 const NODE = typeof module !== "undefined";
@@ -37,13 +41,16 @@ const C = {
   DUNK_FUMBLE: 0.04
 };
 const HOOP = { x: PHX.PHYS.RIM.x, y: PHX.PHYS.RIM.y };
+const TICK = 1/120;                                  // seconds per step
 
 // ---------- State ----------
 // len: length multiplier on contests. stand: standing reach, ft. Both are placeholders until frames.
 function makeDef(x, y) { return { x, y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, len: 1, stand: 8.2 }; }
 function create(opts = {}) {
   const game = {
-    rng: opts.rng || Math.random,
+    seed: (opts.seed ?? 1) | 0,                              // the game's random stream
+    forced: [],                                              // values the next random rolls will take, for tests
+    input: { shot: false, gather: false },                   // buttons as of the last tick, to see presses and releases
     params: { rating: 80, fadeR: 70, handle: 80, dQuick: 70, dSteal: 60, tAssist: 15, bonus: 30, aAssist: 40, drift: 1, finish: 80, floater: 75, dunk: 75, stepUp: 50,
               defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 },
     P: { x: 25, y: 26, vx: 0, vy: 0 },                       // the ball handler
@@ -66,8 +73,9 @@ function create(opts = {}) {
     lastPhys: null,                                          // last simulated shot, for the side-on replay
     lastSeq: 0, statsSeq: 0,                                 // bumped when last or stats change, so the page knows to redraw them
     fx: [], meterFlash: null,                                // floating text, rings and the meter's after-image
-    glass: { cache: {}, n: 0 },                              // bank targets already worked out
-    view: { est: {}, zs: null },                             // running make-chance estimates for the live readout
+    // for the live readout only, never read by the rules: its own random stream, running make-chance estimates,
+    // and bank targets already worked out
+    view: { seed: ((opts.seed ?? 1) ^ 0x9E3779B9) | 0, est: {}, zs: null, glass: { cache: {}, n: 0 } },
   };
   Object.assign(game.R, { len: 1.2, stand: 8.9, mode: null, upX: 25, upY: 13, upDist: 8 });
   Object.assign(game.D, { shade: 0, threat: 0 });
@@ -79,7 +87,11 @@ function use(game) {
   D.len = params.length; D.stand = 8.2*(0.94 + 0.06*params.length);
 }
 const defenders = () => { const a = []; if (params.defOn) a.push(D); if (params.rimOn) a.push(R); return a; };
-const rnd = () => g.rng();
+// Seeded random numbers (mulberry32). The live readout draws from its own stream, so looking at the odds never
+// changes what happens next.
+function nextRandom(o) { o.seed = o.seed + 0x6D2B79F5 | 0; let t = Math.imul(o.seed ^ o.seed >>> 15, 1 | o.seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }
+let viewing = false;
+const rnd = () => viewing ? nextRandom(g.view) : g.forced.length ? g.forced.shift() : nextRandom(g);
 
 function gauss(){ const u1 = Math.max(1e-9, rnd()), u2 = rnd(); return Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2); }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -112,13 +124,15 @@ function physOut(sr, layup) {
   return { make: r.made, big: r.made ? "Make" : "Miss", sub: layup ? (LAYUP_LABEL[r.label] || r.label) : r.label };
 }
 // Aiming at the glass: the cursor on the backboard line, away from the rim. Height is chosen for you.
+// A shot works its target out exactly. The live readout asks many times a second, so it reuses nearby answers.
 function glassAimFor(kind) {
   if (kind !== "jumper" && kind !== "floater") return null;
   const B = PHX.PHYS.BOARD;
   if (Math.abs(mouse.y - B.y) > 0.7 || mouse.x < B.x0 + 0.3 || mouse.x > B.x1 - 0.3 || Math.abs(mouse.x - HOOP.x) < 0.8) return null;
-  const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${mouse.x.toFixed(1)}`;
-  if (!g.glass.cache[key]) { if (++g.glass.n > 300) { g.glass.cache = {}; g.glass.n = 0; } g.glass.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1)); }
-  return g.glass.cache[key];
+  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1));
+  const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${mouse.x.toFixed(1)}`, gl = g.view.glass;
+  if (!gl.cache[key]) { if (++gl.n > 300) { gl.cache = {}; gl.n = 0; } gl.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1)); }
+  return gl.cache[key];
 }
 const liveZ = reuse => (reuse && g.view.zs) ? g.view.zs : (g.view.zs = Array.from({ length: 14 }, () => [gauss(), gauss()]));
 // running estimate: a few simulated shots per refresh. Estimates sharing a refresh share their random draws (zs),
@@ -143,13 +157,14 @@ function decideTime(res) {
 }
 function startPathBall(L, res) {
   const RR = PHX.PHYS.RIM;
-  g.ball = { phase: "path", t: 0, i: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t,
-           announced: false, relZ: L.pos.z, rimDist: Math.hypot(L.pos.x - RR.x, L.pos.y - RR.y) || 1, reached: false };
+  g.ball = { phase: "path", t: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t,
+           announced: false, relZ: L.pos.z, rimDist: Math.hypot(L.pos.x - RR.x, L.pos.y - RR.y) || 1 };
   g.lastPhys = { path: res.path, contacts: res.contacts, from: L.pos, made: res.made };
 }
 function pathPoint(b) {
-  while (b.i < b.path.length - 1 && b.path[b.i + 1].t <= b.t) b.i++;
-  return b.path[b.i];
+  let i = 0;
+  while (i < b.path.length - 1 && b.path[i + 1].t <= b.t) i++;
+  return b.path[i];
 }
 const ballFree = () => !g.ball || (g.ball.phase === "path" && g.ball.announced);
 const LAYUP_LABEL = { "Swish": "Finished", "Bank": "Kissed off the glass", "In off the rim": "Rolled in", "In and out": "In and out",
@@ -773,7 +788,7 @@ function update(dt) {
 }
 
 // ---------- Preview: what would a shot from here be? ----------
-function preview(shift) {
+function previewNow(shift) {
   let live;
   const f = frame(P);
   const cx = shot.state === "shooting" ? { kind: shot.kind, note: shot.note } : shotContext(shift);
@@ -835,6 +850,9 @@ function preview(shift) {
   return live;
 }
 
+// The live readout calls this as often as it likes. It reads the game and writes only to game.view.
+function preview(shift) { viewing = true; try { return previewNow(shift); } finally { viewing = false; } }
+
 // ---------- Input ----------
 function letGo() { if (shot.kind === "jumper") releaseJumper(); else if (shot.kind === "floater") releaseFloater(); else { shot.held = false; shot.upAt = shot.t; } }
 // the shot button came up: a pump fake if it is early enough, otherwise the release (or the end of a finish's hang)
@@ -843,8 +861,19 @@ function releaseShot() {
   if (shot.fakeable && shot.t < C.COMMIT_MS) { pumpFake(); return; }
   letGo();
 }
-// the player stopped giving input (the window lost focus): keys up, and a shot in progress is let go
-function dropInput() { keys.u = keys.d = keys.l = keys.r = false; if (shot.state === "shooting") letGo(); }
+// One tick. input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
+// shot (the shot button is down), shift (held, read when the shot starts), gather (the gather key is down).
+// Presses and releases are read off the change since the last tick.
+function step(input) {
+  keys.u = !!input.u; keys.d = !!input.d; keys.l = !!input.l; keys.r = !!input.r;
+  mouse.x = input.x; mouse.y = input.y;
+  const was = g.input, now = { shot: !!input.shot, gather: !!input.gather };
+  if (now.gather && !was.gather) gather();
+  if (now.shot && !was.shot) startShot(!!input.shift);
+  else if (!now.shot && was.shot) releaseShot();
+  g.input = now;
+  update(TICK);
+}
 function setDefender(which, on) {
   params[which] = on;
   if (which === "defOn") Object.assign(D, { hand: 0, h: 0, jumpT: -1, land: 0, x: P.x, y: Math.max(5, P.y - 6), vx: 0, vy: 0 });
@@ -855,9 +884,8 @@ function resetStats() { Object.assign(stats, { fga: 0, fgm: 0, a3: 0, m3: 0, ar:
 // Every export binds the game it was given before running.
 const on = fn => (game, ...args) => { use(game); return fn(...args); };
 return {
-  C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
-  update: on(update), startShot: on(startShot), releaseShot: on(releaseShot), dropInput: on(dropInput), gather: on(gather),
-  preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats),
+  C, HOOP, TICK, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
+  step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats),
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), fadeSigmaFor: on(fadeSigmaFor),
