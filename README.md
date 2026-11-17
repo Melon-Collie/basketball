@@ -102,7 +102,7 @@ node tools/ingame.js
 node tools/online.js --lag 60 --jitter 20 --loss 5 --seconds 20
 ```
 
-Add `--link` to have them connect by invite link, as players do, with the introduction service played by the script.
+Add `--link` to have them connect by invite link, as players do, with the introduction service played by the script, or `--broker wss://0.peerjs.com/` to go through the real one.
 
 To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss=5` on the end of the address, host, and open the link it gives in a second window. The link carries the same settings. `&smooth=0` turns off the sliding of corrections, to see what it is hiding; any other number is how long a correction takes to slide away, in ms.
 

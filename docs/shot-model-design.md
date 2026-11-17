@@ -709,7 +709,7 @@ The browsers talk directly over WebRTC, but two browsers can't find each other u
 
 If the introduction service can't be reached, the panel says so and opens the old way of connecting, which needs no service: the players carry the two messages themselves, as codes of about 830 characters, the host's first and then the guest's back. `?broker=wss://…/` on the page's address points it at a different introduction service that speaks the same protocol, such as one you run yourself.
 
-**Trying a bad connection.** Once a game starts, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed; with `--link` they connect by invite link, with the introduction service played by the script.
+**Trying a bad connection.** Once a game starts, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed; with `--link` they connect by invite link, with the introduction service played by the script, and with `--broker wss://0.peerjs.com/` through the real one.
 
 **Measured** between two headless browsers on one machine, both players moving, pointing and shooting throughout:
 
@@ -722,7 +722,7 @@ The worst frames are the ones that replay a shot's release, which simulates the 
 
 **Limits, for now:**
 
-- **The invite link has not been tried against the real introduction service.** It was built from that service's published server code and tested with a stand-in that behaves the same way, because the public one could not be reached from where this was written. It is also somebody else's free service: it can be down, slow or limited, and there is no promise it stays up.
+- **The introduction service is somebody else's free service.** It can be down, slow or limited, and there is no promise it stays up. It is also stricter than the server code PeerJS publishes: it hangs up on any sender whose message is not shaped like the library's own, which is why the first version of the link failed with "Lost touch with the invite service" the moment a guest joined. The page now sends what it expects, the link has been checked against the real service, and the stand-in used by `tools/online.js --link` is as strict.
 - **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other. The guest is told so after 20 seconds.
 - **A code is the only key.** Anyone who has the link can take the one open seat. Once a game has started the code is dead.
 - **Not yet played across the internet, or between two different browsers.** Everything above is two copies of Chromium on one machine with the lag faked. Two different browsers may drift and lean on resyncs.
