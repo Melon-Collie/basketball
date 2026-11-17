@@ -43,7 +43,7 @@ This is the original resolver: a 2D landing point at the rim, sampled from a Gau
 ```
 
 - **Make window** (A, B) differed by shot type: softer shots got bigger windows, and a layup from a 25–65° bank angle got 1.2× its window. Physics retired it: the rim is the window.
-- **Displayed make chance** comes from simulated shots: 14 per refresh, blended into a running average, and 80 at release for the last-shot panel. The actual shot uses a fresh random draw.
+- **Displayed make chance** comes from simulated shots: 14 per refresh, blended into a running average, and 80 for the last-shot panel, drawn at release and run when the panel is shown. The actual shot uses a fresh random draw.
 - **Blocks and fouls.** Fouls are rolled separately. Blocks on jumpers, floaters and layups are collisions between the ball and a defender's hand during the flight; only dunks still roll for a block.
 
 A key property: when scatter is small (open, good shooter), input error matters a lot. When a contest dominates the scatter, input barely matters. So skill counts most on good shots, and nobody can time through a hand in the face.
@@ -577,7 +577,7 @@ Noise moves into launch space: a spread on speed (as a fraction) and on directio
 
 The script then prints every target at 4,000 shots, along with the open perfect 15 ft jumper, a three 25 ms off, and an open straight fade.
 
-**Live readouts** simulate 14 shots per refresh and blend them into a running average, instead of reading precomputed tables. The last-shot panel runs 80 shots once, at release.
+**Live readouts** simulate 14 shots per refresh and blend them into a running average, instead of reading precomputed tables. The last-shot panel runs 80 shots once per shot. Their random draws are taken at release and kept with the shot; the shots themselves are run when the panel asks, so the release tick costs about 3 ms and not 16.
 
 ### Blocks, bank shots and feedback
 
@@ -600,14 +600,14 @@ This is the point where the prototype becomes a real project. The physics is bui
 - **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
 - **Game** (`sim/game.js`): everything that happens on the floor: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release, and the rules of a game (score, shot clock, possessions, loose balls, free throws). A game is one plain object, advanced by `step(game, input)` in fixed ticks of 1/120 s. Its random stream is part of the object, so a seed and a list of inputs replay exactly, and a copy carries on identically. The live readout draws from a separate stream, so looking at the odds never changes the outcome.
-- **Lockstep** (`sim/lockstep.js`): keeps two copies of a game in step over a connection, by exchanging inputs a few ticks ahead and resyncing from the host if they drift.
+- **Rollback** (`sim/rollback.js`): keeps two copies of a game together over a connection. Each side plays on with a guess at the other's input, and goes back and replays when the guess was wrong. Resyncs from the host if the copies drift.
 - **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
 - **Measurement** (`sim/measure.js`): an offline script that reports make and block rates with defenders' hands in the simulation, first for fixed defender positions and then with whole shots played through the game.
-- **Browser tools** (`tools/`, need Playwright): `replay.js` plays a scripted session in the prototype with a seeded random generator and a stepped clock, and compares every checkpoint against a git ref, as a check that a refactor didn't change behavior. `ingame.js` measures standing jumpers with the defenders reacting as they do in play.
+- **Browser tools** (`tools/`, need Playwright): `replay.js` plays a scripted session in the prototype with a seeded random generator and a stepped clock, and compares every checkpoint against a git ref, as a check that a refactor didn't change behavior. `ingame.js` measures standing jumpers with the defenders reacting as they do in play. `online.js` plays an online game between two headless browsers over a faked bad link and checks they stayed together.
 - **The page** (`prototype/shot-model-lab.html`): canvas, input, camera, drawing and the panels, about 520 lines. Input events only record what is held; each tick the page hands the game one plain input (keys, cursor position, shot, Shift, gather).
 - **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
-**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js`, `sim/tests-game.js`, `sim/tests-rules.js` and `sim/tests-lockstep.js`):
+**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js`, `sim/tests-game.js`, `sim/tests-rules.js` and `sim/tests-rollback.js`):
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
@@ -622,7 +622,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, steals, live balls off a missed dunk, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
-- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input, and two copies of a game stay identical over a slow link, waiting when it is slower than the input delay and resyncing after a drift.
+- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
 
 **Milestones:**
 
@@ -689,17 +689,38 @@ Two people can now play each other: each plays their own side, and whoever doesn
 
 Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke and strip rolls are off when a player defends, and the ball has to be reached. From in front, across the handler's body, it can't be; from the ball's side it can. **Blocks are the defender's timing:** the jump is theirs to choose, so the knife-edge found in Calibration is now a matter of skill, not of when an AI happens to leave its feet.
 
-**Staying in step** (`sim/lockstep.js`). Both browsers run the whole game. Each samples its own input once per tick and sends it 8 ticks (67 ms) ahead of when it is used, and neither advances a tick until it has both. The delay is the same on a press and a release, so shot timing is as fair online as off. Every 60 ticks they compare a short fingerprint of the game; if the copies differ, the host sends its whole game and the guest takes it. That covers the case where two browsers' maths differs in the last digit.
+**Staying together** (`sim/rollback.js`). Both browsers run the whole game, and neither waits for the other.
+
+- **Your own input lands after 25 ms, always.** Each side samples its input once per tick and uses it 3 ticks later, whatever the connection is like. The delay is the same on a press and a release, so shot timing is as fair online as off.
+- **The other player is guessed, then corrected.** Their input for the current tick has usually not arrived yet, so the game plays on as if they were still doing what they were last seen doing. When the real input arrives and differs, the game goes back to the last tick both inputs were known for and replays to the present with the right one. On screen that is the other player jumping to where they really are; how far depends on the lag and on how sharply they changed what they were doing.
+- **Two games per side.** One has only ever been stepped with real inputs from both players; the one on screen runs ahead of it on guesses. Going back is copying the first over the second, which takes about 0.06 ms, and replaying a tick takes about 0.015 ms. The last-shot panel and the stats read the first, so a result is never shown and then taken back.
+- **How far ahead.** With the two clocks together, the game on screen runs ahead of what is known by the one-way lag less the 25 ms. At 100 ms each way that is about 9 ticks. Past 30 ticks (250 ms) a side stops and waits, so nobody plays far into a game that may not have happened.
+- **Clocks.** Every packet says how far ahead of the other side the sender thinks it is. From the two views each side works out the gap between the clocks, and the one that is ahead gives up a tenth of its time until they match. Without this the host, who starts first, would do all the guessing and the guest none.
+- **Lost packets cost nothing.** Inputs go on a channel that never resends, so a lost packet can't hold up the ones behind it. Every packet carries all the inputs the other side has not yet acknowledged, so the next one fills the gap.
+- **Drift.** Every 60 ticks the two sides compare a short fingerprint of the game they have agreed on; if they differ, the host sends its whole game and the guest takes it. That covers the case where two browsers' maths differs in the last digit.
 
 **Connecting.** The browsers talk directly over WebRTC. With no server to introduce them, the players pass two codes between themselves by hand, each about 830 characters: the host's, then the guest's back. A public server (Google's STUN) is asked only for each browser's outside address.
+
+**Trying a bad connection.** Under the codes, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed.
+
+**Measured** between two headless browsers on one machine, both players moving, pointing and shooting throughout:
+
+| Link each way | Input packets lost | Waited | Resyncs | Keeping in step, per frame |
+| --- | --- | --- | --- | --- |
+| 60–80 ms | 5% | Never | 0 | 0.2 ms median, 5 ms worst |
+| 150–210 ms | 15% | One side, 0.2 s in 12 s | 0 | 0.2 ms median, 7 ms worst |
+
+The worst frames are the ones that replay a shot's release, which simulates the ball's whole flight.
 
 **Limits, for now:**
 
 - **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other.
-- **Only tried on one machine.** Two browsers side by side connected and stayed identical through a made three and a change of possession. It has not been played across the internet, or between two different browsers.
-- **Everything waits 67 ms,** and longer if the link is slower than that.
+- **Not yet played across the internet, or between two different browsers.** Everything above is two copies of Chromium on one machine with the lag faked. Two different browsers may drift and lean on resyncs.
+- **Corrections are not smoothed.** When a guess was wrong the other player snaps to where they really are. Blending that over a few frames is the obvious next thing to try once it has been played.
+- **A shot can change after release.** If the defender's real hand was somewhere other than guessed when you let go, the flight is worked out again. It settles within the lag, long before the ball arrives.
+- **Packets are plain text,** about 200 characters each at 60 a second. Fine for two players; a binary format would be a tenth of that.
 - **No rematch and no tuning online.** The host's settings are used; when a game ends, leave and host again.
-- **The numbers are first guesses:** the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
+- **The numbers are first guesses:** the 25 ms and 250 ms above, the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
 
 ## Prototype defense AI
 
@@ -882,7 +903,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 
 ## Known gaps and roadmap
 
-Full physics is built, the game runs outside the page, and there is a first set of rules. Two players can now play each other online, bare bones. Next is playing it, then the block model and frames.
+Full physics is built, the game runs outside the page, and there is a first set of rules. Two players can now play each other online, with rollback so neither waits on the other. Next is playing it across a real connection, then the block model and frames.
 
 **Known gaps:**
 
