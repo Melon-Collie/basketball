@@ -62,6 +62,13 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .board .mid{flex:1;text-align:center;min-width:0}
 .board .clock{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.5rem;line-height:1;font-variant-numeric:tabular-nums}
 .board .what{color:var(--muted);font-size:.85rem;min-height:1.3em}
+.online{margin-top:16px;padding:12px 16px;background:var(--panel);border-radius:10px}
+.online summary{cursor:pointer;font-weight:600}
+.online .caption{max-width:80ch}
+.online kbd{font-family:inherit;font-weight:600;color:var(--ink);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px}
+.online .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.online label{display:block;margin-top:10px;font-size:.85rem;color:var(--muted)}
+.online textarea{display:block;width:100%;margin-top:4px;font:12px/1.3 ui-monospace,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px;resize:vertical}
 .stats{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:flex-end;margin-top:16px;padding:14px 16px;background:var(--panel);border-radius:10px}
 .stat .v{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.9rem;line-height:1}
 .stat .v small{font-size:1rem;font-weight:600;color:var(--muted);margin-left:4px}
@@ -136,6 +143,15 @@ dd small{color:var(--muted)}
         <div class="stat"><div class="v" id="sPPP">–</div><div class="k">Points per possession</div></div>
         <button id="reset" type="button">Reset stats</button>
       </div>
+      <details class="online" id="online">
+        <summary>Play online: two players</summary>
+        <p class="caption">One player hosts and sends the other a code; the other joins with it and sends a code back. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump.</p>
+        <div class="row"><button id="netHost" type="button">Host a game</button><button id="netJoin" type="button">Join with their code</button><button id="netLeave" type="button" hidden>Leave the game</button></div>
+        <label>Their code<textarea id="netIn" rows="3" spellcheck="false"></textarea></label>
+        <label>Your code<textarea id="netOut" rows="3" readonly spellcheck="false"></textarea></label>
+        <div class="row"><button id="netCopy" type="button">Copy your code</button><button id="netConnect" type="button">Connect (host, after pasting theirs)</button></div>
+        <p class="caption" id="netStatus" aria-live="polite">Not connected.</p>
+      </details>
     </div>
 
     <aside>
@@ -209,6 +225,7 @@ dd small{color:var(--muted)}
 <script src="../sim/calibration.js"></script>
 <script src="../sim/situation.js"></script>
 <script src="../sim/game.js"></script>
+<script src="../sim/lockstep.js"></script>
 <script>
 (() => {
 "use strict";
@@ -220,11 +237,12 @@ const { C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint } = GM;
 const LAB = new URLSearchParams(location.search).has("lab");   // ...html?lab opens straight into free shooting, with the game rules off
 const G = GM.create({ seed: Math.floor(Math.random()*4294967296), rules: !LAB });
 const { P, D, R, shot, hold, drib, stats, params } = G;
-window.shotLab = { game: G };                         // for the console and for tools/
+window.shotLab = { game: G, get net() { return net; } };   // for the console and for tools/
 const handPositions = () => GM.handPositions(G), shoulder = (f, s) => GM.shoulder(G, f, s), stepFoot = k => GM.stepFoot(G, k);
 const dribbleBallPos = () => GM.dribbleBallPos(G), heldBallPos = () => GM.heldBallPos(G), ballFree = () => GM.ballFree(G);
 const tightness = () => GM.tightness(G), fadeSigmaFor = type => GM.fadeSigmaFor(G, type);
 let live = null, shiftDown = false;                   // the live readout's preview of a shot from here; whether Shift is held
+let net = null;                                       // an online game in progress, or being set up
 
 
 const VIEW = { w: 53, h: 41.5 };                    // canvas aspect
@@ -371,7 +389,8 @@ function drawDefender(def, color, radius) {
   ctx.fillStyle = color; ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill();
   const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1;
   const up = Math.max(def.hand, def.h), reach = radius*0.8 + 0.75*up;
-  const [hx, hy] = S(def.x + tx/tl*reach, def.y + ty/tl*reach);
+  // a player's hand is where their cursor put it; the AI's reaches toward the ball handler
+  const [hx, hy] = G.duo && def === D && D.hx !== undefined ? S(D.hx, D.hy) : S(def.x + tx/tl*reach, def.y + ty/tl*reach);
   ctx.fillStyle = T.player; ctx.strokeStyle = color; ctx.lineWidth = ppf*0.12;
   ctx.beginPath(); ctx.arc(hx, hy - lift, ppf*(0.28 + 0.14*up)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
 }
@@ -434,7 +453,7 @@ function draw() {
   const [px, py] = S(P.x, P.y);
   const [hx, hy] = S(HOOP.x, HOOP.y);
   const kind = live ? live.cx.kind : "jumper";
-  const ax = mouse.x - P.x, ay = mouse.y - P.y, al = Math.hypot(ax, ay);
+  const ax = G.mouse.x - P.x, ay = G.mouse.y - P.y, al = Math.hypot(ax, ay);   // the ball handler's cursor, whoever that is
 
   if (shot.state !== "flight") {
     if (shot.state === "shooting" && (kind === "jumper" || kind === "floater") && al > 0.5) {   // aim guide only while the shot is held
@@ -721,10 +740,12 @@ function renderBoard() {
   const what = fl.phase === "over" ? `${SIDES[fl.winner]} wins` : fl.phase === "dead" ? fl.why
              : fl.phase === "ft" ? `${name} at the line, ${fl.ft} to shoot` : fl.loose ? "Loose ball" : `${name} ball`;
   const clock = fl.phase === "live" ? String(Math.ceil(fl.clock - 1e-9)) : "–";
-  const key = [fl.on, fl.score, fl.offense, what, clock].join("|");
+  const you = net && net.live ? net.me : -1;
+  const key = [fl.on, fl.score, fl.offense, what, clock, you].join("|");
   if (key === boardShown) return;
   boardShown = key;
   $("board").hidden = !fl.on;
+  SIDES.forEach((side, i) => { $("bSide" + i).querySelector(".name").textContent = side + (i === you ? " (you)" : ""); });
   $("bScore0").textContent = fl.score[0]; $("bScore1").textContent = fl.score[1];
   $("bSide0").classList.toggle("has", fl.offense === 0); $("bSide1").classList.toggle("has", fl.offense === 1);
   $("bClock").textContent = clock; $("bWhat").textContent = what;
@@ -751,6 +772,106 @@ for (const k of Object.keys(fmt)) {
 $("defOn").addEventListener("change", e => GM.setDefender(G, "defOn", e.target.checked));
 $("rimOn").addEventListener("change", e => GM.setDefender(G, "rimOn", e.target.checked));
 
+// ---------- Online: two players, one game each, kept in step ----------
+// The two browsers talk directly over WebRTC. There is no server to introduce them, so the players pass two codes
+// between themselves by hand: the host's offer and the guest's answer. ../sim/lockstep.js does the rest.
+const LS = window.LockstepLib;
+const netSay = text => { $("netStatus").textContent = text; };
+const encode = d => btoa(JSON.stringify(d)), decode = text => JSON.parse(atob(text.trim()));
+const setOnlineUi = on => {
+  document.querySelectorAll("aside input").forEach(el => { el.disabled = on; });
+  $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netHost").hidden = on; $("netJoin").hidden = on;
+};
+// wait until the browser has listed the routes the other side could reach us by, or three seconds
+const gathered = pc => new Promise(done => {
+  if (pc.iceGatheringState === "complete") return done();
+  const timer = setTimeout(done, 3000);
+  pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(timer); done(); } });
+});
+function connection(me) {
+  drop();
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  net = { pc, dc: null, me, live: false, peer: null, parts: [] };
+  pc.addEventListener("connectionstatechange", () => { if (net && net.pc === pc && ["failed", "closed"].includes(pc.connectionState)) leave("The connection dropped."); });
+  return pc;
+}
+function attach(dc) {
+  const mine = net;
+  mine.dc = dc;
+  dc.addEventListener("open", () => { if (mine.me === 0) { const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true } }; send(start); begin(start); } });
+  dc.addEventListener("message", e => { if (net === mine) got(JSON.parse(e.data)); });
+  dc.addEventListener("close", () => { if (net === mine) leave("The other player left."); });
+}
+// messages are small, except a whole game sent to resync, which goes in pieces
+function send(m) {
+  if (!net || !net.dc || net.dc.readyState !== "open") return;
+  const text = JSON.stringify(m), size = 12000;
+  if (text.length <= size) return net.dc.send(text);
+  const n = Math.ceil(text.length/size);
+  for (let i = 0; i < n; i++) net.dc.send(JSON.stringify({ k: "part", i, n, d: text.slice(i*size, (i + 1)*size) }));
+}
+function got(m) {
+  if (m.k === "part") { net.parts[m.i] = m.d; if (m.i === m.n - 1) { const whole = net.parts.join(""); net.parts = []; got(JSON.parse(whole)); } }
+  else if (m.k === "start") begin(m);
+  else if (net.peer) LS.receive(net.peer, m);
+}
+// both sides build the same game from the host's seed and settings
+function begin(start) {
+  GM.load(G, GM.snapshot(GM.create({ seed: start.seed, rules: true, duo: true })));
+  Object.assign(params, start.params);
+  for (const k of Object.keys(fmt)) { $(k).value = params[k]; $("o-" + k).textContent = fmt[k](String(params[k])); }
+  $("rules").checked = true; $("defOn").checked = true; $("rimOn").checked = params.rimOn;
+  net.peer = LS.create(G, net.me, send); net.live = true; owed = 0;
+  CAM = CAMS.game; cam.x = D.x; cam.y = (net.me === 0 ? P.y : D.y) - CAM.lead; resize();
+  setOnlineUi(true); clearLast(); renderBoard();
+  netSay(`Connected. You are ${SIDES[net.me]}; ${SIDES[0]} has the ball first.`);
+  $("board").scrollIntoView({ block: "start" }); court.focus({ preventScroll: true });   // the codes were exchanged further down the page
+}
+function netFrame(dt) {
+  const peer = net.peer;
+  // sample one input per tick of our own clock, unless the other side has gone quiet and we are far ahead of the game
+  for (owed = Math.min(owed + dt, 0.25); owed >= GM.TICK - 1e-9; owed -= GM.TICK) if (peer.clock - G.tick < 120) LS.sample(peer, tickInput());
+  LS.advance(peer);
+  const waiting = LS.waiting(peer);
+  if (waiting !== net.waiting) { net.waiting = waiting; netSay(waiting ? "Waiting for the other player…" : `Connected. You are ${SIDES[net.me]}.`); }
+}
+function drop() {
+  if (!net) return;
+  const old = net; net = null;
+  try { if (old.dc) old.dc.close(); old.pc.close(); } catch (e) { /* already gone */ }
+}
+function leave(why) {
+  const wasLive = net && net.live;
+  drop(); netSay(why); setOnlineUi(false);
+  if (wasLive) { G.duo = false; GM.newGame(G); clearLast(); renderBoard(); }   // carry on alone against the AI
+}
+$("netHost").addEventListener("click", async () => {
+  const pc = connection(0);
+  attach(pc.createDataChannel("game"));
+  netSay("Getting your code ready…");
+  await pc.setLocalDescription(await pc.createOffer()); await gathered(pc);
+  $("netOut").value = encode(pc.localDescription);
+  netSay("Send your code to the other player. When they send theirs back, paste it under Their code and press Connect.");
+});
+$("netJoin").addEventListener("click", async () => {
+  let offer;
+  try { offer = decode($("netIn").value); } catch (e) { return netSay("Paste the host's code under Their code first."); }
+  const pc = connection(1);
+  pc.addEventListener("datachannel", e => attach(e.channel));
+  netSay("Getting your code ready…");
+  try { await pc.setRemoteDescription(offer); } catch (e) { drop(); return netSay("That code didn't work. Ask the host for a fresh one."); }
+  await pc.setLocalDescription(await pc.createAnswer()); await gathered(pc);
+  $("netOut").value = encode(pc.localDescription);
+  netSay("Send your code back to the host. The game starts when they connect.");
+});
+$("netConnect").addEventListener("click", async () => {
+  if (!net || net.me !== 0 || net.live) return netSay("Press Host a game first, and send the other player your code.");
+  try { await net.pc.setRemoteDescription(decode($("netIn").value)); netSay("Connecting…"); }
+  catch (e) { netSay("That code didn't work. Check you pasted all of it."); }
+});
+$("netCopy").addEventListener("click", () => { const box = $("netOut"); navigator.clipboard.writeText(box.value).catch(() => box.select()); });
+$("netLeave").addEventListener("click", () => leave("You left the game."));
+
 // ---------- Loop ----------
 readTheme();
 new ResizeObserver(resize).observe(court);
@@ -761,10 +882,12 @@ let prev = performance.now(), owed = 0, liveTimer = 0;
 function loop(now) {
   const dt = clamp((now - prev)/1000, 0, 0.05); prev = now;
   const ck = 1 - Math.exp(-dt/CAM.tau);
-  cam.x += (P.x - cam.x)*ck; cam.y += (P.y - CAM.lead - cam.y)*ck;
+  const body = net && net.live && G.flow.offense !== net.me ? D : P;   // online, the camera follows your own player
+  cam.x += (body.x - cam.x)*ck; cam.y += (body.y - CAM.lead - cam.y)*ck;
   mouseToWorld();
   // the game advances in whole ticks; time left over carries to the next frame
-  for (owed += dt; owed >= GM.TICK - 1e-9; owed -= GM.TICK) GM.step(G, tickInput());
+  if (net && net.live) netFrame(dt);
+  else for (owed += dt; owed >= GM.TICK - 1e-9; owed -= GM.TICK) GM.step(G, tickInput());
   syncPanels(); renderBoard();
   liveTimer -= dt; if (liveTimer <= 0) { refreshLive(); liveTimer = 0.08; }
   draw(); drawInset();

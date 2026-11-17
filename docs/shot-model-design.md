@@ -600,13 +600,14 @@ This is the point where the prototype becomes a real project. The physics is bui
 - **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
 - **Game** (`sim/game.js`): everything that happens on the floor: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release, and the rules of a game (score, shot clock, possessions, loose balls, free throws). A game is one plain object, advanced by `step(game, input)` in fixed ticks of 1/120 s. Its random stream is part of the object, so a seed and a list of inputs replay exactly, and a copy carries on identically. The live readout draws from a separate stream, so looking at the odds never changes the outcome.
+- **Lockstep** (`sim/lockstep.js`): keeps two copies of a game in step over a connection, by exchanging inputs a few ticks ahead and resyncing from the host if they drift.
 - **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
 - **Measurement** (`sim/measure.js`): an offline script that reports make and block rates with defenders' hands in the simulation, first for fixed defender positions and then with whole shots played through the game.
 - **Browser tools** (`tools/`, need Playwright): `replay.js` plays a scripted session in the prototype with a seeded random generator and a stepped clock, and compares every checkpoint against a git ref, as a check that a refactor didn't change behavior. `ingame.js` measures standing jumpers with the defenders reacting as they do in play.
 - **The page** (`prototype/shot-model-lab.html`): canvas, input, camera, drawing and the panels, about 520 lines. Input events only record what is held; each tick the page hands the game one plain input (keys, cursor position, shot, Shift, gather).
 - **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
-**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js`, `sim/tests-game.js` and `sim/tests-rules.js`):
+**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js`, `sim/tests-game.js`, `sim/tests-rules.js` and `sim/tests-lockstep.js`):
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
@@ -621,6 +622,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, steals, live balls off a missed dunk, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
+- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input, and two copies of a game stay identical over a slow link, waiting when it is slower than the input delay and resyncing after a drift.
 
 **Milestones:**
 
@@ -671,6 +673,33 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 - **14 seconds and 21 points** are starting values, as is the one-second grace after a check.
 - **Steals are still dice rolls,** and now they cost the possession.
 - **Every possession starts from the same spot,** so the first few seconds can become routine.
+
+## Two players online
+
+Two people can now play each other: each plays their own side, and whoever doesn't have the ball controls the on-ball defender. It is bare bones, built to find out how defending feels. The rim protector is still the AI for both.
+
+**Defending.** The same keys as on offense, so there is still nothing new to learn and no move buttons.
+
+| Input | On defense |
+| --- | --- |
+| WASD | Moves the defender: 14 ft/s, a little quicker than a dribbler's 13.5 |
+| Cursor | The hand. How far it is from the body is how far the arm is out. Pointed at the ball handler it is a hand up, which is what the contest formulas read |
+| Cursor on the ball | Takes it, if the hand gets within 0.55 ft of a ball that is being dribbled or held and the handler's off arm is not in the way. Not during the first second after a check |
+| Space | Jumps. No steering in the air, and the usual recovery on landing |
+
+Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke and strip rolls are off when a player defends, and the ball has to be reached. From in front, across the handler's body, it can't be; from the ball's side it can. **Blocks are the defender's timing:** the jump is theirs to choose, so the knife-edge found in Calibration is now a matter of skill, not of when an AI happens to leave its feet.
+
+**Staying in step** (`sim/lockstep.js`). Both browsers run the whole game. Each samples its own input once per tick and sends it 8 ticks (67 ms) ahead of when it is used, and neither advances a tick until it has both. The delay is the same on a press and a release, so shot timing is as fair online as off. Every 60 ticks they compare a short fingerprint of the game; if the copies differ, the host sends its whole game and the guest takes it. That covers the case where two browsers' maths differs in the last digit.
+
+**Connecting.** The browsers talk directly over WebRTC. With no server to introduce them, the players pass two codes between themselves by hand, each about 830 characters: the host's, then the guest's back. A public server (Google's STUN) is asked only for each browser's outside address.
+
+**Limits, for now:**
+
+- **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other.
+- **Only tried on one machine.** Two browsers side by side connected and stayed identical through a made three and a change of possession. It has not been played across the internet, or between two different browsers.
+- **Everything waits 67 ms,** and longer if the link is slower than that.
+- **No rematch and no tuning online.** The host's settings are used; when a game ends, leave and host again.
+- **The numbers are first guesses:** the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
 
 ## Prototype defense AI
 
@@ -853,7 +882,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 
 ## Known gaps and roadmap
 
-Full physics is built, the game runs outside the page, and there is a first set of rules. A second player on defense is next, then the block model and frames.
+Full physics is built, the game runs outside the page, and there is a first set of rules. Two players can now play each other online, bare bones. Next is playing it, then the block model and frames.
 
 **Known gaps:**
 
@@ -878,7 +907,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
 5. **Rebounding:** a first version is in: misses are live balls on real caroms. Jumping, boxing out and reaction time are still to come.
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
-7. **Human defense controls:** WASD movement with the mouse for contests, steals and passing-lane deflections.
+7. **Human defense controls:** a first version is in for the on-ball defender (see Two players online). Passing-lane deflections wait for passing.
 
 **Engineering:** the whole game now runs outside the page. Physics, launch, noise, the situation rules and the game itself are modules in `sim/`, tested in Node, and the page only handles input and drawing. The game is deterministic on one JavaScript engine. Across engines that is not guaranteed, because functions like `Math.sin` may differ in their last digits, which matters for how online play keeps two machines in step.
 

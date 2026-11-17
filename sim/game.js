@@ -32,6 +32,7 @@ const C = {
   STEP_T: 0.2, GATHER_SPEED: 6,   // gather steps
   COMMIT_MS: 150,                  // release before this and the shot is a pump fake
   ARM: 2.6, SHOULDER: 0.75,       // hands: reach from each shoulder (will come from wingspan)
+  DEF_SPEED: 14, DEF_ACC: 60, STEAL_R: 0.55,                               // a player on defense: top speed, acceleration, and how close a hand must get to the ball
   DRIB_SPEED: 13.5, ACC0: 85, DECEL: 95, REACH_MIN: 0.7, REACH_MAX: 2.4,   // explosive from a stop, sharper to stop than to start
   FADE_SPEED: 5, FADE_COMMIT: 150,   // canned fade: always the same, so its release timing is learnable
   // finishing
@@ -59,9 +60,12 @@ const RULES = {
 function makeDef(x, y) { return { x, y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, len: 1, stand: 8.2 }; }
 function create(opts = {}) {
   const game = {
+    tick: 0,                                                 // steps taken
+    duo: !!opts.duo,                                         // two players: whoever is not on offense controls the on-ball defender
+    defIn: { u: false, d: false, l: false, r: false, x: 25, y: 20 },   // that defender's keys and cursor this tick
     seed: (opts.seed ?? 1) | 0,                              // the game's random stream
     forced: [],                                              // values the next random rolls will take, for tests
-    input: { shot: false, gather: false },                   // buttons as of the last tick, to see presses and releases
+    prev: [{ shot: false, gather: false }, { shot: false, gather: false }],   // each side's buttons as of the last tick, to see presses and releases
     params: { rating: 80, fadeR: 70, handle: 80, dQuick: 70, dSteal: 60, tAssist: 15, bonus: 30, aAssist: 40, drift: 1, finish: 80, floater: 75, dunk: 75, stepUp: 50,
               defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 },
     P: { x: 25, y: 26, vx: 0, vy: 0 },                       // the ball handler
@@ -188,7 +192,8 @@ function pathPoint(b) {
   return b.path[i];
 }
 // Does the handler have the ball? Not while it is in the air, loose, or dead.
-const canSteal = () => !g.flow.on || g.flow.grace <= 0;
+const graceOver = () => !g.flow.on || g.flow.grace <= 0;
+const canSteal = () => !g.duo && graceOver();              // the AI's steal rolls; a player on defense has to get a hand on it
 const inPlay = () => !g.flow.on || g.flow.phase === "live" || g.flow.phase === "ft";
 const ballFree = () => inPlay() && !g.flow.loose && (!g.ball || (g.ball.phase === "path" && g.ball.announced));
 const LAYUP_LABEL = { "Swish": "Finished", "Bank": "Kissed off the glass", "In off the rim": "Rolled in", "In and out": "In and out",
@@ -293,7 +298,7 @@ function startShot(shift) {
   D.jumpAt = null; R.jumpAt = null;
   if (cx.kind === "layup" || cx.kind === "dunk") {
     // shot blockers pick a moment to leave their feet; the shooter can hang to wait them out
-    for (const d of defenders()) { d.jumpAt = rnd() < 0.25 ? null : params.react*0.5 + 40 + rnd()*180; }
+    for (const d of defenders()) { if (g.duo && d === D) continue; d.jumpAt = rnd() < 0.25 ? null : params.react*0.5 + 40 + rnd()*180; }
   }
 }
 
@@ -414,6 +419,7 @@ function launchBall(f, blocked, make, dur, hmax) {
 // Nothing is triggered. The ball follows the cursor, the body follows WASD, and the defender reacts to
 // what they saw one reaction time ago. "Crossover" and "hesi" are names for what that produces.
 function defHand() {
+  if (g.duo && D.hx !== undefined) return { x: D.hx, y: D.hy };       // a player's hand is where their cursor puts it
   const tx = P.x - D.x, ty = P.y - D.y, tl = Math.hypot(tx, ty) || 1, reach = 0.85 + 0.75*D.hand;
   return { x: D.x + tx/tl*reach, y: D.y + ty/tl*reach };
 }
@@ -734,7 +740,7 @@ function update(dt) {
   const sawShot = !!(perceived(params.react/1000) || {}).rising;      // they react to the shooting motion they saw
   const reacted = sawShot || shot.state === "flight";
   for (const d of defenders()) {                                       // close defenders may leave their feet, so a fake can get them in the air
-    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0 && !still) {
+    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0 && !still && !(g.duo && d === D)) {
       const dist = Math.hypot(d.x - P.x, d.y - P.y);
       if (dist < (d === R ? 7 : 5) && rnd() < (d === R ? 0.6 : 0.5)) d.jumpT = 0;
     }
@@ -751,7 +757,8 @@ function update(dt) {
     }
     if (d.land > 0) d.land -= dt;
   }
-  if (params.defOn && !still) {
+  if (params.defOn && !still && g.duo) playerDefender(dt);
+  else if (params.defOn && !still) {
     const f = frame(P);
     let tx, ty, maxS, acc;
     if (loose) { const c = looseTarget(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }   // go and get it
@@ -842,6 +849,28 @@ function tickBall(dt) {
   if (g.meterFlash) { g.meterFlash.t -= dt; if (g.meterFlash.t <= 0) g.meterFlash = null; }
   g.fx = g.fx.filter(o => (o.t += dt) < 1.1);
 }
+
+// ---------- A player on defense ----------
+// WASD moves, the cursor is the hand, Space jumps. How far the cursor is from the body is how far the arm is out;
+// pointing it at the ball handler raises it into a contest, and getting it onto the ball takes the ball.
+function playerDefender(dt) {
+  const i = g.defIn;
+  if (D.jumpT < 0) {                                                   // no steering in the air
+    const ax = (i.r ? 1 : 0) - (i.l ? 1 : 0), ay = (i.d ? 1 : 0) - (i.u ? 1 : 0), al = Math.hypot(ax, ay) || 1;
+    const ex = ax/al*C.DEF_SPEED - D.vx, ey = ay/al*C.DEF_SPEED - D.vy, el = Math.hypot(ex, ey), st = C.DEF_ACC*dt;
+    if (el <= st) { D.vx += ex; D.vy += ey; } else { D.vx += ex/el*st; D.vy += ey/el*st; }
+  }
+  moveDef(D, dt);
+  const cx = i.x - D.x, cy = i.y - D.y, cd = Math.hypot(cx, cy) || 1, out = clamp((cd - 1)/2, 0, 1);
+  const px = P.x - D.x, py = P.y - D.y, pd = Math.hypot(px, py) || 1;
+  D.hand = out*Math.max(0, (cx*px + cy*py)/(cd*pd));
+  D.hx = D.x + cx/cd*(0.85 + 0.75*out); D.hy = D.y + cy/cd*(0.85 + 0.75*out);
+  // a hand on a ball that is being dribbled or held takes it, unless the handler's off arm is in the way
+  if (shot.state !== "idle" || !ballFree() || !graceOver()) return;
+  const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
+  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1) turnover(hold.state === "none" ? "Picked clean" : "Stripped");
+}
+function defenderJump() { if (D.jumpT < 0 && D.land <= 0) D.jumpT = 0; }
 
 // ---------- Rules: score, shot clock, possessions ----------
 // Blow the whistle: play stops for a moment, then `next` happens: "change" (the other side's ball), "keep" (same
@@ -1035,21 +1064,46 @@ function releaseShot() {
   if (shot.fakeable && shot.t < C.COMMIT_MS) { pumpFake(); return; }
   letGo();
 }
-// One tick. input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
-// shot (the shot button is down), shift (held, read when the shot starts), gather (the gather key is down).
-// Presses and releases are read off the change since the last tick.
+// One tick. An input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
+// shot (the shot button is down), shift (held, read when the shot starts), gather (Space is down). Presses and
+// releases are read off the change since the last tick.
+// With one player, pass their input. With two, pass [side 0's input, side 1's input]: the side with the ball plays
+// offense and the other controls the on-ball defender, for whom Space is a jump.
 function step(input) {
   const fl = g.flow, live = !fl.on || fl.phase === "live", ft = fl.on && fl.phase === "ft";
-  keys.u = live && !!input.u; keys.d = live && !!input.d; keys.l = live && !!input.l; keys.r = live && !!input.r;   // nobody moves at the line or on a dead ball
-  mouse.x = input.x; mouse.y = input.y;
-  const was = g.input, now = { shot: !!input.shot, gather: !!input.gather };
+  const two = Array.isArray(input), side = two ? fl.offense : 0, off = two ? input[side] : input;
+  keys.u = live && !!off.u; keys.d = live && !!off.d; keys.l = live && !!off.l; keys.r = live && !!off.r;   // nobody moves at the line or on a dead ball
+  mouse.x = off.x; mouse.y = off.y;
+  const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather };
   if (live && now.gather && !was.gather) gather();
   if (live || ft) {
-    if (now.shot && !was.shot) startShot(!!input.shift);
+    if (now.shot && !was.shot) startShot(!!off.shift);
     else if (!now.shot && was.shot) releaseShot();
   }
-  g.input = now;
+  g.prev[side] = now;
+  if (two) {
+    const def = input[1 - side], dWas = g.prev[1 - side], dNow = { shot: !!def.shot, gather: !!def.gather };
+    Object.assign(g.defIn, { u: live && !!def.u, d: live && !!def.d, l: live && !!def.l, r: live && !!def.r, x: def.x, y: def.y });
+    if (g.duo && live && dNow.gather && !dWas.gather) defenderJump();
+    g.prev[1 - side] = dNow;
+  }
+  g.tick++;
   update(TICK);
+}
+// For keeping two copies of a game in step: a short fingerprint to compare, a copy to send, and a way to take one in.
+function digest() {
+  const r = v => Math.round(v*1000), fl = g.flow;
+  return [g.tick, g.seed, r(P.x), r(P.y), r(D.x), r(D.y), r(R.x), r(R.y), fl.score[0], fl.score[1], fl.offense, fl.phase, shot.state, stats.fga].join(",");
+}
+const snapshot = () => JSON.parse(JSON.stringify({ ...g, view: undefined }));
+// Takes a snapshot into this game in place, so anything holding on to its parts (the page does) still sees them.
+function load(snap) {
+  for (const k of Object.keys(snap)) {
+    const a = g[k], b = snap[k];
+    if (Array.isArray(a) && Array.isArray(b)) { a.length = 0; a.push(...b); }
+    else if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) { for (const kk of Object.keys(a)) delete a[kk]; Object.assign(a, b); }
+    else g[k] = b;
+  }
 }
 function setDefender(which, on) {
   params[which] = on;
@@ -1063,6 +1117,7 @@ const on = fn => (game, ...args) => { use(game); return fn(...args); };
 return {
   C, HOOP, TICK, RULES, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
   step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats), setRules: on(setRules), newGame: on(newGame),
+  digest: on(digest), snapshot: on(snapshot), load: on(load),
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), fadeSigmaFor: on(fadeSigmaFor),
