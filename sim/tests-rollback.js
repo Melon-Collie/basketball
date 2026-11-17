@@ -13,7 +13,7 @@ const RIM = GM.HOOP, same = (a, b) => JSON.stringify({ ...a, view: null }) === J
 //   loss          the share of input packets that never arrive. The rest arrive in whatever order their lag gives.
 //   late          side 1 starts this many ticks after side 0, as a guest does who starts when the host's word arrives
 // Fingerprints and whole games take the same lag but always arrive, and in order, as on the page.
-function pair(seed, { lag = 0, jitter = 0, loss = 0, late = 0, delay } = {}) {
+function pair(seed, { lag = 0, jitter = 0, loss = 0, late = 0, delay, watch } = {}) {
   const games = [0, 1].map(() => GM.create({ seed, rules: true, duo: true })), wire = [], rand = RB_RAND(seed);
   let clock = 0, sent = 0, bytes = 0, lastSure = [0, 0];
   const peers = games.map((g, me) => RB.create(g, me, m => {
@@ -22,7 +22,7 @@ function pair(seed, { lag = 0, jitter = 0, loss = 0, late = 0, delay } = {}) {
     let at = clock + lag + (loose ? Math.floor(rand()*(jitter + 1)) : jitter);
     if (!loose) at = lastSure[me] = Math.max(at, lastSure[me]);
     wire.push({ at, to: 1 - me, m: JSON.parse(text) });
-  }, { delay }));
+  }, { delay, watch }));
   const deliver = () => { for (let i = 0; i < wire.length;) { if (wire[i].at <= clock) { const w = wire.splice(i, 1)[0]; RB.receive(peers[w.to], w.m); } else i++; } };
   const stats = { replayed: 0, deepest: 0, stood: [0, 0] }, given = [new Map(), new Map()];   // given: every input each side gave, by the tick it is used on
   const tick = script => {
@@ -156,6 +156,26 @@ ltest("A side whose clock is ahead slows until the two agree, so both guess abou
   p.settle();
   check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 8)), "the copies should match each other and the true game");
   return `18 ticks apart at the start, ${early} after two seconds, ${gap} at the end`;
+});
+
+ltest("A correction reports how far it moved each player, so drawing can slide them instead of snapping", () => {
+  const p = pair(9, { lag: 14, watch: g => [g.D.x, g.D.y] }), g = p.games[0], side0 = p.peers[0];
+  // the defender, played by the far side, runs right, then cuts back left
+  const cut = (me, c) => ({ ...idle(RIM.x, RIM.y), r: me === 1 && c >= 150 && c < 260, l: me === 1 && c >= 260 && c < 330 });
+  let x = g.D.x, shown = g.D.x, off = 0, raw = 0, slid = 0;
+  for (let t = 0; t < 420; t++) {
+    p.tick(cut);
+    if (side0.jump) { off += side0.jump[0]; side0.jump = null; }      // drawn this far from where the game now has them
+    raw = Math.max(raw, Math.abs(g.D.x - x)); slid = Math.max(slid, Math.abs(g.D.x + off - shown));
+    x = g.D.x; shown = g.D.x + off;
+  }
+  const stride = 14*GM.TICK;                                          // the furthest a defender runs in one tick
+  check(side0.rollbacks >= 3, `the cuts should have been guessed wrong: went back ${side0.rollbacks} times`);
+  check(raw > 2*stride, `uncorrected, the defender should snap: at most ${raw.toFixed(2)} ft in a tick`);
+  check(slid <= stride*1.05, `with the reported jumps taken off, no tick should move them more than a stride (${stride.toFixed(3)} ft): ${slid.toFixed(3)}`);
+  p.settle();
+  check(same(p.games[0], p.games[1]) && same(p.games[0], truth(p, 9)), "watching should not change the game");
+  return `biggest move in one tick: ${raw.toFixed(2)} ft as corrected, ${slid.toFixed(2)} ft with the jumps taken off`;
 });
 
 ltest("If the copies drift, side 1 takes side 0's game and they are identical again", () => {

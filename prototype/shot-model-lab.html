@@ -213,6 +213,12 @@ dd small{color:var(--muted)}
       </section>
 
       <section>
+        <h2>Display</h2>
+        <label class="check" style="margin-top:0"><input id="meterAtCursor" class="own" type="checkbox"> Shot meter follows the cursor</label>
+        <p class="caption">Puts the meter beside your cursor, with its release line level with it, so you can time a shot without looking away from your aim. Off, it stays beside your player.</p>
+      </section>
+
+      <section>
         <h2>Tuning</h2>
         <label class="check" style="margin-top:0"><input id="rules" type="checkbox" checked> Game rules: score, shot clock, possessions</label>
         <p class="sub-h">Jump shooting</p>
@@ -258,12 +264,14 @@ const { C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint } = GM;
 const LAB = new URLSearchParams(location.search).has("lab");   // ...html?lab opens straight into free shooting, with the game rules off
 const G = GM.create({ seed: Math.floor(Math.random()*4294967296), rules: !LAB });
 const { P, D, R, shot, hold, drib, stats, params } = G;
-window.shotLab = { game: G, get net() { return net; } };   // for the console and for tools/
+window.shotLab = { game: G, get net() { return net; }, get ease() { return ease; } };   // for the console and for tools/
 const handPositions = () => GM.handPositions(G), shoulder = (f, s) => GM.shoulder(G, f, s), stepFoot = k => GM.stepFoot(G, k);
 const dribbleBallPos = () => GM.dribbleBallPos(G), heldBallPos = () => GM.heldBallPos(G), ballFree = () => GM.ballFree(G);
 const tightness = () => GM.tightness(G), fadeSigmaFor = type => GM.fadeSigmaFor(G, type);
 let live = null, shiftDown = false;                   // the live readout's preview of a shot from here; whether Shift is held
 let net = null;                                       // an online game in progress, or being set up
+let meterAtCursor = false;                            // draw the shot meter beside the cursor, not the player
+try { meterAtCursor = localStorage.getItem("shotLab.meterAtCursor") === "1"; } catch (e) { /* no storage here: starts off */ }
 
 
 const VIEW = { w: 53, h: 41.5 };                    // canvas aspect
@@ -295,7 +303,12 @@ function readTheme() {
   const cs = getComputedStyle(document.documentElement);
   for (const k of ["court","grain","paint","courtline","oob","rim","ball","make","miss","accent","player","defender","defender2","ink","muted","line","panel"]) T[k] = cs.getPropertyValue("--" + k).trim();
 }
-function S(x, y) { return [(x - cam.x)*ppf + court.width/2, (y - cam.y)*ppf + court.height/2]; }
+// Court to screen. S0 is for things fixed to the floor. S is for a player and what they carry: it adds `nudge`,
+// which is how far that player is being drawn from where the game has them (see Sliding corrections, below).
+function S0(x, y) { return [(x - cam.x)*ppf + court.width/2, (y - cam.y)*ppf + court.height/2]; }
+function S(x, y) { return nudge ? S0(x + nudge.x, y + nudge.y) : S0(x, y); }
+let nudge = null;
+const ease = { P: { x: 0, y: 0, h: 0 }, D: { x: 0, y: 0, h: 0 }, R: { x: 0, y: 0, h: 0 } };
 let cps = 10;                                           // court image scale, capped to stay inside mobile canvas limits
 function SC(x, y) { return [(x - CACHE.x0)*cps, (y - CACHE.y0)*cps]; }
 function resize() {
@@ -402,18 +415,21 @@ function drawBall(x, y, h, alpha) {
   ctx.globalAlpha = 1;
 }
 function drawDefender(def, color, radius) {
-  const [dx, dy] = S(def.x, def.y), lift = def.h*ppf*1.1, sc = 1 + 0.2*def.h;
-  if (def.h > 0.02) {
+  const mine = def === D ? ease.D : ease.R, was = nudge, h = Math.max(0, def.h + mine.h);
+  nudge = mine;
+  const [dx, dy] = S(def.x, def.y), lift = h*ppf*1.1, sc = 1 + 0.2*h;
+  if (h > 0.02) {
     ctx.globalAlpha = 0.25; ctx.fillStyle = "#000";
     ctx.beginPath(); ctx.ellipse(dx, dy, ppf*radius, ppf*radius*0.6, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1;
   }
   ctx.fillStyle = color; ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill();
   const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1;
-  const up = Math.max(def.hand, def.h), reach = radius*0.8 + 0.75*up;
+  const up = Math.max(def.hand, h), reach = radius*0.8 + 0.75*up;
   // a player's hand is where their cursor put it; the AI's reaches toward the ball handler
   const [hx, hy] = G.duo && def === D && D.hx !== undefined ? S(D.hx, D.hy) : S(def.x + tx/tl*reach, def.y + ty/tl*reach);
   ctx.fillStyle = T.player; ctx.strokeStyle = color; ctx.lineWidth = ppf*0.12;
   ctx.beginPath(); ctx.arc(hx, hy - lift, ppf*(0.28 + 0.14*up)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  nudge = was;
 }
 function drawFeet() {
   const foot = (p, pivot) => {
@@ -469,10 +485,11 @@ function tag(text, x, y, color) {
 }
 function draw() {
   ctx.fillStyle = T.oob; ctx.fillRect(0, 0, court.width, court.height);
-  { const [ox, oy] = S(CACHE.x0, CACHE.y0); ctx.drawImage(cache, ox, oy, CACHE.w*ppf, CACHE.h*ppf); }
+  { const [ox, oy] = S0(CACHE.x0, CACHE.y0); ctx.drawImage(cache, ox, oy, CACHE.w*ppf, CACHE.h*ppf); }
+  nudge = ease.P;                                        // most of what follows is the ball handler's; the rest says otherwise
   const f = frame(P);
   const [px, py] = S(P.x, P.y);
-  const [hx, hy] = S(HOOP.x, HOOP.y);
+  const [hx, hy] = S0(HOOP.x, HOOP.y);
   const kind = live ? live.cx.kind : "jumper";
   const ax = G.mouse.x - P.x, ay = G.mouse.y - P.y, al = Math.hypot(ax, ay);   // the ball handler's cursor, whoever that is
 
@@ -521,6 +538,7 @@ function draw() {
     drawBall(P.x + f.u.x*0.7, P.y + f.u.y*0.7, lift, 1);
   }
   if (shot.state === "idle" && ballFree()) { const b = hold.state === "none" ? dribbleBallPos() : heldBallPos(); drawBall(b.x, b.y, b.h, 1); }
+  nudge = null;                                          // a ball out of the hands is nobody's
   if (G.ball && G.ball.phase === "path") { const pp = pathPoint(G.ball); drawBall(pp.x, pp.y, pathVisH(G.ball, pp), G.ball.announced ? 0.45 : 1); }
   else if (G.ball) {
     if (G.ball.phase === "flight") {
@@ -529,9 +547,10 @@ function draw() {
     } else if (G.ball.phase === "drop") drawBall(HOOP.x, HOOP.y + G.ball.t*1.5, 0, 1 - G.ball.t/0.4);
     else if (G.ball.phase === "bounce") drawBall(G.ball.bx, G.ball.by, 3*Math.abs(Math.sin(G.ball.t*7))*(1 - G.ball.t), 1 - G.ball.t/0.9);
   }
+  nudge = ease.P;
   ctx.strokeStyle = T.rim; ctx.lineWidth = ppf*0.12; ctx.beginPath(); ctx.arc(hx, hy, 0.75*ppf, 0, 2*Math.PI); ctx.stroke();
   if (live && live.cx.glass && shot.state !== "flight") {          // aiming at the glass: green if that spot can bank it in
-    const [gx, gy] = S(live.cx.glass.target.x, PHX.PHYS.BOARD.y);
+    const [gx, gy] = S0(live.cx.glass.target.x, PHX.PHYS.BOARD.y);
     ctx.save(); ctx.fillStyle = live.cx.glass.works ? T.make : T.miss; ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = ppf*0.06;
     ctx.fillRect(gx - ppf*0.35, gy - ppf*0.22, ppf*0.7, ppf*0.44); ctx.strokeRect(gx - ppf*0.35, gy - ppf*0.22, ppf*0.7, ppf*0.44); ctx.restore();
   }
@@ -553,17 +572,28 @@ function draw() {
     } else {
       ctx.save(); ctx.globalAlpha = a; ctx.font = `700 ${Math.round(ppf*1.4)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
       ctx.textAlign = "center"; ctx.lineWidth = ppf*0.35; ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.fillStyle = "#FFFFFF";
-      const [tx0, ty0] = o.x !== undefined ? S(o.x, o.y - 2.4) : [hx, hy + ppf*3.4];
+      const [tx0, ty0] = o.x !== undefined ? S0(o.x, o.y - 2.4) : [hx, hy + ppf*3.4];
       const y = ty0 + ppf*o.t*0.8;
       ctx.strokeText(o.text, tx0, y); ctx.fillText(o.text, tx0, y); ctx.restore();
     }
   }
 
-  // meters
-  const mx = px + ppf*1.9, mh = ppf*4.2, mw = ppf*0.55, mtop = py - mh*0.75;
+  // meters: beside the player, or beside the cursor if that was asked for and the shot is yours
+  const mh = ppf*4.2, mw = ppf*0.55;
+  let mx = px + ppf*1.9, mtop = py - mh*0.75;
+  const atCursor = meterAtCursor && pointer.fx !== undefined && (!net || !net.live || G.flow.offense === net.me);
+  // line: how far down the meter its release line is. Beside the cursor, that line sits level with the cursor, and
+  // the meter goes to the cursor's right, or its left where there is no room.
+  const place = line => {
+    if (!atCursor) return;
+    const cx = pointer.fx*court.width, cy = pointer.fy*court.height, gap = ppf*1.3;
+    mx = cx + gap + mw + ppf*0.3 <= court.width ? cx + gap : cx - gap - mw;
+    mtop = clamp(cy - mh*line, ppf*0.3, Math.max(ppf*0.3, court.height - mh - ppf*0.3));
+  };
   if (shot.state === "shooting" && shot.kind === "layup") {
     // rise, then hang: the red part is control you are spending to wait out the block
     const total = C.RISE_LAYUP + C.MAX_HANG, yOf = t => mtop + mh*(1 - clamp(t, 0, total)/total);
+    place(1 - C.RISE_LAYUP/total);
     ctx.save(); ctx.fillStyle = "rgba(20,32,43,.75)"; ctx.fillRect(mx, mtop, mw, mh);
     ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = 0.85;
     ctx.fillRect(mx + mw*0.2, yOf(Math.min(shot.t, C.RISE_LAYUP)), mw*0.6, mtop + mh - yOf(Math.min(shot.t, C.RISE_LAYUP)));
@@ -580,6 +610,7 @@ function draw() {
   const timed = shot.state === "shooting" && (shot.kind === "jumper" || shot.kind === "floater");
   const showT = timed ? shot.t : (G.meterFlash ? MT.ideal + G.meterFlash.e : null);
   if (showT !== null) {
+    place(1 - MT.ideal/MT.max);
     const alpha = shot.state === "shooting" ? 1 : Math.min(1, G.meterFlash.t/0.3);
     const yOf = t => mtop + mh*(1 - clamp(t, 0, MT.max)/MT.max);
     ctx.save(); ctx.globalAlpha = alpha;
@@ -597,6 +628,7 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(MT.ideal)); ctx.lineTo(mx + mw + ppf*0.2, yOf(MT.ideal)); ctx.stroke();
     ctx.restore();
   }
+  nudge = null;
 }
 
 function drawInset() {
@@ -795,6 +827,9 @@ for (const k of Object.keys(fmt)) {
   el.addEventListener("input", sync); sync();
 }
 $("defOn").addEventListener("change", e => GM.setDefender(G, "defOn", e.target.checked));
+// where the shot meter is drawn is the player's own choice, remembered by this browser where it can be
+$("meterAtCursor").checked = meterAtCursor;
+$("meterAtCursor").addEventListener("change", e => { meterAtCursor = e.target.checked; try { localStorage.setItem("shotLab.meterAtCursor", meterAtCursor ? "1" : "0"); } catch (err) { /* not remembered */ } });
 $("rimOn").addEventListener("change", e => GM.setDefender(G, "rimOn", e.target.checked));
 
 // ---------- Online: two players, one game each, kept together ----------
@@ -810,8 +845,26 @@ const encode = d => btoa(JSON.stringify(d)), decode = text => JSON.parse(atob(te
 // delay in ms (the default is 25).
 const QUERY = new URLSearchParams(location.search), queryNum = k => Math.max(0, +QUERY.get(k) || 0);
 const FAKE = { lag: queryNum("lag"), jitter: queryNum("jitter"), loss: queryNum("loss")/100 };
+
+// Sliding corrections. When a guess about the other player turns out wrong, the game puts everyone where they
+// really are at once. Drawn as is, that is a snap. So each player is drawn where they were a moment ago, plus what
+// is left of the correction, and that remainder shrinks away: by about two thirds every SLIDE seconds. Only the
+// drawing lags; the game, and what counts as a contest or a hand on the ball, is always the corrected one.
+// ?smooth=150 sets the time in ms; ?smooth=0 turns it off.
+const SLIDE = (QUERY.has("smooth") ? queryNum("smooth") : 100)/1000, SNAP = 5;   // a correction of more than SNAP ft is a move to a new spot, not a slide
+const WATCHED = [["P", "x"], ["P", "y"], ["D", "x"], ["D", "y"], ["D", "h"], ["R", "x"], ["R", "y"], ["R", "h"]];
+const watch = g => WATCHED.map(([who, what]) => g[who][what]);
+const settle = () => { for (const k of Object.keys(ease)) ease[k].x = ease[k].y = ease[k].h = 0; };
+function slide(peer, dt) {
+  const keep = SLIDE > 0 ? Math.exp(-dt/SLIDE) : 0;
+  for (const k of Object.keys(ease)) { ease[k].x *= keep; ease[k].y *= keep; ease[k].h *= keep; }
+  if (!peer.jump) return;
+  WATCHED.forEach(([who, what], i) => { ease[who][what] += peer.jump[i]; });
+  peer.jump = null;
+  for (const k of Object.keys(ease)) if (SLIDE <= 0 || Math.hypot(ease[k].x, ease[k].y) > SNAP) ease[k].x = ease[k].y = ease[k].h = 0;
+}
 const setOnlineUi = on => {
-  document.querySelectorAll("aside input").forEach(el => { el.disabled = on; });
+  document.querySelectorAll("aside input:not(.own)").forEach(el => { el.disabled = on; });   // the game's settings are the host's; how it is drawn stays your own
   $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netSetup").hidden = on; $("netManual").hidden = on;
   $("netStats").hidden = !on;
 };
@@ -870,7 +923,7 @@ function begin(start) {
   Object.assign(params, start.params);
   for (const k of Object.keys(fmt)) { $(k).value = params[k]; $("o-" + k).textContent = fmt[k](String(params[k])); }
   $("rules").checked = true; $("defOn").checked = true; $("rimOn").checked = params.rimOn;
-  net.peer = RB.create(G, net.me, send, { delay: start.delay }); net.live = true;
+  net.peer = RB.create(G, net.me, send, { delay: start.delay, watch }); net.live = true; settle();
   CAM = CAMS.game; cam.x = D.x; cam.y = (net.me === 0 ? P.y : D.y) - CAM.lead; resize();
   setOnlineUi(true); clearLast(); renderBoard();
   netSay(`Connected. You are ${SIDES[net.me]}; ${SIDES[0]} has the ball first.`);
@@ -879,6 +932,7 @@ function begin(start) {
 function netFrame(dt) {
   const peer = net.peer;
   RB.frame(peer, dt, tickInput);
+  slide(peer, dt);
   const waiting = RB.waiting(peer);
   if (waiting !== net.waiting) { net.waiting = waiting; netSay(waiting ? "Waiting for the other player…" : `Connected. You are ${SIDES[net.me]}.`); }
   if ((net.statsT -= dt) <= 0) {
@@ -890,6 +944,7 @@ function netFrame(dt) {
   }
 }
 function drop() {
+  settle();
   if (!net) return;
   const old = net; net = null;
   try { if (old.dc) old.dc.close(); if (old.fast) old.fast.close(); old.pc.close(); } catch (e) { /* already gone */ }

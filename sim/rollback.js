@@ -34,11 +34,15 @@ const alike = (a, b) => a.x === b.x && a.y === b.y && a.u === b.u && a.d === b.d
 
 // game: the game on screen. me: 0 or 1, the side this copy plays. Side 0 is the reference when the copies disagree.
 // opts.delay: ticks of input delay, if not DELAY. Both sides must be given the same.
+// opts.watch: a function giving a list of numbers read off a game, such as where each player is. Whenever the game
+//   on screen is corrected, `jump` is how far each of them moved because of it (what it was less what it is now, at
+//   the same tick), added up until whoever is drawing takes it and sets it back to null. Drawing each thing that
+//   far from where it now is, and letting that shrink away, turns a snap into a slide.
 function create(game, me, send, opts = {}) {
   const delay = opts.delay ?? DELAY, sure = GM.create();
   GM.load(sure, GM.snapshot(game));
   return {
-    game, sure, me, send, delay,
+    game, sure, me, send, delay, watch: opts.watch || null, jump: null,
     clock: 0,                    // ticks sampled so far; the game on screen is run up to this tick
     owed: 0, rate: 1, slow: 0,   // time not yet turned into ticks, and ticks still to give up because this clock is ahead
     mine: new Map(), theirs: new Map(), guess: new Map(),   // inputs by the tick they are used on; guess is what was assumed for theirs
@@ -82,17 +86,22 @@ function advance(p) {
       for (const m of [p.mine, p.theirs, p.prints, p.theirPrints]) for (const k of m.keys()) { if (k < S.tick - KEEP) m.delete(k); else break; }
     }
   }
-  let replayed = 0;
+  let replayed = 0, was = null, at = -1;
+  // note how far the watched numbers have moved once the replay is back at the tick the game was showing
+  const moved = () => { const now = p.watch(G); p.jump = was.map((v, i) => v - now[i] + (p.jump ? p.jump[i] : 0)); was = null; };
   if (p.dirty) {
     replayed = Math.max(0, Math.min(G.tick, p.clock) - S.tick);
+    if (p.watch) { was = p.watch(G); at = G.tick; }
     GM.load(G, GM.snapshot(S));
     p.guess.clear(); p.dirty = false; p.rollbacks++; p.depth = replayed;
+    if (was && G.tick >= at) moved();
   }
   while (G.tick < p.clock) {
     const t = G.tick, a = t < p.delay ? NEUTRAL : p.mine.get(t);
     let b = NEUTRAL;
     if (t >= p.delay) { if (t <= p.got) b = p.theirs.get(t); else { b = p.last; p.guess.set(t, b); } }
     GM.step(G, p.me === 0 ? [a, b] : [b, a]);
+    if (was && G.tick === at) moved();
   }
   return replayed;
 }

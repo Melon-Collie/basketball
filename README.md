@@ -104,7 +104,7 @@ node tools/online.js --lag 60 --jitter 20 --loss 5 --seconds 20
 
 Add `--link` to have them connect by invite link, as players do, with the introduction service played by the script.
 
-To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss=5` on the end of the address, host, and open the link it gives in a second window. The link carries the same settings.
+To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss=5` on the end of the address, host, and open the link it gives in a second window. The link carries the same settings. `&smooth=0` turns off the sliding of corrections, to see what it is hiding; any other number is how long a correction takes to slide away, in ms.
 
 ## Controls
 
@@ -116,5 +116,7 @@ Mouse and keyboard:
 - **Space** gathers the ball.
 
 On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps.
+
+The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.
 
 See the design doc for how context picks the shot type.

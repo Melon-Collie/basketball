@@ -622,7 +622,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, steals, live balls off a missed dunk, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
-- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
+- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Each correction reports how far it moved each player, and with that taken off nobody moves more than a stride in a tick. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
 
 **Milestones:**
 
@@ -695,6 +695,7 @@ Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke 
 - **The other player is guessed, then corrected.** Their input for the current tick has usually not arrived yet, so the game plays on as if they were still doing what they were last seen doing. When the real input arrives and differs, the game goes back to the last tick both inputs were known for and replays to the present with the right one. On screen that is the other player jumping to where they really are; how far depends on the lag and on how sharply they changed what they were doing.
 - **Two games per side.** One has only ever been stepped with real inputs from both players; the one on screen runs ahead of it on guesses. Going back is copying the first over the second, which takes about 0.06 ms, and replaying a tick takes about 0.015 ms. The last-shot panel and the stats read the first, so a result is never shown and then taken back.
 - **How far ahead.** With the two clocks together, the game on screen runs ahead of what is known by the one-way lag less the 25 ms. At 100 ms each way that is about 9 ticks. Past 30 ticks (250 ms) a side stops and waits, so nobody plays far into a game that may not have happened.
+- **Corrections slide.** A correction puts everyone where they really are at once, which drawn as is would be a snap. So the page draws each player where they were, plus what is left of the correction, and that remainder shrinks by about two thirds every 100 ms. On a 100–130 ms link the other player's biggest move between two frames fell from 2.0 ft to 0.6 ft. Only the drawing lags: contests and a hand on the ball are always judged on the corrected positions, so for a moment a player can be drawn up to a foot or so from where they count as being. A correction of more than 5 ft is a move to a new spot and is not slid. `?smooth=150` sets the time in ms and `?smooth=0` turns it off.
 - **Clocks.** Every packet says how far ahead of the other side the sender thinks it is. From the two views each side works out the gap between the clocks, and the one that is ahead gives up a tenth of its time until they match. Without this the host, who starts first, would do all the guessing and the guest none.
 - **Lost packets cost nothing.** Inputs go on a channel that never resends, so a lost packet can't hold up the ones behind it. Every packet carries all the inputs the other side has not yet acknowledged, so the next one fills the gap.
 - **Drift.** Every 60 ticks the two sides compare a short fingerprint of the game they have agreed on; if they differ, the host sends its whole game and the guest takes it. That covers the case where two browsers' maths differs in the last digit.
@@ -725,11 +726,11 @@ The worst frames are the ones that replay a shot's release, which simulates the 
 - **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other. The guest is told so after 20 seconds.
 - **A code is the only key.** Anyone who has the link can take the one open seat. Once a game has started the code is dead.
 - **Not yet played across the internet, or between two different browsers.** Everything above is two copies of Chromium on one machine with the lag faked. Two different browsers may drift and lean on resyncs.
-- **Corrections are not smoothed.** When a guess was wrong the other player snaps to where they really are. Blending that over a few frames is the obvious next thing to try once it has been played.
+- **Sliding only covers where players are.** A jump or a shot that the other player started a moment ago still appears already under way, and a ball leaving a sliding player's hands steps to its true path.
 - **A shot can change after release.** If the defender's real hand was somewhere other than guessed when you let go, the flight is worked out again. It settles within the lag, long before the ball arrives.
 - **Packets are plain text,** about 200 characters each at 60 a second. Fine for two players; a binary format would be a tenth of that.
 - **No rematch and no tuning online.** The host's settings are used; when a game ends, leave and host again.
-- **The numbers are first guesses:** the 25 ms and 250 ms above, the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
+- **The numbers are first guesses:** the 25 ms and 250 ms above, the 100 ms slide, the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
 
 ## Prototype defense AI
 
@@ -909,6 +910,8 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | Hands | 0.3 ft sphere; reach 8.2 ft (rim protector 8.9 ft); 2.2 ft jump | Block collisions. Placeholders until frames |
 
 **Tuning sliders and defaults:** fadeaway rating 70, timing assist ±15 ms, perfect release bonus 30%, aim assist 40%, drift strength 1.0×, ball handling 80, finishing 80, dunk 75, on-ball defender and rim protector on, rim protector steps up 50%, guarding distance 4.5 ft, on-ball quickness 70, on-ball steals 60, shot reaction time 250 ms, on-ball length 1.0×. The rating sliders are placeholders until frames replace them. The shooter rating and floater touch sliders are gone.
+
+**Display:** the shot meter sits beside the player, or beside the cursor if the player ticks "Shot meter follows the cursor". Beside the cursor, the meter's release line is level with the cursor, so the bar reaches the cursor's height at the moment to let go, and aim and timing can be read in one place. It moves to the cursor's left where there is no room on the right. The choice is the player's own: it is remembered by their browser, is not one of the host's settings online, and applies only to their own shots.
 
 ## Known gaps and roadmap
 
