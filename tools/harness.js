@@ -21,7 +21,8 @@ function install(seed) {
   window.__step = n => { for (let i = 0; i < n; i++) { now += 1000/60; const cbs = queue.splice(0); for (const cb of cbs) cb(now); } };
 }
 
-async function open({ file = PROTOTYPE, seed = 12345 } = {}) {
+// lab: open the page in free shooting (?lab), with the game rules off. Refs from before the rules ignore it.
+async function open({ file = PROTOTYPE, seed = 12345, lab = true } = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1300, height: 2600 } });   // tall enough that the page never scrolls
   const errors = [];
@@ -29,7 +30,7 @@ async function open({ file = PROTOTYPE, seed = 12345 } = {}) {
   // local files only: no web fonts, so it runs offline and draws the same text everywhere
   await page.route('**/*', r => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.addInitScript(install, seed);
-  await page.goto(pathToFileURL(file).href);
+  await page.goto(pathToFileURL(file).href + (lab ? '?lab' : ''));
 
   const step = n => page.evaluate(n => window.__step(n), n);                           // advance the game by n frames
   const at = async (fx, fy) => {                                                       // cursor to a spot on the court, as fractions of its size

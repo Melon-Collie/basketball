@@ -2,6 +2,8 @@
 
 A proof-of-concept basketball game exploring a shot model where input sets the aim and the situation sets the scatter, so no input can guarantee a make.
 
+The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
+
 ## Contents
 
 - [`prototype/shot-model-lab.html`](prototype/shot-model-lab.html): the playable prototype. There is no build step: open it in a browser. The page only handles input and drawing; the game itself is loaded from `sim/`, so keep the two folders side by side.
@@ -10,12 +12,12 @@ A proof-of-concept basketball game exploring a shot model where input sets the a
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
   - `situation.js`: the rules that read the floor: what a click would produce, contests, clean looks, finishing scatter and defenders' hands.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
-  - `game.js`: the game itself: movement, dribbling, the defenders' AI and shots, advanced in fixed ticks from plain input. Deterministic for a given seed.
+  - `game.js`: the game itself: movement, dribbling, the defenders' AI, shots and the rules, advanced in fixed ticks from plain input. Deterministic for a given seed.
   - `noise.js`: launch-space noise and simulated make rates.
   - `calibrate.js`: solves the noise settings against the design targets and writes `calibration.js`.
   - `calibration.js`: the generated settings, applied to the noise model when the prototype loads.
   - `measure.js`: reports make and block rates with defenders' hands in the simulation.
-  - `tests.js`, `tests-launch.js`, `tests-situation.js`, `tests-game.js`: physics tests, the launch continuity check, the situation rules, and the game played from scripted input.
+  - `tests.js`, `tests-launch.js`, `tests-situation.js`, `tests-game.js`, `tests-rules.js`: physics tests, the launch continuity check, the situation rules, the game played from scripted input, and the rules of a game.
 
 ## Running the simulation
 
@@ -35,6 +37,10 @@ node sim/tests-situation.js
 
 ```bash
 node sim/tests-game.js
+```
+
+```bash
+node sim/tests-rules.js
 ```
 
 Calibration takes about a minute and rewrites `sim/calibration.js`:
@@ -71,7 +77,7 @@ npm install
 npx playwright install chromium
 ```
 
-`replay.js` is a check that a refactor didn't change behavior. It plays one scripted session covering every shot type in the working tree and in a git ref (`HEAD` by default), compares the panels and both canvases at each checkpoint, and exits 1 on any difference:
+`replay.js` is a check that a refactor didn't change behavior. It plays one scripted session of free shooting, covering every shot type, in the working tree and in a git ref (`HEAD` by default), compares the panels and both canvases at each checkpoint, and exits 1 on any difference:
 
 ```bash
 node tools/replay.js

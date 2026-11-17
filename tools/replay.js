@@ -1,12 +1,13 @@
 // Regression check for changes that should not alter behavior.
 // Plays one scripted session (every shot type, gathers, a pump fake, crossovers) in the working tree's prototype and
-// in the one from a git ref, and compares them at each checkpoint: all the panel text, the scatter bar, the last-shot
-// panel, and the pixels of both canvases.
+// in the one from a git ref, and compares them at each checkpoint, part by part: the text of every element with an
+// id, the scatter bar, the last-shot panel, and the pixels of both canvases. Text is compared on the elements both
+// versions have, so adding a panel is not a difference; changing what an existing one says is.
 //
 //   node tools/replay.js [ref] [--verbose]      ref defaults to HEAD
 //
-// Exits 1 if any checkpoint differs. A change that is meant to alter behavior will differ too: this only tells you
-// whether behavior changed, not whether it should have.
+// Exits 1 if any checkpoint differs, and says which parts. A change that is meant to alter behavior will differ too:
+// this only tells you whether behavior changed, not whether it should have.
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -16,13 +17,20 @@ const { open, PROTOTYPE } = require('./harness.js');
 
 // Everything a player can see, read in the page.
 function capture() {
-  const text = [...document.querySelectorAll('[id]')].filter(e => !/^(court|inset)$/.test(e.id) && e.tagName !== 'INPUT')
-    .map(e => e.id + '=' + e.textContent.replace(/\s+/g, ' ').trim()).join('|');
+  const text = {};
+  for (const e of document.querySelectorAll('[id]')) if (!/^(court|inset)$/.test(e.id) && e.tagName !== 'INPUT') text[e.id] = e.textContent.replace(/\s+/g, ' ').trim();
   const bar = [...document.querySelector('#lBar').children].map(c => c.style.width).join(',');
   const big = document.querySelector('#last .big'), sub = document.querySelector('#last .sub');
-  return { outcome: big ? `${big.textContent} / ${sub.textContent}` : '',
-           state: { text, bar, last: document.querySelector('#last').innerHTML,
-                    court: document.querySelector('#court').toDataURL(), inset: document.querySelector('#inset').toDataURL() } };
+  return { outcome: big ? `${big.textContent} / ${sub.textContent}` : '', text,
+           parts: { bar, 'last shot': document.querySelector('#last').innerHTML,
+                    court: document.querySelector('#court').toDataURL(), 'side view': document.querySelector('#inset').toDataURL() } };
+}
+// which parts of two captures differ
+function differences(a, b) {
+  const out = Object.keys(a.parts).filter(k => a.parts[k] !== b.parts[k]);
+  const ids = Object.keys(a.text).filter(id => id in b.text && a.text[id] !== b.text[id]);
+  if (ids.length) out.unshift(`text of ${ids.slice(0, 4).map(id => '#' + id).join(', ')}${ids.length > 4 ? ` and ${ids.length - 4} more` : ''}`);
+  return out;
 }
 
 async function session(file) {
@@ -30,12 +38,13 @@ async function session(file) {
   const checkpoints = [];
   const snap = async name => {
     const s = await page.evaluate(capture);
-    checkpoints.push({ name, outcome: s.outcome, hash: crypto.createHash('sha1').update(JSON.stringify(s.state)).digest('hex') });
+    for (const k of Object.keys(s.parts)) s.parts[k] = crypto.createHash('sha1').update(s.parts[k]).digest('hex');   // the canvases are large
+    checkpoints.push({ name, ...s });
   };
   const until = async (re, max = 240) => { for (let i = 0; i < max; i += 2) { if (re.test(await h.text('#lKind'))) return; await step(2); } };
   const retreat = async () => { await key('KeyS', 110); await step(25); };
 
-  await step(5); await snap('start');
+  await step(5); await snap('start');                     // the harness opens the page in free shooting: this session exercises the shot lab
   // 1. standing jumpers aimed at the rim, on time, early and late
   for (const frames of [31, 28, 36]) { await at(0.5, 0.26); await step(3); await click(frames); await step(4); await snap(`jumper held ${frames}`); await step(200); await snap(`after jumper ${frames}`); }
   // 2. cursor on the glass from straight on, then a fadeaway
@@ -83,8 +92,8 @@ async function session(file) {
     const [now, then] = await Promise.all([session(PROTOTYPE), session(path.join(base, path.relative(root, PROTOTYPE)))]);
     let same = 0;
     now.checkpoints.forEach((c, i) => {
-      const o = then.checkpoints[i], ok = o && o.hash === c.hash; if (ok) same++;
-      if (verbose || !ok) console.log(`${ok ? 'same' : 'DIFF'}  ${c.name}${c.outcome ? `: ${c.outcome}` : ''}${!ok && o && o.outcome !== c.outcome ? ` (${ref}: ${o.outcome})` : ''}`);
+      const o = then.checkpoints[i], diff = o ? differences(c, o) : ['missing'], ok = diff.length === 0; if (ok) same++;
+      if (verbose || !ok) console.log(`${ok ? 'same' : 'DIFF'}  ${c.name}${c.outcome ? `: ${c.outcome}` : ''}${!ok && o && o.outcome !== c.outcome ? ` (${ref}: ${o.outcome})` : ''}${ok ? '' : ` [${diff.join('; ')}]`}`);
     });
     for (const [who, r] of [['working tree', now], [ref, then]]) for (const e of r.errors) console.log(`page error in ${who}: ${e}`);
     const outcomes = [...new Set(now.checkpoints.map(c => c.outcome).filter(Boolean))];

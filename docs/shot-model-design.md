@@ -1,6 +1,6 @@
 # Shot model design: 2K-style basketball
 
-Updated Nov 12, 2026 · @Jackson Schroeder
+Updated Nov 17, 2026 · @Jackson Schroeder
 
 ## Problem and principles
 
@@ -186,7 +186,7 @@ Near the rim, the cursor picks the finish side, holding the button is a timing d
 **Outcomes.**
 
 - Layup blocks are collisions with a defender's hand (see Full physics). Dunk block = clamp(c × (0.6 − (dunk − 70)/100), 0, 0.9).
-- Foul = c × (0.12 + 0.25 × clamp(defender speed / 10)). A fouled layup gets 1.15× its speed, angle and hang scatter. Labeled as and-one or two free throws, but free throws are not awarded yet.
+- Foul = c × (0.12 + 0.25 × clamp(defender speed / 10)). A fouled layup gets 1.15× its speed, angle and hang scatter. Labeled as and-one or two free throws. Under the game rules they are shot (see The game).
 - Dunks have no meaningful scatter: block roll, then a 4% fumble, then a make ("posterized" above 0.5 contest).
 
 ## Floaters
@@ -210,7 +210,7 @@ The chance of stepping up is a slider (default 50%). The decision resets after e
 
 There are no dribble moves to trigger. The cursor is the ball hand, WASD is the body, and crossovers and hesis are names for what happens when those change. Gestures and right-stick style move inputs are explicitly out.
 
-**Camera.** The camera follows the ball handler: centered horizontally, leading 7.5 ft toward the baseline, about 36 ft of court tall, with 60 ms of smoothing. The cursor is re-projected every frame, so a still mouse stays at the same spot relative to your body. Everything below depends on that. When the rim is off the top of the screen, an edge marker points to it.
+**Camera.** The camera follows the ball handler: centered horizontally, leading 7.5 ft toward the baseline, about 36 ft of court tall, with 60 ms of smoothing. Under the game rules it shows 42 ft and leads by 9 ft, so the rim stays on screen from the top of the key. The cursor is re-projected every frame, so a still mouse stays at the same spot relative to your body. Everything below depends on that. When the rim is off the top of the screen, an edge marker points to it.
 
 **Ball.**
 
@@ -599,14 +599,14 @@ This is the point where the prototype becomes a real project. The physics is bui
 - **Situation** (`sim/situation.js`): the rules that read the floor. What a click would produce, the jumper, floater and rim contests, clean looks, finishing scatter, and where the defenders' hands are during the flight.
 - **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
-- **Game** (`sim/game.js`): everything that happens on the floor: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release. A game is one plain object, advanced by `step(game, input)` in fixed ticks of 1/120 s. Its random stream is part of the object, so a seed and a list of inputs replay exactly, and a copy carries on identically. The live readout draws from a separate stream, so looking at the odds never changes the outcome.
+- **Game** (`sim/game.js`): everything that happens on the floor: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release, and the rules of a game (score, shot clock, possessions, loose balls, free throws). A game is one plain object, advanced by `step(game, input)` in fixed ticks of 1/120 s. Its random stream is part of the object, so a seed and a list of inputs replay exactly, and a copy carries on identically. The live readout draws from a separate stream, so looking at the odds never changes the outcome.
 - **Calibration** (`sim/calibrate.js`): an offline script that solves the noise settings and writes them to `sim/calibration.js`.
 - **Measurement** (`sim/measure.js`): an offline script that reports make and block rates with defenders' hands in the simulation, first for fixed defender positions and then with whole shots played through the game.
 - **Browser tools** (`tools/`, need Playwright): `replay.js` plays a scripted session in the prototype with a seeded random generator and a stepped clock, and compares every checkpoint against a git ref, as a check that a refactor didn't change behavior. `ingame.js` measures standing jumpers with the defenders reacting as they do in play.
 - **The page** (`prototype/shot-model-lab.html`): canvas, input, camera, drawing and the panels, about 520 lines. Input events only record what is held; each tick the page hands the game one plain input (keys, cursor position, shot, Shift, gather).
 - **Data:** the calibration output is its own generated file. Other constants still sit at the top of each module.
 
-**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js` and `sim/tests-game.js`):
+**Tests** (`sim/tests.js`, `sim/tests-launch.js`, `sim/tests-situation.js`, `sim/tests-game.js` and `sim/tests-rules.js`):
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
@@ -620,6 +620,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' hands.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, steals, live balls off a missed dunk, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 
 **Milestones:**
 
@@ -637,6 +638,39 @@ This is the point where the prototype becomes a real project. The physics is bui
 - How stiff is the rim, and do breakaway rims matter for dunks?
 - How exactly do layups choose glass versus rim from the finish side?
 - How tolerant should make detection be where the net catches the ball?
+
+## The game: possessions and rules
+
+With the rules on, the prototype is a game: two sides take turns with the ball against the same defense, first to 21. With them off it is the shot lab as before, where the ball comes straight back after every shot. The rules live in `sim/game.js` beside everything else and are covered by `sim/tests-rules.js`.
+
+**Sides and turns.** Home and Away alternate on every change of possession, including after a score. Until a second player can defend, one person plays offense for both sides and the AI defends both.
+
+| Rule | How it works |
+| --- | --- |
+| Check ball | Every possession starts at the top of the key, 25.75 ft out and behind the arc, with the defender at their guarding distance and the rim protector home. The ball can't be taken for the first second |
+| Shot clock | 14 s. It runs while the handler has the ball, including the shooting motion, and stops once the shot is in the air. Running out gives the ball away |
+| Scoring | Twos and threes as before, one for a free throw. First to 21 wins |
+| Loose ball | A miss or a block is a live ball. It keeps flying and bouncing as the physics says, and goes to whoever first gets within 1.6 ft of it while it is below 8 ft |
+| Offensive rebound | The handler gets it: play on with a fresh clock |
+| Defensive rebound | A defender gets it: the other side's ball |
+| Out of bounds | Against the side that touched it last: the shooter, or the defense after a block. A ball left lying for 1.5 s is whistled dead the same way |
+| Steals and strips | End the possession at once |
+| Fouls | A fouled finish that goes in is an and-one: one free throw. One that misses is two |
+| Free throws | An ordinary jumper from the line, 13.75 ft out, with the defenders more than 8 ft away, so each is a clean look. Nobody moves. After the last one the other side takes the ball |
+| Dunks | A dunk that is blocked or rattles out comes off the front of the rim as a live ball |
+| Whistles | Play stops for 1.5 s, then the next thing happens |
+
+**Chasing the ball.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The defenders go straight to the spot where the ball can first be caught. Bodies meeting over a loose ball split the bump evenly. The ball is drawn with its height while it is loose, so you can see when it is coming down.
+
+**Nothing new to press.** Rebounding is running to the ball, and a free throw is the same hold and release as any jumper. That keeps to the principle of no move buttons.
+
+**First guesses, to revisit:**
+
+- **Rebounding is bare.** There is no jumping for the ball, no boxing out, and the defenders react to a miss instantly, so the rim protector takes most of them.
+- **The last free throw is never rebounded.** The other side simply takes the ball.
+- **14 seconds and 21 points** are starting values, as is the one-second grace after a check.
+- **Steals are still dice rolls,** and now they cost the possession.
+- **Every possession starts from the same spot,** so the first few seconds can become routine.
 
 ## Prototype defense AI
 
@@ -790,6 +824,11 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | REACH\_MIN / REACH\_MAX | 0.7 / 2.4 ft | Closest and farthest a dribble lands from the body |
 | Camera | 36 ft tall view, 7.5 ft lead, 60 ms smoothing | Follow camera |
 | Defender lag | 0.12–0.4 s (about 0.25 s at defaults) | On-ball perception delay |
+| TICK | 1/120 s | One step of the game |
+| SHOT\_CLOCK / TARGET | 14 s / 21 | Game rules: time to get a shot off / points that win |
+| CHECK / FT\_LINE | 25.75 ft / 13.75 ft from the rim | Where a possession starts / where free throws are shot |
+| CATCH\_R / CATCH\_Z | 1.6 ft / 8.0 ft | A loose ball is caught inside this reach, below this height |
+| DEAD\_T / FT\_GAP / GRACE / REST\_T | 1.5 / 0.9 / 1.0 / 1.5 s | Pause after a whistle / between free throws / no steals after a check / a ball left lying is whistled dead |
 
 **Physics build** (in `sim/`):
 
@@ -814,13 +853,14 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 
 ## Known gaps and roadmap
 
-Full physics is built; frames are next. The prototype should become a real project before passing and multiple players.
+Full physics is built, the game runs outside the page, and there is a first set of rules. A second player on defense is next, then the block model and frames.
 
 **Known gaps:**
 
 - **Ratings still drive everything except shooting accuracy;** frames are decided but not built.
 - **Dunks don't fly:** they keep the old block and fumble rolls. Layups always go at the rim's center; choosing glass versus rim from the finish side is still open.
-- **No free throws:** fouls and and-ones are labeled but award nothing, so rim attempts are undervalued.
+- **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
+- **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
 - **Forward momentum on pull-up jumpers** is still a depth bias with no clean correction, which conflicts with principle 4.
 - **Dribbling isn't final:** no between the legs, behind the back or spins yet.
 - **Live-ball triple threat and jab steps** need passing.
@@ -834,9 +874,9 @@ Full physics is built; frames are next. The prototype should become a real proje
 
 1. **Full physics:** done. Standalone physics, calibration, then wiring into the game with a side-on feedback view.
 2. **Frames:** height, wingspan and weight replace the rating sliders.
-3. **Fouls and free throws.**
+3. **Fouls and free throws:** a first version is in, under the game rules.
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
-5. **Rebounding:** real caroms from the physics.
+5. **Rebounding:** a first version is in: misses are live balls on real caroms. Jumping, boxing out and reaction time are still to come.
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** WASD movement with the mouse for contests, steals and passing-lane deflections.
 

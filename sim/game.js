@@ -42,6 +42,17 @@ const C = {
 };
 const HOOP = { x: PHX.PHYS.RIM.x, y: PHX.PHYS.RIM.y };
 const TICK = 1/120;                                  // seconds per step
+// The rules of a game, for when they are switched on (game.flow.on).
+const RULES = {
+  SHOT_CLOCK: 14, TARGET: 21,                        // seconds to get a shot off; points that win
+  CHECK: { x: 25, y: 31 },                           // where a possession starts: the top of the key, behind the arc
+  FT_LINE: 13.75,                                    // the free-throw line, ft from the rim's center
+  DEAD_T: 1.5, FT_GAP: 0.9,                          // pause after a whistle, and between free throws, s
+  GRACE: 1.0,                                        // the ball can't be taken this soon after a check
+  CATCH_R: 1.6, CATCH_Z: 8.0,                        // a loose ball is caught inside this reach and below this height (placeholders until frames)
+  REST_T: 1.5,                                       // a ball left lying this long is whistled dead
+  COURT: { x0: 0, x1: 50, y0: 0, y1: 47 },
+};
 
 // ---------- State ----------
 // len: length multiplier on contests. stand: standing reach, ft. Both are placeholders until frames.
@@ -68,7 +79,14 @@ function create(opts = {}) {
             firstFoot: 1, prints: [], stepDir: { x: 0, y: -1 }, stopping: false, fakeT: 0 },
     seen: [],                                                // what the defender has watched the handler do
     simT: 0,
-    stats: { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, pts: 0, to: 0 },
+    stats: { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, fta: 0, ftm: 0, pts: 0, to: 0 },
+    // The rules: two sides take turns on offense. With on false none of this applies and the ball simply comes back
+    // to the handler after every shot, which is the shot lab.
+    //   phase     "live", "ft" (free throws), "dead" (whistle blown, t seconds until next happens) or "over"
+    //   loose     the ball is up for grabs after a miss or a block; lastTouch says which side touched it last
+    //   value, fouled   what the shot in the air is worth, and whether the shooter was fouled
+    flow: { on: !!opts.rules, phase: "live", t: 0, next: null, why: "", offense: 0, score: [0, 0], clock: RULES.SHOT_CLOCK,
+            loose: false, lastTouch: "o", value: 2, fouled: false, ft: 0, winner: null, grace: 0 },
     last: null,                                              // how the last shot was resolved
     lastPhys: null,                                          // last simulated shot, for the side-on replay
     lastSeq: 0, statsSeq: 0,                                 // bumped when last or stats change, so the page knows to redraw them
@@ -79,6 +97,7 @@ function create(opts = {}) {
   };
   Object.assign(game.R, { len: 1.2, stand: 8.9, mode: null, upX: 25, upY: 13, upDist: 8 });
   Object.assign(game.D, { shade: 0, threat: 0 });
+  if (game.flow.on) { use(game); checkBall(); }
   return game;
 }
 let g, P, D, R, mouse, keys, shot, drib, hold, seen, stats, params;
@@ -145,7 +164,9 @@ function liveRates(key, inp, sc, zs) {
 const liveChance = (key, inp, sc, zs) => liveRates(key, inp, sc, zs).make;
 function physShot(inp, sc) {
   const L = LNX.buildLaunch({ ...inp, noise: physNoise(inp, sc) });
-  return L ? { L, res: PHX.simulateShot(L, { floorBounces: 2, hands: inp.hands || [] }) } : null;
+  // under the rules a miss stays in play, so follow the ball until it has all but stopped bouncing
+  const far = g.flow.on ? { floorBounces: 8, tMax: 8 } : { floorBounces: 2 };
+  return L ? { L, res: PHX.simulateShot(L, { ...far, hands: inp.hands || [] }) } : null;
 }
 // when the result is known: through the net, or the first time the ball drops below the rim after its peak
 function decideTime(res) {
@@ -166,7 +187,10 @@ function pathPoint(b) {
   while (i < b.path.length - 1 && b.path[i + 1].t <= b.t) i++;
   return b.path[i];
 }
-const ballFree = () => !g.ball || (g.ball.phase === "path" && g.ball.announced);
+// Does the handler have the ball? Not while it is in the air, loose, or dead.
+const canSteal = () => !g.flow.on || g.flow.grace <= 0;
+const inPlay = () => !g.flow.on || g.flow.phase === "live" || g.flow.phase === "ft";
+const ballFree = () => inPlay() && !g.flow.loose && (!g.ball || (g.ball.phase === "path" && g.ball.announced));
 const LAYUP_LABEL = { "Swish": "Finished", "Bank": "Kissed off the glass", "In off the rim": "Rolled in", "In and out": "In and out",
   "Front rim": "Short off the front", "Back iron": "Too strong", "Off the side": "Off the side", "Off the glass": "Too strong off the glass", "Airball": "Blown layup" };
 
@@ -296,7 +320,8 @@ function releaseJumper() {
   const sig = NZX.scatterIn(sc);
   const shotRes = physShot(inp, sc), out = physOut(shotRes);
   const three = isThree({ x: shot.gx, y: shot.gy });   // zone is where you took off, not where you landed
-  record(out.make, three ? 3 : 2, three, false);
+  if (g.flow.on && g.flow.phase === "ft") recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, false);
+  g.flow.value = three ? 3 : 2; g.flow.fouled = false;
   g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, chance, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
   g.meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
   if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, true, false, 0.4, 3);
@@ -331,12 +356,20 @@ function releaseFinish() {
   const blocked = out.big === "Blocked";
   if (foul && !blocked) out.sub = out.make ? "And one" : "Fouled, two free throws";
   record(out.make, 2, false, true);
+  g.flow.value = 2; g.flow.fouled = foul && !blocked;
   g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foulP: foulChance(con), chance, bank,
            speed: shot.gatherSpeed, note: shot.note, dist: f.dist };
-  if (layupShot) startPathBall(layupShot.L, layupShot.res); else launchBall(f, blocked, out.make, dunk ? 0.18 : 0.38, dunk ? 1 : 3);
-  if (blocked && !layupShot) g.fx.push({ kind: "text", text: "Blocked", t: 0 });
-  shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
+  if (blocked && !layupShot) g.fx.push({ kind: "text", text: "Blocked", t: 0 });
+  if (g.flow.on && dunk && !out.make) {
+    // under the rules a dunk that doesn't go down is a live ball off the rim, or free throws if it was a foul
+    shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;
+    if (!blocked) g.fx.push({ kind: "text", text: out.sub, t: 0 });
+    if (g.flow.fouled) shotDecided(false, false); else looseOffRim(f, blocked);
+    return;
+  }
+  if (layupShot) startPathBall(layupShot.L, layupShot.res); else launchBall(f, blocked, out.make, dunk ? 0.18 : 0.38, dunk ? 1 : 3);
+  shot.state = "flight";
 }
 
 function releaseFloater() {
@@ -352,6 +385,7 @@ function releaseFloater() {
   const shotRes = physShot(inp, sc), out = physOut(shotRes);
   if (out.sub === "Swish") out.sub = "Dropped in soft";
   record(out.make, 2, false, false, true);
+  g.flow.value = 2; g.flow.fouled = false;
   g.last = { kind: "floater", out, e, q, b, con, sig, chance, block, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
   g.meterFlash = { e, t: 0.8, kind: "floater" };
   if (shotRes) startPathBall(shotRes.L, shotRes.res); else launchBall(f, true, false, 0.4, 3);
@@ -359,6 +393,7 @@ function releaseFloater() {
   g.lastSeq++; g.statsSeq++;
 }
 
+function recordFreeThrow(make) { stats.fta++; if (make) { stats.ftm++; stats.pts++; } }
 function record(make, value, three, rim, floater = false) {
   stats.fga++; if (three) stats.a3++; if (rim) stats.ar++; if (floater) stats.af++;
   if (make) { stats.fgm++; stats.pts += value; if (three) stats.m3++; if (rim) stats.mr++; if (floater) stats.mf++; }
@@ -417,7 +452,7 @@ function newBounce() {
   drib.len = len;
   drib.crossing = drib.side !== oldSide;
   if (drib.crossing) onCross(f);
-  else if (params.defOn) {
+  else if (params.defOn && canSteal()) {
     const h = defHand(), dm = Math.hypot(h.x - (P.x + drib.to.x), h.y - (P.y + drib.to.y));
     const bx = P.x + drib.to.x, by = P.y + drib.to.y;
     if (dm < 1.6 && rnd() < 0.06*(1.6 - dm)/1.6*(len/1.5)*stealFactor()*armBarFactor(bx, by)) turnover("Reached in and picked an exposed dribble");
@@ -466,7 +501,7 @@ function armBarFactor(bx, by) {
 }
 function onCross(f) {
   drib.lastMove = "Crossover";
-  if (!params.defOn) return;
+  if (!params.defOn || !canSteal()) return;
   const dd = Math.hypot(D.x - P.x, D.y - P.y);
   if (dd > 8) return;
   // the ball crosses in front of the body: the moment a close defender can poke it
@@ -485,6 +520,7 @@ function turnover(text) {
   g.fx.push({ kind: "text", text: "Stolen", t: 0, x: P.x, y: P.y });
   drib.lastMove = text; shot.cooldown = 1.0; hold.state = "none";
   g.statsSeq++;
+  if (g.flow.on) whistle("Stolen", "change");
 }
 function dribbleBallPos() {
   const ph = drib.phase, top = drib.top, f = frame(P);
@@ -589,7 +625,7 @@ function pivotMove(dt) {
   P.x = (hold.pivot.x + hold.free.x)/2; P.y = (hold.pivot.y + hold.free.y)/2;
   // a held ball can be stripped if it's left where the defender's hand can reach
   hold.stripT += dt;
-  if (hold.stripT > 0.25 && params.defOn) {
+  if (hold.stripT > 0.25 && params.defOn && canSteal()) {
     hold.stripT = 0;
     const h = defHand(), b = heldBallPos(), dm = Math.hypot(h.x - b.x, h.y - b.y);
     if (dm < 1.2 && rnd() < 0.12*(1.2 - dm)/1.2*stealFactor()) turnover("Stripped on a dead dribble");
@@ -632,6 +668,8 @@ function moveDef(def, dt, sep = 1.7) {
       def.x += nx*over*0.35; def.y += ny*over*0.35;
       P.x -= nx*over*0.65; P.y -= ny*over*0.65;
       const into = P.vx*nx + P.vy*ny; if (into > 0) { P.vx -= into*nx; P.vy -= into*ny; }
+    } else if (g.flow.loose) {
+      def.x += nx*over*0.5; def.y += ny*over*0.5; P.x -= nx*over*0.5; P.y -= ny*over*0.5;
     } else { def.x += nx*over; def.y += ny*over; }
   }
   def.x = clamp(def.x, 0.6, 49.4); def.y = clamp(def.y, 4.8, 40);
@@ -647,6 +685,9 @@ function finishMove(dt) {
   P.vx = Math.cos(heading)*sp; P.vy = Math.sin(heading)*sp;
 }
 function update(dt) {
+  const fl = g.flow, loose = fl.loose;
+  if (fl.on && (fl.phase === "dead" || fl.phase === "over")) { deadTick(dt); return; }
+  const still = fl.on && fl.phase === "ft";                           // free throws: the defenders stand and watch
   g.simT += dt; recordSeen();
   if (hold.fakeT > 0) hold.fakeT -= dt;
   let ax = 0, ay = 0;
@@ -675,11 +716,11 @@ function update(dt) {
   } else if (hold.state === "pivot") { pivotMove(dt);
   } else {
     if (ballFree()) updateDribble(dt);
-    const sp0 = Math.hypot(P.vx, P.vy);
-    const tx = ax*C.DRIB_SPEED, ty = ay*C.DRIB_SPEED, dx = tx - P.vx, dy = ty - P.vy, dl = Math.hypot(dx, dy);
+    const sp0 = Math.hypot(P.vx, P.vy), top = loose ? C.PSPEED : C.DRIB_SPEED;   // faster without the ball, chasing it down
+    const tx = ax*top, ty = ay*top, dx = tx - P.vx, dy = ty - P.vy, dl = Math.hypot(dx, dy);
     // explosive from a stop, tapering near top speed; stopping and cutting are sharper than starting
-    const speedingUp = (ax || ay) && C.DRIB_SPEED > sp0 + 0.01;
-    const step = (speedingUp ? C.ACC0*(1 - 0.6*clamp(sp0/C.DRIB_SPEED, 0, 1)) : C.DECEL)*dt;
+    const speedingUp = (ax || ay) && top > sp0 + 0.01;
+    const step = (speedingUp ? C.ACC0*(1 - 0.6*clamp(sp0/top, 0, 1)) : C.DECEL)*dt;
     if (dl <= step || dl < 1e-9) { P.vx = tx; P.vy = ty; } else { P.vx += dx/dl*step; P.vy += dy/dl*step; }
   }
   const cap = C.PSPEED;
@@ -693,7 +734,7 @@ function update(dt) {
   const sawShot = !!(perceived(params.react/1000) || {}).rising;      // they react to the shooting motion they saw
   const reacted = sawShot || shot.state === "flight";
   for (const d of defenders()) {                                       // close defenders may leave their feet, so a fake can get them in the air
-    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0) {
+    if (sawShot && !d.sawPrev && d.jumpT < 0 && d.land <= 0 && !still) {
       const dist = Math.hypot(d.x - P.x, d.y - P.y);
       if (dist < (d === R ? 7 : 5) && rnd() < (d === R ? 0.6 : 0.5)) d.jumpT = 0;
     }
@@ -710,10 +751,11 @@ function update(dt) {
     }
     if (d.land > 0) d.land -= dt;
   }
-  if (params.defOn) {
+  if (params.defOn && !still) {
     const f = frame(P);
     let tx, ty, maxS, acc;
-    if (reacted) { tx = P.x + f.u.x*1.8; ty = P.y + f.u.y*1.8; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
+    if (loose) { const c = looseTarget(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }   // go and get it
+    else if (reacted) { tx = P.x + f.u.x*1.8; ty = P.y + f.u.y*1.8; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
     else {
       // act on what they saw `lag` ago, extrapolated forward: a sudden change leaves them guessing wrong
       const lag = defLag(), s0 = perceived(lag) || { x: P.x, y: P.y, vx: 0, vy: 0, side: drib.side, threat: 0 };
@@ -729,9 +771,9 @@ function update(dt) {
     }
     if (D.jumpT < 0) stepToward(D, tx, ty, maxS, acc, dt);
     moveDef(D, dt);
-    D.hand = clamp(D.hand + clamp((reacted ? 1 : D.threat*0.8) - D.hand, -dt/0.15, dt/0.15), 0, 1);
+    D.hand = clamp(D.hand + clamp((loose ? 0 : reacted ? 1 : D.threat*0.8) - D.hand, -dt/0.15, dt/0.15), 0, 1);
   }
-  if (params.rimOn) {
+  if (params.rimOn && !still) {
     const hx = P.x - HOOP.x, hy = P.y - HOOP.y, dP = Math.hypot(hx, hy) || 0.001, nx = hx/dP, ny = hy/dP;
     const isFin = k => k === "layup" || k === "dunk";
     const finishing = (shooting && isFin(shot.kind)) || (shot.state === "flight" && g.last && isFin(g.last.kind));
@@ -750,13 +792,24 @@ function update(dt) {
       tx = homeX + (HOOP.x + nx*k - homeX)*w; ty = homeY + (HOOP.y + ny*k - homeY)*w;
       maxS = R.mode === "up" ? 8 : finishing ? 12 : 11;   // a big who stepped up has to recover
     }
+    if (loose) { const c = looseTarget(); tx = c.x; ty = c.y; maxS = 12; }
     if (R.jumpT < 0) stepToward(R, tx, ty, maxS, 40, dt);
     moveDef(R, dt, 2.2);
     const handUp = shooting && !isFin(shot.kind) && shot.t >= (shot.kind === "floater" ? params.react*0.6 : params.react) && Math.hypot(R.x - P.x, R.y - P.y) < 8;
     R.hand = clamp(R.hand + clamp((handUp ? 1 : 0) - R.hand, -dt/0.15, dt/0.15), 0, 1);
   }
 
-  // ball
+  tickBall(dt);
+  if (fl.on && inPlay()) {
+    if (fl.loose) looseTick();
+    else if (fl.phase === "live" && shot.state !== "flight") {       // the clock runs until the shot is in the air
+      fl.clock -= dt; if (fl.grace > 0) fl.grace -= dt;
+      if (fl.clock <= 0) { fl.clock = 0; g.fx.push({ kind: "text", text: "Shot clock", t: 0 }); whistle("Shot clock violation", "change"); }
+    }
+  }
+}
+// The ball in the air, and the timers that run whether or not the ball is live.
+function tickBall(dt) {
   if (g.ball && g.ball.phase === "path") {
     g.ball.t += dt;
     if (!g.ball.announced && g.ball.t >= g.ball.decideT) {
@@ -764,11 +817,13 @@ function update(dt) {
       if (g.ball.made) { g.fx.push({ kind: "ring", t: 0 }); g.fx.push({ kind: "text", text: g.last.out.sub === "And one" ? "And one!" : g.last.out.big, t: 0 }); }
       else g.fx.push({ kind: "text", text: g.last.out.big === "Blocked" ? "Blocked" : g.last.out.sub, t: 0 });
       shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;
+      if (g.flow.on) shotDecided(g.ball.made, g.last.out.big === "Blocked");
     }
-    if (g.ball.t > g.ball.endT + 0.2) g.ball = null;
+    if (g.ball.t > g.ball.endT + 0.2 && !g.flow.loose) g.ball = null;
   } else if (g.ball) {
     g.ball.t += dt;
     if (g.ball.phase === "flight" && g.ball.t >= g.ball.dur) {
+      const made = g.ball.make;
       g.ball.t = 0;
       if (g.ball.blocked) { g.ball.phase = "bounce"; g.ball.bx = g.ball.tx; g.ball.by = g.ball.ty; g.ball.vx = (g.ball.tx - g.ball.sx)*1.2; g.ball.vy = (g.ball.ty - g.ball.sy)*1.2; }
       else if (g.ball.make) { g.ball.phase = "drop"; g.fx.push({ kind: "ring", t: 0 }); g.fx.push({ kind: "text", text: g.last.out.sub === "And one" ? "And one!" : g.last.out.big, t: 0 }); }
@@ -777,6 +832,7 @@ function update(dt) {
         g.fx.push({ kind: "text", text: g.last.out.sub, t: 0 });
       }
       shot.state = "idle"; shot.cooldown = 0.35; R.mode = null;   // the big re-reads every possession
+      if (g.flow.on && inPlay()) { if (made) shotDecided(true, false); else whistle("Out of bounds", "change"); }   // a made dunk, or a shot that never had a chance
     } else if (g.ball.phase === "bounce") {
       g.ball.bx += g.ball.vx*dt; g.ball.by += g.ball.vy*dt; g.ball.vx *= Math.exp(-dt*1.5); g.ball.vy *= Math.exp(-dt*1.5);
       if (g.ball.t > 0.9) g.ball = null;
@@ -785,6 +841,124 @@ function update(dt) {
   if (shot.cooldown > 0) shot.cooldown -= dt;
   if (g.meterFlash) { g.meterFlash.t -= dt; if (g.meterFlash.t <= 0) g.meterFlash = null; }
   g.fx = g.fx.filter(o => (o.t += dt) < 1.1);
+}
+
+// ---------- Rules: score, shot clock, possessions ----------
+// Blow the whistle: play stops for a moment, then `next` happens: "change" (the other side's ball), "keep" (same
+// side, from the top), "ft" (free throws) or "over".
+function whistle(why, next, pause = RULES.DEAD_T) {
+  const fl = g.flow;
+  if (!inPlay()) return;
+  Object.assign(fl, { phase: "dead", t: pause, why, next, loose: false });
+  if (shot.state === "shooting") shot.state = "idle";
+  P.vx = 0; P.vy = 0;
+}
+function addPoints(n) {
+  const fl = g.flow;
+  fl.score[fl.offense] += n;
+  if (fl.score[fl.offense] >= RULES.TARGET) { fl.winner = fl.offense; return true; }
+  return false;
+}
+// A shot's result is known: it went in, or it is coming down off the rim, the glass or a hand.
+function shotDecided(made, blocked) {
+  const fl = g.flow;
+  if (fl.phase === "ft") {
+    const won = made && addPoints(1);
+    fl.ft--;
+    if (won) whistle("Game", "over");
+    else if (fl.ft > 0) whistle(made ? "Good" : "No good", "ft", RULES.FT_GAP);
+    else whistle(made ? "Good" : "No good", "change");               // no rebound off the last one yet: the other side takes it
+  } else if (made) {
+    if (addPoints(fl.value)) whistle("Game", "over");
+    else if (fl.fouled) { fl.ft = 1; whistle("And one", "ft"); }
+    else whistle("Score", "change");
+  } else if (fl.fouled) { fl.ft = fl.value; whistle("Foul", "ft"); }
+  else { fl.loose = true; fl.lastTouch = blocked ? "d" : "o"; }
+}
+// A dunk that was blocked or rattled out: the ball comes off the front of the rim, live.
+function looseOffRim(f, blocked) {
+  const side = rnd() < 0.5 ? -1 : 1, k = blocked ? { out: 3, across: 8, up: 1 } : { out: 5, across: 2, up: 4 };
+  const pos = { x: HOOP.x - f.u.x*1.6, y: HOOP.y - f.u.y*1.6, z: PHX.PHYS.RIM.z + 0.3 };
+  const vel = { x: -f.u.x*k.out + f.r.x*side*k.across, y: -f.u.y*k.out + f.r.y*side*k.across, z: k.up };
+  const res = PHX.simulateShot({ pos, vel }, { floorBounces: 8, tMax: 8 });
+  g.ball = { phase: "path", t: 0, path: res.path, made: false, decideT: 0, endT: res.path[res.path.length - 1].t, announced: true, relZ: pos.z, rimDist: 1 };
+  g.flow.loose = true; g.flow.lastTouch = blocked ? "d" : "o";
+}
+// Where a loose ball can first be caught: the spot it comes down to reaching height, or where it is now.
+function looseTarget() {
+  const b = g.ball, p = b.path;
+  for (let i = 0; i < p.length; i++) if (p[i].t >= b.t && p[i].z <= RULES.CATCH_Z) return p[i];
+  return p[p.length - 1];
+}
+// A loose ball goes to whoever gets a hand to it first. Out of bounds, it goes against the side that touched it last.
+function looseTick() {
+  const fl = g.flow, b = g.ball, bp = pathPoint(b), K = RULES.COURT;
+  const out = bp.x < K.x0 || bp.x > K.x1 || bp.y < K.y0 || bp.y > K.y1;
+  if (out || b.t > b.endT + RULES.REST_T) {
+    g.fx.push({ kind: "text", text: out ? "Out of bounds" : "Dead ball", t: 0 });
+    whistle(out ? "Out of bounds" : "Dead ball", fl.lastTouch === "o" ? "change" : "keep");
+    return;
+  }
+  let best = null;
+  for (const body of [P, ...defenders()]) {
+    const reach = RULES.CATCH_Z + (body === P ? 0 : SIT.SITU.HAND_JUMP*body.h), d = Math.hypot(body.x - bp.x, body.y - bp.y);
+    if (bp.z <= reach && d <= RULES.CATCH_R && (!best || d < best.d)) best = { body, d };
+  }
+  if (!best) return;
+  if (best.body === P) {                                               // the offense has it back: play on with a fresh clock
+    fl.loose = false; fl.clock = RULES.SHOT_CLOCK; g.ball = null; shot.cooldown = 0.25; R.mode = null;
+    drib.lastMove = "Offensive rebound";
+    g.fx.push({ kind: "text", text: "Offensive rebound", t: 0, x: P.x, y: P.y });
+  } else {
+    g.fx.push({ kind: "text", text: "Rebound", t: 0, x: best.body.x, y: best.body.y });
+    whistle(fl.lastTouch === "d" ? "Block recovered" : "Defensive rebound", "change");
+  }
+}
+// Put everyone in place with the ball in the handler's hands and nothing in progress.
+function place(p, d, r) {
+  Object.assign(P, { x: p.x, y: p.y, vx: 0, vy: 0 });
+  Object.assign(D, { x: d.x, y: d.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, shade: 0, threat: 0, sawPrev: false });
+  Object.assign(R, { x: r.x, y: r.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, mode: null, sawPrev: false });
+  Object.assign(shot, { state: "idle", kind: "jumper", t: 0, held: false, note: "", cooldown: 0.4, fade: false });
+  Object.assign(hold, { state: "none", fakeT: 0, prints: [] });
+  Object.assign(drib, { phase: 0, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9, hold: 0, crossing: false });
+  g.ball = null; g.meterFlash = null; seen.length = 0;
+}
+function checkBall() {
+  place(RULES.CHECK, { x: RULES.CHECK.x, y: RULES.CHECK.y - params.sag }, { x: 25, y: 8.5 });
+  Object.assign(g.flow, { phase: "live", t: 0, next: null, why: "", clock: RULES.SHOT_CLOCK, loose: false, fouled: false, ft: 0, grace: RULES.GRACE });
+}
+// Free throws: the shooter at the line, the defenders outside the lane, more than 8 ft away so every one is a clean look.
+function freeThrows() {
+  place({ x: HOOP.x, y: HOOP.y + RULES.FT_LINE }, { x: 19, y: 13 }, { x: 31, y: 13 });
+  Object.assign(g.flow, { phase: "ft", t: 0, next: null, why: "", loose: false, fouled: false });
+}
+// A dead ball: nobody moves, the ball finishes what it was doing, and when the pause is up the next thing happens.
+function deadTick(dt) {
+  const fl = g.flow;
+  g.simT += dt;
+  P.vx = 0; P.vy = 0;
+  for (const d of [D, R]) { d.vx = 0; d.vy = 0; }
+  tickBall(dt);
+  if (fl.phase !== "dead") return;
+  fl.t -= dt;
+  if (fl.t > 0) return;
+  if (fl.next === "over") { fl.phase = "over"; return; }
+  if (fl.next === "ft") { freeThrows(); return; }
+  if (fl.next === "change") fl.offense = 1 - fl.offense;
+  checkBall();
+}
+function newGame() {
+  resetStats();
+  Object.assign(g.flow, { offense: 0, score: [0, 0], winner: null, value: 2, lastTouch: "o" });
+  checkBall();
+}
+// Switching the rules on starts a game. Switching them off goes back to the shot lab, from its usual starting spots.
+function setRules(on) {
+  g.flow.on = !!on;
+  if (on) { newGame(); return; }
+  Object.assign(g.flow, { phase: "live", loose: false, why: "" });
+  place({ x: 25, y: 26 }, { x: 25, y: 20 }, { x: 25, y: 9.5 }); shot.cooldown = 0;
 }
 
 // ---------- Preview: what would a shot from here be? ----------
@@ -865,12 +1039,15 @@ function releaseShot() {
 // shot (the shot button is down), shift (held, read when the shot starts), gather (the gather key is down).
 // Presses and releases are read off the change since the last tick.
 function step(input) {
-  keys.u = !!input.u; keys.d = !!input.d; keys.l = !!input.l; keys.r = !!input.r;
+  const fl = g.flow, live = !fl.on || fl.phase === "live", ft = fl.on && fl.phase === "ft";
+  keys.u = live && !!input.u; keys.d = live && !!input.d; keys.l = live && !!input.l; keys.r = live && !!input.r;   // nobody moves at the line or on a dead ball
   mouse.x = input.x; mouse.y = input.y;
   const was = g.input, now = { shot: !!input.shot, gather: !!input.gather };
-  if (now.gather && !was.gather) gather();
-  if (now.shot && !was.shot) startShot(!!input.shift);
-  else if (!now.shot && was.shot) releaseShot();
+  if (live && now.gather && !was.gather) gather();
+  if (live || ft) {
+    if (now.shot && !was.shot) startShot(!!input.shift);
+    else if (!now.shot && was.shot) releaseShot();
+  }
   g.input = now;
   update(TICK);
 }
@@ -879,13 +1056,13 @@ function setDefender(which, on) {
   if (which === "defOn") Object.assign(D, { hand: 0, h: 0, jumpT: -1, land: 0, x: P.x, y: Math.max(5, P.y - 6), vx: 0, vy: 0 });
   else Object.assign(R, { hand: 0, h: 0, jumpT: -1, land: 0, x: 25, y: 9.5, vx: 0, vy: 0, mode: null });
 }
-function resetStats() { Object.assign(stats, { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, pts: 0, to: 0 }); drib.lastMove = ""; g.last = null; }
+function resetStats() { Object.assign(stats, { fga: 0, fgm: 0, a3: 0, m3: 0, ar: 0, mr: 0, af: 0, mf: 0, fta: 0, ftm: 0, pts: 0, to: 0 }); drib.lastMove = ""; g.last = null; }
 
 // Every export binds the game it was given before running.
 const on = fn => (game, ...args) => { use(game); return fn(...args); };
 return {
-  C, HOOP, TICK, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
-  step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats),
+  C, HOOP, TICK, RULES, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
+  step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats), setRules: on(setRules), newGame: on(newGame),
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), fadeSigmaFor: on(fadeSigmaFor),
