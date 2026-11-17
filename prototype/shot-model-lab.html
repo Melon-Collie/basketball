@@ -963,6 +963,9 @@ function leave(why) {
 // (the one run for the PeerJS library, spoken to here directly) passes those few messages between them. The host
 // waits there under a six-character code, and the link carries the code. Once the two are connected the service is
 // dropped, and nothing of the game goes through it. ?broker=ws://localhost:9000/ points at another one.
+// The public service checks every message and hangs up on a sender whose message is not shaped like the library's:
+// an offer must be a real session description and say type, connectionId, label, reliable and serialization; an
+// answer or a route must say type and connectionId. `call` is that connectionId, made up by the guest for each try.
 const BROKER = QUERY.get("broker") || "wss://0.peerjs.com/", ROOM = "hoops1v1-";
 const LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";                       // none that read as each other: no 0 O 1 I L
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => LETTERS[b % LETTERS.length]).join("");
@@ -984,7 +987,7 @@ function closeLobby() {
 }
 const serviceDown = () => { closeLobby(); drop(); $("netManual").open = true; netSay("Couldn't reach the invite service. You can still connect with codes, under Connect without the link."); };
 // each side tells the other the routes it finds as it finds them, so connecting doesn't wait for the full list
-const tellRoutes = (pc, to) => pc.addEventListener("icecandidate", e => { if (e.candidate && lobby) lobby.line.say("CANDIDATE", to, { candidate: e.candidate }); });
+const tellRoutes = (pc, to, call) => pc.addEventListener("icecandidate", e => { if (e.candidate && lobby) lobby.line.say("CANDIDATE", to, { candidate: e.candidate, type: "data", connectionId: call }); });
 const addRoute = (mine, c) => { if (mine.remote) mine.pc.addIceCandidate(c).catch(() => {}); else mine.ice.push(c); };
 async function setRemote(mine, sdp) {
   await mine.pc.setRemoteDescription(sdp);
@@ -1008,14 +1011,14 @@ function hostByLink() {
     else if (type === "CLOSED") { closeLobby(); drop(); netSay("Lost touch with the invite service. Host again for a new link."); }
     else if (type === "OFFER" && m.payload && m.payload.sdp) {            // the newest caller replaces one still trying; once a game starts this line is closed
       mine.peer = m.src;
-      const pc = connection(0), con = net;
+      const pc = connection(0), con = net, call = m.payload.connectionId;
       pc.addEventListener("datachannel", e => attach(e.channel));
-      tellRoutes(pc, m.src);
+      tellRoutes(pc, m.src, call);
       netSay("The other player is connecting…");
       try {
         await setRemote(con, m.payload.sdp);
         await pc.setLocalDescription(await pc.createAnswer());
-        mine.line.say("ANSWER", m.src, { sdp: pc.localDescription });
+        mine.line.say("ANSWER", m.src, { sdp: pc.localDescription, type: "data", connectionId: call });
       } catch (e) { if (net === con) leave("That didn't connect."); }
     } else if (type === "CANDIDATE" && m.src === mine.peer && net && m.payload) addRoute(net, m.payload.candidate);
   });
@@ -1031,11 +1034,11 @@ function joinByCode(text) {
     if (lobby !== mine) return;
     if (type === "OPEN") {
       mine.open = true;
-      const pc = connection(1);
+      const pc = connection(1), call = "dc_" + newCode().toLowerCase();
       attach(pc.createDataChannel("game")); attach(pc.createDataChannel("inputs", { ordered: false, maxRetransmits: 0 }));
-      tellRoutes(pc, host);
+      tellRoutes(pc, host, call);
       await pc.setLocalDescription(await pc.createOffer());
-      mine.line.say("OFFER", host, { sdp: pc.localDescription });
+      mine.line.say("OFFER", host, { sdp: pc.localDescription, type: "data", connectionId: call, label: call, reliable: true, serialization: "json" });
       mine.timer = setTimeout(() => fail(mine.answered ? "Found the game, but the two of you couldn't connect directly. One of your networks may not allow it."
                                                        : "The host didn't answer. They may already be in a game."), 20000);
     } else if (type === "ID-TAKEN") joinByCode(code);

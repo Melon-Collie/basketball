@@ -7,8 +7,8 @@
 // and smooth is how long a correction takes to slide away, in ms (0 turns sliding off).
 // The two connect by exchanging codes, which needs nothing outside this machine. With --link they connect the way
 // players do, by an invite link, with the introduction service played by this script (see stand-in, below). With
-// --broker they use a real one at that address: after `npm install peer`, `npx peerjs --port 9000` runs one locally,
-// the same software as the public one the page uses by default.
+// --broker they use a real one at that address: `--broker wss://0.peerjs.com/` is the public one the page uses by
+// default. If HTTPS_PROXY is set, the browsers reach it through that.
 // Both players move, point and press throughout. At the end it compares the fingerprints the two sides took of the
 // game they have agreed on, and reports how often each went back, how long a frame took, and whether either had to
 // wait or be resynced. Exits 1 if they disagreed, or a page threw an error.
@@ -22,9 +22,19 @@ const broker = process.argv.includes('--broker') ? process.argv[process.argv.ind
 const link = broker !== null || process.argv.includes('--link');
 
 // A stand-in for the introduction service, for --link: it answers the pages' connections to it without anything
-// leaving the browser, and does what the PeerJS server does. A new id is told OPEN and one in use ID-TAKEN; a message
-// is passed to the id it names with the sender's id added; one for an id nobody holds comes back as EXPIRE 5 s later.
+// leaving the browser, and does what the public PeerJS service was seen to do. A new id is told OPEN and one in use
+// ID-TAKEN; a message is passed to the id it names with the sender's id added; one for an id nobody holds comes back
+// as EXPIRE half a second later. Like the public service, and unlike the server code PeerJS publishes, it hangs up
+// on a sender whose message is not shaped like the library's.
 const waiting = new Map();
+const has = (o, ...keys) => !!o && keys.every(k => o[k] !== undefined && o[k] !== null);
+const wellFormed = m => {
+  const p = m.payload, real = p && p.sdp && typeof p.sdp.sdp === 'string' && p.sdp.sdp.startsWith('v=0\r\n') && has(p.sdp, 'type');
+  if (m.type === 'OFFER') return real && has(p, 'type', 'connectionId', 'label', 'reliable', 'serialization');
+  if (m.type === 'ANSWER') return real && has(p, 'type', 'connectionId');
+  if (m.type === 'CANDIDATE') return has(p, 'candidate', 'type', 'connectionId');
+  return false;
+};
 const standIn = page => page.routeWebSocket(/\/peerjs\?/, ws => {
   const id = new URL(ws.url()).searchParams.get('id');
   if (waiting.has(id)) { ws.send(JSON.stringify({ type: 'ID-TAKEN' })); ws.close(); return; }
@@ -32,8 +42,9 @@ const standIn = page => page.routeWebSocket(/\/peerjs\?/, ws => {
   ws.onMessage(text => {
     const m = JSON.parse(text), to = waiting.get(m.dst);
     if (m.type === 'HEARTBEAT') return;
+    if (!wellFormed(m)) { waiting.delete(id); ws.close(); return; }
     if (to) to.send(JSON.stringify({ type: m.type, src: id, dst: m.dst, payload: m.payload }));
-    else setTimeout(() => { if (waiting.get(id) === ws) ws.send(JSON.stringify({ type: 'EXPIRE', src: m.dst, dst: id })); }, 5000);
+    else setTimeout(() => { if (waiting.get(id) === ws) ws.send(JSON.stringify({ type: 'EXPIRE', src: m.dst, dst: id })); }, 500);
   });
   ws.onClose(() => { if (waiting.get(id) === ws) waiting.delete(id); });
 });
@@ -64,7 +75,8 @@ function install() {
 // address: the page to open, or nothing for the prototype with `query` on the end
 async function player(query, address) {
   // real addresses in the connection codes, not .local names, which nothing here can look up
-  const browser = await chromium.launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] });
+  const browser = await chromium.launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+                                          proxy: broker && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined });
   const page = await browser.newPage({ viewport: { width: 1300, height: 2600 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
