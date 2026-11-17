@@ -91,6 +91,50 @@ ltest("A hand on the ball takes it, but not through the handler's body or inside
   return `from the ball side, taken ${beside.at.toFixed(1)} s in; from in front, never`;
 });
 
+// A 15 ft jumper with a perfect release against a player-controlled defender `gap` ft away, who jumps `before` ms
+// ahead of the release (null: stays down) with their cursor `out` ft from their own body, toward the shooter.
+function contested(gap, before, out, seed = 1) {
+  const g = GM.create({ seed, rules: true, duo: true });
+  Object.assign(g.P, { x: 25, y: RIM.y + 15 }); Object.assign(g.D, { x: 25, y: RIM.y + 15 - gap });
+  const press = 60, hold = 62, jump = before === null ? -1 : press + hold - Math.round(before/1000/GM.TICK);
+  for (let t = 0; t < 600 && !(g.last && g.ball && g.ball.announced); t++)
+    GM.step(g, [{ ...idle(RIM.x, RIM.y), shot: t >= press && t < press + hold }, { ...idle(g.D.x, g.D.y + out), gather: t === jump }]);
+  return g;
+}
+ltest("A defender close enough who goes up in time blocks a jumper; from further out, late, or flat-footed, the ball clears them", () => {
+  const big = g => g.last.out.big, touched = g => !!g.last.out.touched;
+  const block = contested(2.4, 250, 0.9);
+  check(big(block) === "Blocked" && touched(block) && block.ball.toucher === "D", `2.4 ft away, hand up, up 250 ms early: ${big(block)} / ${block.last.out.sub}`);
+  check(block.flow.loose && block.flow.lastTouch === "d" && block.stats.fga === 1 && block.stats.fgm === 0, "a block is a miss, live, last touched by the defense");
+  for (const [why, g] of [["standing", contested(2.4, null, 0.9)], ["from 4 ft", contested(4, 250, 2.5)], ["leaving the floor 30 ms before the release", contested(2.4, 30, 0.9)],
+                          ["already coming down, up 480 ms early", contested(2.4, 480, 0.9)]])
+    check(!touched(g), `${why} they should not get a hand on it: ${big(g)} / ${g.last.out.sub}`);
+  return `2.4 ft away, up 250 ms early: ${big(block)}; standing, 4 ft away, 30 ms early or 480 ms early: untouched`;
+});
+
+ltest("An arm is one length: reaching out gets a hand to shots that straight up cannot, and straight up is better close in", () => {
+  const got = (gap, out) => { let n = 0; for (let ms = 100; ms <= 350; ms += 25) if (contested(gap, ms, out).last.out.big === "Blocked") n++; return n; };
+  const farOut = got(3.2, 3.2), farUp = got(3.2, 0.9), nearOut = got(2.0, 2.0), nearUp = got(2.0, 0.9);
+  check(farOut >= 3 && farUp === 0, `from 3.2 ft: reaching out blocked ${farOut} of 11 timings, straight up ${farUp}`);
+  check(nearUp > nearOut, `from 2 ft: straight up blocked ${nearUp} of 11 timings, reaching out ${nearOut}`);
+  return `of 11 jump timings, 3.2 ft away: ${farOut} reaching out, ${farUp} straight up. 2 ft away: ${nearOut} reaching out, ${nearUp} straight up`;
+});
+
+ltest("The defender who gets a hand to a shot has to wait a moment before they can also catch it", () => {
+  const g = contested(2.4, 250, 0.9);
+  check(g.last.out.big === "Blocked", `expected a block: ${g.last.out.big}`);
+  // keep the shooter out of it, and the defender under the ball
+  const b = g.ball; let at = null;
+  for (let t = 0; t < 600 && g.flow.loose; t++) {
+    const bp = GM.pathPoint(g.ball); at = g.ball.t;
+    Object.assign(g.P, { x: bp.x, y: bp.y + 6, vx: 0, vy: 0 }); Object.assign(g.D, { x: bp.x, y: bp.y - 0.5, vx: 0, vy: 0 });
+    GM.step(g, [idle(RIM.x, RIM.y), idle(g.D.x, g.D.y + 0.9)]);
+  }
+  check(!g.flow.loose && g.flow.why === "Block recovered", `the defender should end up with it: ${g.flow.phase}, "${g.flow.why}"`);
+  check(at >= b.touchT + GM.RULES.TOUCH_LOCK - 0.01, `touched at ${b.touchT.toFixed(2)} s and holding it at ${at.toFixed(2)} s`);
+  return `touched ${b.touchT.toFixed(2)} s into the flight, held no sooner than ${at.toFixed(2)} s`;
+});
+
 ltest("With no lag beyond the input delay nothing is guessed, and the two copies match a game played on one machine", () => {
   const p = pair(3, { lag: 2 });
   p.run(120*5, script); p.settle();

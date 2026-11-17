@@ -151,7 +151,7 @@ dd small{color:var(--muted)}
       </div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
-        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump.</p>
+        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. After a miss, <kbd>Space</kbd> jumps for the ball for both of you.</p>
         <div id="netSetup">
           <div class="row"><button id="netHost" type="button">Host a game</button></div>
           <div id="netInvite" hidden>
@@ -518,8 +518,11 @@ function draw() {
   if (params.rimOn) drawDefender(R, T.defender2, 1.25);
   if (params.defOn) drawDefender(D, T.defender, 1.05);
 
+  // the handler, lifted off their shadow when they go up for a loose ball
+  const ph = Math.max(0, P.h + ease.P.h);
+  if (ph > 0.02) { ctx.globalAlpha = 0.25; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(px, py, ppf*1.05, ppf*0.63, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1; }
   ctx.fillStyle = T.player; ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.14;
-  ctx.beginPath(); ctx.arc(px, py, ppf*1.05, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py - ph*ppf*1.1, ppf*1.05*(1 + 0.2*ph), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   if (shot.state === "idle" && hold.state === "pivot") drawFeet();   // on top, so the pivot foot is always readable
   else if (shot.state === "idle" && hold.state === "steps") drawGatherFeet();
   if (shot.state === "idle" && ballFree()) drawHands();
@@ -852,7 +855,7 @@ const FAKE = { lag: queryNum("lag"), jitter: queryNum("jitter"), loss: queryNum(
 // drawing lags; the game, and what counts as a contest or a hand on the ball, is always the corrected one.
 // ?smooth=150 sets the time in ms; ?smooth=0 turns it off.
 const SLIDE = (QUERY.has("smooth") ? queryNum("smooth") : 100)/1000, SNAP = 5;   // a correction of more than SNAP ft is a move to a new spot, not a slide
-const WATCHED = [["P", "x"], ["P", "y"], ["D", "x"], ["D", "y"], ["D", "h"], ["R", "x"], ["R", "y"], ["R", "h"]];
+const WATCHED = [["P", "x"], ["P", "y"], ["P", "h"], ["D", "x"], ["D", "y"], ["D", "h"], ["R", "x"], ["R", "y"], ["R", "h"]];
 const watch = g => WATCHED.map(([who, what]) => g[who][what]);
 const settle = () => { for (const k of Object.keys(ease)) ease[k].x = ease[k].y = ease[k].h = 0; };
 function slide(peer, dt) {
@@ -890,7 +893,7 @@ function attach(dc) {
     if (mine.me !== 0 || mine.started || net !== mine) return;
     mine.started = true;
     const delay = QUERY.has("delay") ? clamp(Math.round(queryNum("delay")/1000/GM.TICK), 0, 12) : RB.DELAY;
-    const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true }, delay };
+    const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true, rimOn: false }, delay };   // one against one: no rim protector
     send(start); begin(start);
   };
   dc.addEventListener("open", opened);
@@ -956,7 +959,7 @@ function leave(why) {
   // a guest who found the host's game but never got through: the host's link is still good for another try
   if (!wasLive && lobby && lobby.host && lobby.open) { lobby.peer = null; return netSay("That didn't connect. Your link still works; waiting for the other player."); }
   closeLobby(); netSay(why); setOnlineUi(false);
-  if (wasLive) { G.duo = false; GM.newGame(G); shownLast = G.lastSeq; shownStats = G.statsSeq; clearLast(); renderBoard(); }   // carry on alone against the AI
+  if (wasLive) { G.duo = false; GM.setDefender(G, "rimOn", true); $("rimOn").checked = true; GM.newGame(G); shownLast = G.lastSeq; shownStats = G.statsSeq; clearLast(); renderBoard(); }   // carry on alone against the AI
 }
 
 // ---------- Invite links ----------

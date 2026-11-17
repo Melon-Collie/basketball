@@ -13,6 +13,10 @@ const PHYS = {
   DT: 0.001, DT_NEAR: 0.0005, DT_FAR: 0.01,                 // finer steps near the rim, big ones far from it
   T_MAX: 3.5,
   NET_DEPTH: 0.6,                                           // make confirmed this far below the rim, still inside
+  // a defender's arm: a hand gives when the ball hits it, so the ball keeps little of the speed it had into it
+  E_HAND: 0.2, MU_HAND: 0.3,
+  ARM_R: 0.17,                                              // half the thickness of a forearm, ft
+  BLOCK_TAKES: 0.4,                                         // a touch that changes the ball's velocity by this share of its speed is a block; less is a tip
 };
 
 const v3 = {
@@ -63,12 +67,40 @@ function boardContact(c) {
   return { n: { x: 0, y: 1, z: 0 }, depth: B.y + PHYS.BALL_R - c.y };
 }
 
+// Where the ball at c touches a defender's arm at time t, if it does. A hand is { at: t => {x, y, z, from}, r }: the
+// hand is a sphere of radius r at that point, and `from`, if given, is the shoulder, with the arm a rod between them.
+// `at` may give nothing, for a time when the arm is no longer in the shot.
+// Returns the outward normal, how deep the ball is in, and how fast that part of the arm is moving.
+function armContact(c, hand, t) {
+  const H = hand.at(t);
+  if (!H) return null;
+  const S = H.from, rH = hand.r || 0.35;
+  let best = null;
+  const tryAt = (q, rad, u) => {
+    const d = v3.sub(c, q), dist = v3.len(d), depth = PHYS.BALL_R + rad - dist;
+    if (depth > 0 && (!best || depth > best.depth)) best = { p: q, n: v3.mul(d, 1/(dist || 1e-9)), depth, u };
+  };
+  tryAt({ x: H.x, y: H.y, z: H.z }, rH, 1);
+  if (S) {
+    const a = v3.sub(H, S), u = Math.max(0, Math.min(1, v3.dot(v3.sub(c, S), a)/(v3.dot(a, a) || 1e-9)));
+    tryAt(v3.add(S, v3.mul(a, u)), PHYS.ARM_R, u);
+  }
+  if (!best) return null;
+  const dt = 0.002, H0 = hand.at(t - dt) || H, q0 = H0.from ? v3.add(H0.from, v3.mul(v3.sub(H0, H0.from), best.u)) : H0;
+  best.v = v3.mul(v3.sub(best.p, { x: q0.x, y: q0.y, z: q0.z }), 1/dt);
+  return best;
+}
+
 // Simulate a whole shot. Returns the path (every ~10 ms), the contact log, and the outcome.
+//   blocked   a defender's arm changed the ball's course by a lot, and it did not go in
+//   tipped    an arm touched it, but lightly: it carried on, off line. It may still have gone in
+//   touchT, touchBy   when an arm first touched it, and which of opts.hands it was
 function simulateShot(launch, opts = {}) {
   const R = PHYS.RIM;
   let c = { ...launch.pos }, vel = { ...launch.vel }, t = 0;
   const path = [{ t, ...c }], contacts = [];
-  let wentIn = false, made = false, madeAt = null, sinceSample = 0, floorBounces = 0, blocked = false, goaltend = false;
+  let wentIn = false, made = false, madeAt = null, sinceSample = 0, floorBounces = 0, goaltend = false;
+  let touch = null;                                          // the ball's velocity before an arm first touched it, and after it last did
   const hands = opts.hands || [];                            // defenders' hands: { at: t => {x, y, z}, r }
   let maxSpeedAfter = [];                                    // for the energy check
   while (t < (opts.tMax ?? PHYS.T_MAX)) {
@@ -97,29 +129,32 @@ function simulateShot(launch, opts = {}) {
       vel = bounce(vel, bc.n, PHYS.E_BOARD, PHYS.MU_BOARD);
       contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel) });
     }
-    // hands: a touch on the way up is a block; on the way down over the rim it's goaltending (counts as a make)
-    if (hands.length && !made && !blocked) for (const h of hands) {
-      const hp = h.at(t), d = v3.sub(c, hp), dist = v3.len(d), reach = PHYS.BALL_R + (h.r || 0.35);
-      if (dist >= reach) continue;
+    // arms: a touch on the way down over the rim is goaltending (counts as a make). Any other touch is a collision
+    // with something soft that may be moving: the ball loses nearly all the speed it had into the arm and keeps the
+    // rest, so a square hit stops it and a graze only turns it a little.
+    if (hands.length && !made) for (let i = 0; i < hands.length; i++) {
+      const k = armContact(c, hands[i], t);
+      if (!k) continue;
       const before = v3.len(vel);
-      if (vel.z < 0 && c.z > R.z && Math.hypot(c.x - R.x, c.y - R.y) < 1.6) {
+      if (!touch && vel.z < 0 && c.z > R.z && Math.hypot(c.x - R.x, c.y - R.y) < 1.6) {
         goaltend = true; made = true; madeAt = t;
-        contacts.push({ type: "goaltend", t, x: hp.x, y: hp.y, z: hp.z, before, after: before });
-      } else {
-        blocked = true;
-        const n = v3.mul(d, 1/(dist || 1e-9));
-        c = v3.add(hp, v3.mul(n, reach));
-        vel = bounce(vel, n, 0.45, 0.3);                     // swatted: loses most of its pace
-        vel.z = Math.min(vel.z, -4);                         // and goes down
-        contacts.push({ type: "block", t, x: hp.x, y: hp.y, z: hp.z, before, after: v3.len(vel) });
+        contacts.push({ type: "goaltend", t, x: k.p.x, y: k.p.y, z: k.p.z, before, after: before });
+        break;
       }
+      if (!touch) touch = { t, by: i, v0: { ...vel }, v1: vel };
+      c = v3.add(c, v3.mul(k.n, k.depth));
+      vel = v3.add(bounce(v3.sub(vel, k.v), k.n, PHYS.E_HAND, PHYS.MU_HAND), k.v);
+      touch.v1 = vel;
+      const last = contacts[contacts.length - 1];
+      if (last && last.type === "hand" && t - last.t < 0.05) last.after = v3.len(vel);
+      else contacts.push({ type: "hand", t, x: k.p.x, y: k.p.y, z: k.p.z, before, after: v3.len(vel) });
       break;
     }
     // make detection: down through the rim plane with the center inside the ring, then on into the net
     const hl = Math.hypot(c.x - R.x, c.y - R.y);
     if (prevZ >= R.z && c.z < R.z && vel.z < 0) wentIn = hl < R.r;
     if (wentIn && c.z > R.z) wentIn = false;                 // popped back out
-    if (!made && !blocked && wentIn && c.z <= R.z - PHYS.NET_DEPTH && hl < R.r) {
+    if (!made && wentIn && c.z <= R.z - PHYS.NET_DEPTH && hl < R.r) {
       made = true; madeAt = t;
       vel = v3.mul(vel, 0.3);                               // the net takes the pace off
     }
@@ -135,14 +170,16 @@ function simulateShot(launch, opts = {}) {
     if (sinceSample >= 0.01) { path.push({ t, ...c }); sinceSample = 0; }
   }
   path.push({ t, ...c });
-  return { path, contacts, made, madeAt, blocked, goaltend, label: labelFor(launch, contacts, made, madeAt) };
+  const turned = touch ? v3.len(v3.sub(touch.v1, touch.v0))/(v3.len(touch.v0) || 1e-9) : 0;
+  const blocked = !made && turned >= PHYS.BLOCK_TAKES, tipped = !!touch && !goaltend && !blocked;
+  return { path, contacts, made, madeAt, blocked, tipped, goaltend, touchT: touch ? touch.t : null, touchBy: touch ? touch.by : null,
+           label: blocked ? "Blocked" : labelFor(launch, contacts.filter(k => k.type !== "hand"), made, madeAt) };
 }
 
 function labelFor(launch, contacts, made, madeAt) {
   const early = contacts.filter(k => k.type !== "floor" && (madeAt === null || k.t <= madeAt));
   const R = PHYS.RIM;
   if (contacts.some(k => k.type === "goaltend")) return "Goaltending";
-  if (contacts.some(k => k.type === "block")) return "Blocked";
   if (made) {
     if (!early.length) return "Swish";
     return early[0].type === "board" ? "Bank" : "In off the rim";

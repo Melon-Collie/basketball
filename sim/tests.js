@@ -134,6 +134,32 @@ test("A hand in the ball's path on the way up blocks it", () => {
   assert(clear.made, `low hand still blocked: ${clear.label}`);
   return `hand in the path: ${res.label}; hand at 8 ft: ${clear.label}`;
 });
+test("An arm is solid from shoulder to hand: a ball that would pass under the hand hits the forearm", () => {
+  const from = spot(15), v = idealSpeed(from, RIM, deg(48));
+  const L = { pos: from, vel: launchVelocity(from, RIM, v, deg(48), 0) };
+  const t = 0.12, px = from.x + L.vel.x*t, py = from.y + L.vel.y*t, pz = from.z + L.vel.z*t - 0.5*PHYS.G*t*t;
+  const hand = { x: px, y: py, z: pz + 1.2 };                        // the hand is well above where the ball passes
+  const handOnly = simulateShot(L, { hands: [{ r: 0.3, at: () => hand }] });
+  const withArm = simulateShot(L, { hands: [{ r: 0.3, at: () => ({ ...hand, from: { x: px, y: py - 0.3, z: pz - 1.4 } }) }] });
+  assert(handOnly.made && !handOnly.tipped, `a hand 1.2 ft above the ball should not touch it: ${handOnly.label}`);
+  assert(withArm.blocked && !withArm.made && withArm.touchBy === 0 && Math.abs(withArm.touchT - t) < 0.05, `the forearm should have stopped it: ${withArm.label}, touched at ${withArm.touchT}`);
+  return `hand alone: ${handOnly.label}; with the arm under it: ${withArm.label}`;
+});
+test("A light touch is a tip: the ball keeps most of its pace and carries on off line", () => {
+  const from = spot(15), v = idealSpeed(from, RIM, deg(48));
+  const L = { pos: from, vel: launchVelocity(from, RIM, v, deg(48), 0) };
+  const t = 0.12, px = from.x + L.vel.x*t, py = from.y + L.vel.y*t, pz = from.z + L.vel.z*t - 0.5*PHYS.G*t*t;
+  // a hand to the side of the ball's path, overlapping it by `into` ft
+  const beside = into => simulateShot(L, { hands: [{ r: 0.3, at: () => ({ x: px + PHYS.BALL_R + 0.3 - into, y: py, z: pz }) }] });
+  const graze = beside(0.06), square = beside(0.5), miss = beside(-0.05);
+  const pace = r => r.contacts.find(k => k.type === "hand");
+  assert(!miss.tipped && !miss.blocked && miss.made, `a hand just clear of the ball should change nothing: ${miss.label}`);
+  assert(graze.tipped && !graze.blocked && pace(graze).after > 0.8*pace(graze).before, `a graze should be a tip that keeps its pace: ${graze.label}, ${pace(graze) && (pace(graze).after/pace(graze).before).toFixed(2)}`);
+  assert(square.blocked && !square.made && pace(square).after < 0.8*pace(square).before, `a hand well into the path should block it: ${square.label}`);
+  const again = beside(0.06);
+  assert(JSON.stringify(again.path) === JSON.stringify(graze.path), "the same touch should give the same path");
+  return `clear: ${miss.label}; 0.06 ft in: tipped, ${Math.round(100*pace(graze).after/pace(graze).before)}% of its pace kept, ${graze.label}; 0.5 ft in: ${square.label}`;
+});
 test("Touching the ball on its way down over the rim is goaltending, and counts", () => {
   const from = spot(15), v = idealSpeed(from, RIM, deg(48));
   const res = simulateShot({ pos: from, vel: launchVelocity(from, RIM, v*0.99, deg(48), 0) }, { hands: [{ r: 0.35, at: () => ({ x: RIM.x, y: RIM.y + 0.9, z: 10.9 }) }] });

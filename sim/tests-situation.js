@@ -129,18 +129,29 @@ stest("Finishing scatter: speed past the control limit, cutting back, hang and e
   return `limit ${base.limit.toFixed(1)} ft/s at finishing 80; floor ${base.parts[0].toFixed(2)} in`;
 });
 
-stest("Hands: only within 7 ft, lowered or at standing reach, lifted by a jump in progress or scheduled", () => {
-  const p = at(20);
+stest("Arms: only within 7 ft, a fixed length from the shoulder, lifted by a jump in progress or scheduled", () => {
+  const p = at(20), ARM = SIT.SITU.ARM;
+  const top = (stand, reach) => stand - ARM + Math.sqrt(ARM*ARM - reach*reach);   // hand height with the arm up and that far out
   check(SIT.handPaths(p, [defender(p, 7.5, { hand: 1 })], null).length === 0, "a defender past 7 ft has no hand in the shot");
   const z = (o, t = 0, shotT = null) => SIT.handPaths(p, [defender(p, 3, o)], shotT)[0].at(t).z;
-  check(near(z({ hand: 0 }), 6.2) && near(z({ hand: 1 }), 8.2) && near(z({ hand: 1, stand: 8.9 }), 8.9), "hand down is 6.2 ft, hand up is standing reach");
-  check(near(z({ jumpT: 0.25, h: 1 }), 8.2 + 2.2), `peak of a jump: ${z({ jumpT: 0.25, h: 1 })}`);
-  check(near(z({ jumpT: 0.1, h: 0.6 }, 0.4), 8.2), "the hand should be back at standing reach once the jump is over");
-  check(near(z({ hand: 1, jumpAt: 300 }, 0.1, 100), 8.2) && near(z({ hand: 1, jumpAt: 300 }, 0.45, 100), 8.2 + 2.2), "a scheduled jump should start on time");
-  check(near(z({ hand: 1, jumpAt: 300 }, 0.45, null), 8.2), "a scheduled jump needs a shot in progress");
+  check(near(top(8.2, 0), 8.2), "straight up, the hand is at standing reach");
+  check(near(z({ hand: 0 }), 6.2) && near(z({ hand: 1 }), top(8.2, 1.6)) && near(z({ hand: 1, stand: 8.9 }), top(8.9, 1.6)), `hand down is 6.2 ft; up and 1.6 ft out it is ${top(8.2, 1.6).toFixed(2)}, not the full 8.2: ${z({ hand: 1 }).toFixed(2)}`);
+  check(near(z({ jumpT: 0.25, h: 1 }), top(8.2, 1.6) + 2.2), `peak of a jump: ${z({ jumpT: 0.25, h: 1 })}`);
+  check(near(z({ jumpT: 0.1, h: 0.6 }, 0.4), top(8.2, 1.3)), "the hand should be back down once the jump is over");
+  check(near(z({ hand: 1, jumpAt: 300 }, 0.1, 100), top(8.2, 1.6)) && near(z({ hand: 1, jumpAt: 300 }, 0.45, 100), top(8.2, 1.6) + 2.2), "a scheduled jump should start on time");
+  check(near(z({ hand: 1, jumpAt: 300 }, 0.45, null), top(8.2, 1.6)), "a scheduled jump needs a shot in progress");
   const h = SIT.handPaths(p, [defender(p, 3, { hand: 1, vy: 10 })], null)[0];
-  check(h.r === 0.3 && near(h.at(0).y, p.y - 3 + 1.6) && near(h.at(0.2).y - h.at(0).y, 2) && near(h.at(1).y - h.at(0).y, 3.5), "the hand reaches 1.6 ft toward the shooter and is carried by their motion for 0.35 s");
-  return "reach heights and jump timing";
+  check(h.r === 0.3 && near(h.at(0).y, p.y - 3 + 1.6) && near(h.at(0.2).y - h.at(0).y, 2) && near(h.at(0.5).y - h.at(0).y, 3.5), "the hand reaches 1.6 ft toward the shooter and is carried by their motion for 0.35 s");
+  check(h.at(0.6) !== null && h.at(0.61) === null, "an arm is only in the shot for 0.6 s: a ball that comes back out later is a loose ball");
+  const s0 = h.at(0).from, s1 = h.at(0.2).from;
+  check(near(s0.x, p.x) && near(s0.y, p.y - 3) && near(s0.z, 8.2 - ARM) && near(s1.y - s0.y, 2), "the arm starts at the shoulder, over the defender's feet and an arm's length below standing reach, and moves with them");
+  // a defender played by a person: the hand goes where they put it, so close in is high and far out is low
+  const d = defender(p, 3, { hand: 1 }), mine = (out) => SIT.handPaths(p, [{ ...d, hx: d.x, hy: d.y + out }], null, null);
+  const own = out => { const me = { ...d, hx: d.x, hy: d.y + out }; return SIT.handPaths(p, [me], null, me)[0].at(0); };
+  check(near(own(0.85).z, top(8.2, 0.85)) && near(own(1.6).z, top(8.2, 1.6)) && own(0.85).z > own(1.6).z + 0.3, `close in ${own(0.85).z.toFixed(2)} ft, far out ${own(1.6).z.toFixed(2)} ft`);
+  check(near(own(1.6).y, d.y + 1.6) && near(mine(0.85)[0].at(0).y, d.y + 1.6), "only the defender named as a person's uses the hand they placed");
+  check(near(own(9).z, top(8.2, ARM*0.95)), "an arm can't reach further than it is long");
+  return `hand 0.85 ft out: ${own(0.85).z.toFixed(2)} ft up; 1.6 ft out: ${own(1.6).z.toFixed(2)} ft`;
 });
 
 stest("Geometry: the shot line points at the rim, and the three-point line is 22 ft in the corners and 23.75 above", () => {

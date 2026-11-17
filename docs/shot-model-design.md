@@ -581,7 +581,15 @@ The script then prints every target at 4,000 shots, along with the open perfect 
 
 ### Blocks, bank shots and feedback
 
-**Blocks.** Each defender's hand becomes a sphere (0.3 ft in the prototype) at their reach height: standing reach plus their current jump height, out in the direction they're contesting. It's checked against the ball at every simulation step. Any touch that isn't goaltending is a block: the ball comes off the hand with most of its pace gone and heads down. This replaces the block probability rolls for everything except dunks.
+**Blocks.** A defender's arm is in the shot for the first 0.6 s of the ball's flight, and the ball collides with it like anything else.
+
+- **An arm is one length.** It is 2.6 ft from shoulder to hand, and the shoulder is that far below standing reach. Reaching out toward the ball lowers the hand: 1.6 ft out, it is 0.55 ft lower than straight up. So a hand cannot be both close to the ball and as high as it goes.
+- **The whole arm is solid.** The hand is a 0.3 ft sphere and the forearm a rod from the shoulder to it. A ball that would pass under the hand hits the arm.
+- **A touch is a collision with something soft.** The ball loses nearly all the speed it had into the arm and keeps the rest, and a rising hand carries it. A square hit stops it: a block. A graze turns it a little: a tip, which carries on off line and can still go in. The line between them is the ball's velocity changing by 40% of its speed.
+- **Then it is a loose ball.** Whoever touched it can't also catch it for 0.35 s.
+- **The arm is where the defender put it at the release.** A jump that starts after the ball is gone changes nothing; by then the ball is out of reach anyway. After 0.6 s the arm is out of the simulation, so a ball coming back off the rim is rebounded under the rules of the game and is never a late "block" by an arm that is no longer there.
+
+This replaces the block probability rolls for everything except dunks.
 
 **Goaltending.** Touching the ball on its way down, above rim height and within 1.6 ft of the rim's center, counts as a make.
 
@@ -615,14 +623,14 @@ This is the point where the prototype becomes a real project. The physics is bui
 - Small sideways errors produce some rim contacts that fall out (in-and-outs exist).
 - The same launch produces the identical path.
 - No bounce ever gains speed.
-- A hand in the ball's path on the way up blocks it; a hand that stays low doesn't.
+- A hand in the ball's path on the way up blocks it; a hand that stays low doesn't. An arm is solid from shoulder to hand, a graze is a tip that keeps most of its pace, and the same touch always gives the same path.
 - A touch on the way down over the rim is goaltending, and counts.
 - Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
-- The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' hands.
+- The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, steals, live balls off a missed dunk, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
-- Two players: the side without the ball moves, contests, jumps and takes the ball with their own input. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Each correction reports how far it moved each player, and with that taken off nobody moves more than a stride in a tick. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
+- Two players: there is no rim protector, and the side without the ball moves, contests, jumps and takes the ball with their own input. A defender close enough who goes up in time blocks a jumper, and from further out, late or flat-footed does not; reaching out gets to shots that straight up cannot. After a miss, the player in the air takes the ball before it comes down to the other, and a player standing on the spot is not moved by one running into their back. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Each correction reports how far it moved each player, and with that taken off nobody moves more than a stride in a tick. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
 
 **Milestones:**
 
@@ -652,7 +660,7 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 | Check ball | Every possession starts at the top of the key, 25.75 ft out and behind the arc, with the defender at their guarding distance and the rim protector home. The ball can't be taken for the first second |
 | Shot clock | 14 s. It runs while the handler has the ball, including the shooting motion, and stops once the shot is in the air. Running out gives the ball away |
 | Scoring | Twos and threes as before, one for a free throw. First to 21 wins |
-| Loose ball | A miss or a block is a live ball. It keeps flying and bouncing as the physics says, and goes to whoever first gets within 1.6 ft of it while it is below 8 ft |
+| Loose ball | A miss, a tip or a block is a live ball. It keeps flying and bouncing as the physics says, and goes to whoever's reach it comes into first: within 1.6 ft of their body and no higher than their hands, which are at 8 ft standing and up to 10.2 ft at the top of a jump |
 | Offensive rebound | The handler gets it: play on with a fresh clock |
 | Defensive rebound | A defender gets it: the other side's ball |
 | Out of bounds | Against the side that touched it last: the shooter, or the defense after a block. A ball left lying for 1.5 s is whistled dead the same way |
@@ -662,13 +670,20 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 | Dunks | A dunk that is blocked or rattles out comes off the front of the rim as a live ball |
 | Whistles | Play stops for 1.5 s, then the next thing happens |
 
-**Chasing the ball.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The defenders go straight to the spot where the ball can first be caught. Bodies meeting over a loose ball split the bump evenly. The ball is drawn with its height while it is loose, so you can see when it is coming down.
+**Rebounding.** Three things decide who gets a loose ball, and none of them is a roll.
 
-**Nothing new to press.** Rebounding is running to the ball, and a free throw is the same hold and release as any jumper. That keeps to the principle of no move buttons.
+- **Getting there.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The ball is drawn with its height while it is loose, so you can see where and when it is coming down.
+- **Going up.** Space jumps, for the handler as well as a player on defense, any time they don't have the ball. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
+- **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
+
+**One new thing to press, and it is the same key.** Space is already the defender's jump; with no ball in the handler's hands there is nothing to gather, so it is theirs too. A free throw is the same hold and release as any jumper.
+
+**Against the AI.** The defenders take a reaction time to register a miss before they go after it, and they go up for a ball that is about to come within a jump's reach.
 
 **First guesses, to revisit:**
 
-- **Rebounding is bare.** There is no jumping for the ball, no boxing out, and the defenders react to a miss instantly, so the rim protector takes most of them.
+- **Rebounding is by position and timing only.** Catching is automatic once the ball is in reach: the cursor plays no part. Every body is the same size and strength until frames, so a box-out can't be moved by anyone.
+- **A ball only comes loose once it has dropped below the rim.** A player already in the air has it the moment it does, so the first chance at most rebounds is at about 9 ft.
 - **The last free throw is never rebounded.** The other side simply takes the ball.
 - **14 seconds and 21 points** are starting values, as is the one-second grace after a check.
 - **Steals are still dice rolls,** and now they cost the possession.
@@ -676,18 +691,18 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 
 ## Two players online
 
-Two people can now play each other: each plays their own side, and whoever doesn't have the ball controls the on-ball defender. It is bare bones, built to find out how defending feels. The rim protector is still the AI for both.
+Two people can now play each other: each plays their own side, and whoever doesn't have the ball controls the on-ball defender. It is one against one: there is no rim protector. It is built to find out how defending feels.
 
 **Defending.** The same keys as on offense, so there is still nothing new to learn and no move buttons.
 
 | Input | On defense |
 | --- | --- |
 | WASD | Moves the defender: 14 ft/s, a little quicker than a dribbler's 13.5 |
-| Cursor | The hand. How far it is from the body is how far the arm is out. Pointed at the ball handler it is a hand up, which is what the contest formulas read |
+| Cursor | The hand. How far it is from the body is how far the arm is out, between 0.85 ft (nearly straight up, and as high as it goes) and 1.6 ft (reaching out, and lower). Pointed at the ball handler it is a hand up, which is what the contest formulas read |
 | Cursor on the ball | Takes it, if the hand gets within 0.55 ft of a ball that is being dribbled or held and the handler's off arm is not in the way. Not during the first second after a check |
-| Space | Jumps. No steering in the air, and the usual recovery on landing |
+| Space | Jumps, to block a shot or go up for a rebound. No steering in the air, and the usual recovery on landing |
 
-Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke and strip rolls are off when a player defends, and the ball has to be reached. From in front, across the handler's body, it can't be; from the ball's side it can. **Blocks are the defender's timing:** the jump is theirs to choose, so the knife-edge found in Calibration is now a matter of skill, not of when an AI happens to leave its feet.
+Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke and strip rolls are off when a player defends, and the ball has to be reached. From in front, across the handler's body, it can't be; from the ball's side it can. **Blocks are the defender's timing and reach:** the jump is theirs to choose and the hand is where they put it (see Blocks, under Full physics, and the measurements under Calibration).
 
 **Staying together** (`sim/rollback.js`). Both browsers run the whole game, and neither waits for the other.
 
@@ -770,27 +785,44 @@ With perfect input, a shooter makes about half of open threes and drops to the m
 
 The floater under full contest was about 15% in the landing-point model. Floater contest scatter was not part of the calibration.
 
-**With defenders' hands** (from `sim/measure.js`: the contest and the hands both come from one defender position at release, 4,000 shots each, perfect release). "In the air" means the defender jumped when they saw the shot, one reaction time in.
+**With defenders' arms** (from `sim/measure.js`: the contest and the arm both come from one defender position at release, 4,000 shots each, perfect release). "In the air" means the defender jumped when they saw the shot, one reaction time in. These are the AI's arms, which reach toward the shooter.
 
 | Situation | Made | Blocked |
 | --- | --- | --- |
 | Three, on-ball defender 4 ft away, hand up | 49% | 0% |
 | Three, defender 3 ft away, hand up | 37% | 0% |
 | Three, defender 2 ft away, hand up | 22% | 0% |
-| Three, defender 2.5 to 3.5 ft away, in the air | 0% | 100% |
-| Three, defender 2 ft away or closer, in the air | 20–22% | 0% |
+| Three, defender 3 ft away, in the air | 0% | 100% |
+| Three, defender 2.5 ft away, in the air | 0% | 89% |
+| Three, defender 3.5 ft away or further, or 2 ft or closer, in the air | 20–51% | 0% |
 | 15 ft jumper, defender 3 ft away, hand up | 48% | 0% |
-| Floater from 10 ft, rim protector 3.5 ft away, hand up | 50% | 0% |
-| Floater from 10 ft, rim protector 3 ft away or closer, hand up | 0% | 100% |
-| Layup, standing rim protector 40° to one side: away / middle / into them | 78% / 76% / 72% | 0% |
-| Layup, that rim protector at the peak of a jump: away / middle / into them | 63% / 57% / 56% | 4–7% |
+| Floater from 10 ft, rim protector 2.2 to 5 ft away, hand up | 31–51% | 0% |
+| Floater from 10 ft, rim protector 4 ft away or closer, in the air | 0% | 100% |
+| Layup, standing rim protector straight in front, or 40° to one side | 71–78% | 0% |
+| Layup, rim protector 40° to one side at the peak of a jump: away / middle / into them | 44% / 31% / 30% | 35% / 45% / 45% |
 | Layup, rim protector straight in front, in the air | 0% | 100% |
+
+**A player's arm** (a 15 ft jumper with a perfect release against a defender who jumps; each cell is every jump timing from 400 ms before the release to the release itself):
+
+| Defender | Cursor on the shooter: reaching out | Cursor close to their body: straight up |
+| --- | --- | --- |
+| 1.8 ft away | Never blocked; tipped on 79% of timings | Blocked on 54%, tipped on 28% |
+| 2.2 ft | Blocked on 41%, tipped on 35% | Blocked on 67%, tipped on 10% |
+| 2.6 ft | Blocked on 43%, tipped on 27% | Blocked on 48%, tipped on 9% |
+| 3.0 ft | Blocked on 44%, tipped on 11% | Blocked on 1%, tipped on 21% |
+| 3.2 ft | Blocked on 32%, tipped on 9% | Never touched |
+| 3.4 ft | Never blocked; tipped on 17% | Never touched |
+| 3.6 ft or more | Never touched | Never touched |
 
 What this shows:
 
-- **Blocks are all-or-nothing.** Launch noise barely moves the ball in its first few feet, so a hand is either in the path or it isn't: a given defender position blocks every shot or none. Block rates only come from the mix of positions and jumps a defender ends up in.
-- **A raised hand inside 3 ft blocks every floater.** The floater leaves at 8.7 ft and the rim protector's standing reach is 8.9 ft.
-- **A standing rim protector barely costs a layup:** 72–78%, against 81% open. The landing-point model had about 48% finishing away and 33% into them. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
+- **A block needs the defender inside about 3.2 ft, and a jump that left the floor between about 320 and 150 ms before the release.** Before the arm had a length, the same jumper was blocked from anywhere inside 3.5 ft over a 350 ms span of timings, and a jump at the right moment from 4 ft still got there.
+- **Reaching out and reaching up are different tools.** Out gets a hand to shots from 3 to 3.4 ft that straight up cannot touch. Up is better inside 2.6 ft, where an arm reaching out ends up behind the ball.
+- **The edges are tips, not a cliff.** Around the block timings, and at the far end of the reach, the hand only grazes the ball.
+- **The timing is the contest.** A jumper takes 520 ms to its release and cannot be called off after 150 ms. A defender who goes on the first movement is up in time, and is beaten by a pump fake. One who waits for the commitment and then reacts in 200 ms has a hand up about 30 ms before a perfect release: an early release beats them, at a small cost in distance.
+- **A hand held up no longer blocks a floater.** Reaching toward the shooter now puts it below the ball. It takes a jump.
+- **A standing rim protector still barely costs a layup:** 71–78%, against 81% open. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
+- **Against the AI, a block is still all-or-nothing for a given position and jump,** because the AI's jump is on a schedule. The variation now comes from a player's timing and reach.
 
 **In play** (the last section of `sim/measure.js`: whole shots played through the game, so the on-ball defender reads the shot, closes out and jumps on their own; 600 standing jumpers per row, each with a perfect release):
 
@@ -908,7 +940,9 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | TAIL\_IN / CONTEST\_TAIL\_IN | 12.5 / 1.6 in | Furthest noise alone can carry a shot from the rim's center / extra at full contest |
 | DT / DT\_NEAR / DT\_FAR | 1 / 0.5 / 10 ms | Simulation step: normal / near the rim / nothing to hit |
 | T\_MAX / NET\_DEPTH | 3.5 s / 0.6 ft | Longest flight / depth below the rim that confirms a make |
-| Hands | 0.3 ft sphere; reach 8.2 ft (rim protector 8.9 ft); 2.2 ft jump | Block collisions. Placeholders until frames |
+| Arms | 2.6 ft from shoulder to a 0.3 ft hand, 0.17 ft forearm; standing reach 8.2 ft (rim protector 8.9 ft); 2.2 ft jump; in the shot for 0.6 s | Block collisions. Placeholders until frames |
+| Touches | Restitution 0.2, friction 0.3; a block changes the ball's velocity by 40% of its speed or more | A hand on the ball: block or tip |
+| Rebounds | Caught within 1.6 ft, at 8 ft standing plus up to 2.2 ft of jump; 0.35 s before whoever touched a shot can catch it | Loose balls |
 
 **Tuning sliders and defaults:** fadeaway rating 70, timing assist ±15 ms, perfect release bonus 30%, aim assist 40%, drift strength 1.0×, ball handling 80, finishing 80, dunk 75, on-ball defender and rim protector on, rim protector steps up 50%, guarding distance 4.5 ft, on-ball quickness 70, on-ball steals 60, shot reaction time 250 ms, on-ball length 1.0×. The rating sliders are placeholders until frames replace them. The shooter rating and floater touch sliders are gone.
 
@@ -929,8 +963,9 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **Live-ball triple threat and jab steps** need passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **Floaters don't get the clean-look premium yet.**
-- **Blocks are all-or-nothing for a given defender position, and turn on a few milliseconds of jump timing** (see Calibration). The frames target of about 1 in 12 tight contests can only come from the mix of positions and jumps, unless something adds variation to where the hand or the release point is.
-- **A standing rim protector barely costs a layup,** and a raised hand inside 3 ft blocks every floater (see Calibration).
+- **How often a player blocks a tight jumper is not known yet.** The arm now has a length, a block has a window of about 170 ms, and its edges are tips (see Calibration). Whether that lands near the frames target of about 1 in 12 tight contests depends on how people time their jumps, which only play will show.
+- **A jump after the release does nothing,** because a shot's flight is worked out at the release. For a jumper the ball is out of reach by then anyway; for a floater or a layup near the rim it may not be.
+- **A standing rim protector barely costs a layup** (see Calibration).
 - **The live scatter breakdown bar still uses the landing-point component sizes,** including a distance share the physics no longer has. The scatter figure beside it comes from the noise model.
 
 **Roadmap:**
@@ -939,7 +974,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 2. **Frames:** height, wingspan and weight replace the rating sliders.
 3. **Fouls and free throws:** a first version is in, under the game rules.
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
-5. **Rebounding:** a first version is in: misses are live balls on real caroms. Jumping, boxing out and reaction time are still to come.
+5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out and the AI's reaction time are in. Size and strength wait for frames.
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** a first version is in for the on-ball defender (see Two players online). Passing-lane deflections wait for passing.
 
