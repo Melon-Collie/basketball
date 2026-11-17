@@ -71,7 +71,7 @@ function simulateShot(launch, opts = {}) {
   let wentIn = false, made = false, madeAt = null, sinceSample = 0, floorBounces = 0, blocked = false, goaltend = false;
   const hands = opts.hands || [];                            // defenders' hands: { at: t => {x, y, z}, r }
   let maxSpeedAfter = [];                                    // for the energy check
-  while (t < PHYS.T_MAX) {
+  while (t < (opts.tMax ?? PHYS.T_MAX)) {
     const hR = Math.hypot(c.x - R.x, c.y - R.y);
     const nearRim = hR < 2 && Math.abs(c.z - R.z) < 1.5;
     const far = hR > 3.2 && c.z > 1.5;                       // nothing to hit out here: take big steps
