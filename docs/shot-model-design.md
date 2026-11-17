@@ -721,7 +721,14 @@ Two things this changes. **Steals are no longer dice:** the AI's reach-in, poke 
 The browsers talk directly over WebRTC, but two browsers can't find each other unaided: each has to be told how to reach the other. Two outside services help, and neither sees the game:
 
 - **An introduction service** passes those few messages between the two browsers. The page uses the free public one run for the PeerJS library, speaking its protocol directly, with no library loaded. The host waits there under the code; the guest calls that code; they exchange how to reach each other and the page hangs up on the service. Both players' network addresses pass through it, as they must for any service doing this job.
-- **A public address lookup** (Google's STUN) tells each browser its own outside address.
+- **Public address lookups** (Google's and Cloudflare's STUN) tell each browser its own outside address. Two are asked so the page can tell when a network answers each one differently.
+
+**When a direct connection isn't possible.** Some networks will not accept a connection from outside however it is introduced: ones that give a different outside address to every destination, and ones that block this kind of traffic altogether. Two players on such networks, or one on a strict one and one on an ordinary one, cannot connect directly. The only way through is a relay: a server both can reach that passes the traffic between them, still encrypted end to end. A relay needs an account with someone who runs one, so the page has none by default.
+
+- `?relay=<address>` on the page (or `RELAY_URL` in it) names an address that answers with a list of relay servers in the form browsers take. The credential addresses of Metered and of Cloudflare's TURN service both do. The invite link carries it to the guest.
+- `?relayonly` connects only through the relay, to check that one works.
+- Once a game starts, the panel says whether it is connected directly or through a relay.
+- When a connection fails to come up, each side is told what its own browser found: no outside address at all, a different one for every destination, or a network that looks open (so the other player's is probably the one in the way), and whether a relay was available.
 
 If the introduction service can't be reached, the panel says so and opens the old way of connecting, which needs no service: the players carry the two messages themselves, as codes of about 830 characters, the host's first and then the guest's back. `?broker=wss://…/` on the page's address points it at a different introduction service that speaks the same protocol, such as one you run yourself.
 
@@ -739,7 +746,7 @@ The worst frames are the ones that replay a shot's release, which simulates the 
 **Limits, for now:**
 
 - **The introduction service is somebody else's free service.** It can be down, slow or limited, and there is no promise it stays up. It is also stricter than the server code PeerJS publishes: it hangs up on any sender whose message is not shaped like the library's own, which is why the first version of the link failed with "Lost touch with the invite service" the moment a guest joined. The page now sends what it expects, the link has been checked against the real service, and the stand-in used by `tools/online.js --link` is as strict.
-- **Some networks won't connect.** With no relay server, two players behind strict firewalls can't reach each other. The guest is told so after 20 seconds.
+- **Some networks won't connect, and this has happened in a real game between two networks.** With no relay set up, players behind a strict firewall can't be reached. Each side is told what its own network looks like when it fails. The relay support above is untested against a real relay.
 - **A code is the only key.** Anyone who has the link can take the one open seat. Once a game has started the code is dead.
 - **Not yet played across the internet, or between two different browsers.** Everything above is two copies of Chromium on one machine with the lag faked. Two different browsers may drift and lean on resyncs.
 - **Sliding only covers where players are.** A jump or a shot that the other player started a moment ago still appears already under way, and a ball leaving a sliding player's hands steps to its true path.
