@@ -44,6 +44,16 @@ The measurement with defenders' hands takes about two minutes and prints its tab
 node sim/measure.js
 ```
 
+## Hosting on GitHub Pages
+
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the prototype whenever it or `sim/` changes on `main`. It needs Pages enabled for the repository with GitHub Actions as its source, under Settings > Pages.
+
+The site holds only the prototype, the `sim/` scripts it loads and an index page that redirects to it. To build the same folder locally:
+
+```bash
+tools/build-site.sh _site
+```
+
 ## Browser tools
 
 Two scripts in [`tools/`](tools) drive the prototype in headless Chromium, with a seeded random generator and a clock they step by hand, so a run plays out the same way every time. They need Playwright:
