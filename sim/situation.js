@@ -17,7 +17,7 @@ const SITU = {
   DRIVE_SPEED: 4,                  // ft/s toward the rim to count as driving
   CLOSE_RANGE: 4,                  // inside this, any shot is a finish
   LAYUP_RANGE: 7, STEPS_LAYUP_RANGE: 9, DUNK_RANGE: 9, FLOATER_RANGE: 14,
-  DUNK_SPEED: 7, DUNK_MIN_RATING: 55,
+  DUNK_SPEED: 7,
   STEP_THROUGH_EXT: 1.2, STEP_THROUGH_RANGE: 8,
   // defenders' hands (reach heights are placeholders until frames)
   HAND_RANGE: 7, HAND_R: 0.3, HAND_LOW: 6.2, HAND_JUMP: 2.2, JUMP_T: 0.5,
@@ -25,6 +25,7 @@ const SITU = {
   ARM_FOR: 0.6,                    // s after the release that an arm is in the shot. Past that nobody knows where the defender will be
   // finishing
   RIM_CONTEST_SIG: 3.5,
+  FINISH_FLOOR: 1.8 + 15*0.045,    // in: the part of a layup's scatter nothing takes away, as shown in the readout
 };
 const clampS = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -42,7 +43,8 @@ function isThree(p) {
 
 // ---------- Context: what does a click do right now? ----------
 // hold: { state: "none" | "steps" | "pivot", pivot, free, ext } (the gathered ball; pivot and free are the feet)
-function shotContext(p, hold, shift, dunkRating) {
+// canDunk: whether this player can get up there at all. Everyone can for now; with frames it will come from reach and vertical.
+function shotContext(p, hold, shift, canDunk = true) {
   const f = frame(p), vAlong = p.vx*f.u.x + p.vy*f.u.y;
   if (hold.state === "pivot") {
     // stepping through toward the rim with the free foot is a finish; otherwise it's a set shot
@@ -57,7 +59,7 @@ function shotContext(p, hold, shift, dunkRating) {
   if (!attack) return driving && f.dist <= SITU.FLOATER_RANGE ? { kind: "floater", note: "" } : { kind: "jumper", note: "" };
   if (!shift) return { kind: "layup", note: "" };
   let why = "";
-  if (dunkRating < SITU.DUNK_MIN_RATING) why = "not athletic enough";
+  if (!canDunk) why = "can't get up there";
   else if (f.dist > SITU.DUNK_RANGE) why = "too far out";
   else if (vAlong < SITU.DUNK_SPEED) why = "needs more speed";
   return why ? { kind: "layup", note: `Dunk unavailable, ${why}` } : { kind: "dunk", note: "" };
@@ -118,10 +120,10 @@ function cleanLook(p, defs, fade, moveSpeed) {
 
 // ---------- Finishing scatter ----------
 // The landing-point components (inches at the rim) for a layup. The physics takes the angle, hang and speed parts
-// as extra scatter; lat and dep are only shown in the live readout. finishing is the 40-99 rating.
+// as extra scatter; lat and dep are only shown in the live readout. limit is the speed, in ft/s, that a layup can
+// be taken at under control; every foot per second over it costs.
 function finishScatter(s) {
-  const r = 1.8 + (95 - s.finishing)*0.045;
-  const limit = 9 + (s.finishing - 50)*0.08;
+  const r = SITU.FINISH_FLOOR, limit = s.limit;
   const sp = 0.35*Math.max(0, s.speed - limit);
   const vp = clampS(s.vPerp/6, -1, 1);
   const turn = 2.2*Math.max(0, -s.side*vp) + 0.8*Math.abs(s.side) + 0.6*(s.euro || 0);   // cutting back, awkward angles, euro footwork

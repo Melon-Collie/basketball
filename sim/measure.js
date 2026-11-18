@@ -45,12 +45,12 @@ function timedTable(title, kind, dist, move, body, gaps) {
   table(title, "defender", states.map(([name]) => name), rows);
 }
 
-// Layups: the shooter is 3 ft out at the end of the finish, arriving at 11 ft/s (under control at finishing 80).
+// Layups: the shooter is 3 ft out at the end of the finish, arriving at 11 ft/s (under control: the limit is 11.4).
 function layup(angle, state, side) {
   const p = { x: R.x, y: R.y + 3, vx: 0, vy: 0 };
   const defs = [defenderAt(p, 2.3, { ...BIG, angle, ...state })];
   const con = SIT.rimContest(p, defs, side);
-  const fs = SIT.finishScatter({ speed: 11, vPerp: 0, side, hangMs: 0, euro: 0, contest: con.c, finishing: 80 });
+  const fs = SIT.finishScatter({ speed: 11, vPerp: 0, side, hangMs: 0, euro: 0, contest: con.c, limit: 11.4 });
   const r = N.makeRate({ kind: "layup", dist: 3, contest: con.c, extra: Math.hypot(fs.parts[1], fs.parts[2]), hands: SIT.handPaths(p, defs, null) }, n, seed);
   return { c: con.c, rate: r.rate, blocks: r.blocks };
 }

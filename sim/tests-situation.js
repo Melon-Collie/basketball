@@ -19,7 +19,7 @@ function defender(p, d, opts = {}) {
 const DRIBBLING = { state: "none" };
 
 stest("Context follows the design doc's table, in order", () => {
-  const kind = (p, shift = false, hold = DRIBBLING, dunk = 75) => SIT.shotContext(p, hold, shift, dunk).kind;
+  const kind = (p, shift = false, hold = DRIBBLING, canDunk = true) => SIT.shotContext(p, hold, shift, canDunk).kind;
   const rows = [
     ["standing 3 ft", kind(at(3)), "layup"],
     ["standing 3 ft, Shift (no speed)", kind(at(3), true), "layup"],
@@ -28,7 +28,7 @@ stest("Context follows the design doc's table, in order", () => {
     ["driving 8.5 ft", kind(at(8.5, 10)), "floater"],
     ["driving 8.5 ft, Shift", kind(at(8.5, 10), true), "dunk"],
     ["driving 8.5 ft, Shift, 6 ft/s", kind(at(8.5, 6), true), "layup"],
-    ["driving 8.5 ft, Shift, dunk rating 50", kind(at(8.5, 10), true, DRIBBLING, 50), "layup"],
+    ["driving 8.5 ft, Shift, by someone who can't get up there", kind(at(8.5, 10), true, DRIBBLING, false), "layup"],
     ["driving 13 ft", kind(at(13, 10)), "floater"],
     ["driving 15 ft", kind(at(15, 10)), "jumper"],
     ["standing 10 ft", kind(at(10)), "jumper"],
@@ -36,7 +36,7 @@ stest("Context follows the design doc's table, in order", () => {
     ["strafing 10 ft", kind(at(10, 0, 10)), "jumper"],
   ];
   for (const [name, got, want] of rows) check(got === want, `${name}: ${got}, expected ${want}`);
-  const why = SIT.shotContext(at(8.5, 6), DRIBBLING, true, 75).note;
+  const why = SIT.shotContext(at(8.5, 6), DRIBBLING, true).note;
   check(/needs more speed/.test(why), `note: ${why}`);
   return `${rows.length} situations`;
 });
@@ -116,7 +116,7 @@ stest("A clean look needs nobody within 8 ft, feet set, and no fade", () => {
 });
 
 stest("Finishing scatter: speed past the control limit, cutting back, hang and euro steps all cost", () => {
-  const fs = o => SIT.finishScatter({ speed: 10, vPerp: 0, side: 0, hangMs: 0, euro: 0, contest: 0, finishing: 80, ...o });
+  const fs = o => SIT.finishScatter({ speed: 10, vPerp: 0, side: 0, hangMs: 0, euro: 0, contest: 0, limit: 11.4, ...o });
   const base = fs({});
   check(near(base.limit, 11.4) && near(base.parts[0], 2.475) && base.parts[1] === 0 && base.parts[2] === 0, `base: ${JSON.stringify(base)}`);
   check(near(fs({ speed: 13.4 }).parts[2], 0.7), "2 ft/s over the limit should cost 0.7 in");
@@ -125,8 +125,8 @@ stest("Finishing scatter: speed past the control limit, cutting back, hang and e
   check(near(fs({ side: 1 }).parts[1], 0.8), "finishing at the side of the rim should cost 0.8 in");
   check(near(fs({ side: 1, vPerp: -6 }).parts[1], 3.0) && near(fs({ side: 1, vPerp: 6 }).parts[1], 0.8), "cutting back across your momentum should cost 2.2 in more");
   check(near(fs({ contest: 1 }).parts[3], 3.5), "a full contest should add 3.5 in");
-  check(near(fs({ finishing: 50 }).limit, 9), "the control limit should drop to 9 ft/s at finishing 50");
-  return `limit ${base.limit.toFixed(1)} ft/s at finishing 80; floor ${base.parts[0].toFixed(2)} in`;
+  check(near(fs({ limit: 9, speed: 11 }).parts[2], 0.7) && fs({ limit: 13, speed: 11 }).parts[2] === 0, "the limit is the speed it is given: 2 ft/s over a 9 ft/s limit costs, and 11 ft/s under a 13 ft/s one does not");
+  return `limit ${base.limit.toFixed(1)} ft/s; floor ${base.parts[0].toFixed(2)} in`;
 });
 
 stest("Arms: only within 7 ft, a fixed length from the shoulder, lifted by a jump in progress or scheduled", () => {

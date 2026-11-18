@@ -69,7 +69,7 @@ One context-sensitive shot button on mouse and keyboard: the distance and motion
 | 4 | Driving, 7–14 ft | Floater |
 | 5 | Anything else | Jumper (fade if away-from-rim input) |
 
-Dunk eligibility: within 9 ft, at least 7 ft/s toward the rim, dunk rating 55 or higher. When Shift is held but the dunk is not eligible, the shot is a layup and the UI says why.
+Dunk eligibility: within 9 ft and at least 7 ft/s toward the rim. Everyone can get up there for now; with frames that will depend on reach and vertical. When Shift is held but the dunk is not eligible, the shot is a layup and the UI says why.
 
 Clicking early on a drive gives a floater; keeping the drive going and clicking late gives a layup. The timing of the click is the decision, so there is no separate floater button. A tag under the player always shows what a click would produce.
 
@@ -129,7 +129,7 @@ A fade is a committed shot variant with a fixed motion and its own fixed release
 | Straight (S) | 1.0 | +56 ms | none | fade cost |
 | Side (S+A / S+D) | 0.707 | +39 ms | \~5.7 in toward the fade side, before aim assist | 1.25 × fade cost |
 
-Fade cost (lateral scatter, combined with movement) = 0.5 + 0.06 × (95 − fadeaway rating): about 2.0 in at 70 and 0.5 in at 95. The sideways push of a side fade is constant, so the cursor correction is constant and learnable.
+Fade cost (lateral scatter, combined with movement) is 2.0 in for a straight fade and a quarter more for a sideways one, the same for everyone. The sideways push of a side fade is constant, so the cursor correction is constant and learnable.
 
 **The trade-off emerges from timing.** The later release gives a closeout more time. A fade wins against a defender who is already close and loses against a late closeout. At 15 ft, an open perfect release goes about 60% standing versus about 48% on a straight fade at fadeaway 70. In one test from the same spot, the fade cut the contest from 21% to 6%.
 
@@ -170,7 +170,7 @@ Near the rim, the cursor picks the finish side, holding the button is a timing d
 | Component | Formula |
 | --- | --- |
 | Universal floor | 2.48. The old finisher term at 80, now the same for everyone |
-| Speed | 0.35 × max(0, speed at the start of the finish − control limit); limit = 9 + 0.08 × (finishing − 50) ft/s, 11.4 at 80 |
+| Speed | 0.35 × max(0, speed at the start of the finish − control limit); the limit is 11.4 ft/s, the same for everyone |
 | Angle | 2.2 × max(0, −s × lateral momentum) + 0.8 × abs(s), where lateral momentum is clamp(sideways speed / 6). Plus 0.6 per ft of euro step |
 | Hang | 0.9 per 100 ms |
 | Contest | 3.5 × rim contest |
@@ -249,11 +249,7 @@ In the real game, the defender is a person: WASD moves them, and the mouse contr
 
 **Perception.** The defender acts on the ball handler as they were one reaction time ago, projected forward by 0.8 of that time using the velocity they saw. A sudden change leaves them heading the wrong way until the delay catches up, and separation comes from that delay plus their acceleration limits. No move ever rolls dice to decide whether it worked.
 
-```latex
-\text{lag} = \mathrm{clamp}\big(0.32 - 0.0025\,(\text{quickness} - 40) + 0.0015\,(\text{handling} - 70),\ 0.12,\ 0.4\big)\ \text{s}
-```
-
-At the defaults, that's about 0.25 s.
+The age of that picture is one setting, 260 ms, the same against every handler. It used to be worked out from a quickness rating and a ball-handling rating.
 
 **What they do with it.**
 
@@ -262,7 +258,7 @@ At the defaults, that's about 0.25 s.
 - **Shading:** 0.8 ft toward the ball side they saw, so a crossover leaves them shaded the wrong way for one reaction time.
 - **Dead dribble:** with no drive threat left, they crowd to 2 ft with a hand up.
 - **Shots:** they react to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closing out, raising a hand, and, if close, sometimes leaving their feet (see Pump fakes).
-- **Movement:** 13 ft/s top speed and 50 ft/s² acceleration at default quickness, each scaling with quickness.
+- **Movement:** 13 ft/s top speed and 50 ft/s² acceleration. Acceleration rises with the top-speed setting, 10 ft/s² per ft/s.
 
 Quickness, handling and shooting are placeholders in this model. Under frames (below), they come from the bodies involved.
 
@@ -351,7 +347,7 @@ The panel shows "clean look" on the contest line when the premium applies. Float
 
 ## Frames instead of ratings
 
-Players are defined by their bodies, not by ratings. Height, wingspan and weight shape the mechanics, and the user's skill decides what to do with them. Players differ in what they can get away with, never in hidden accuracy. This is decided but not yet built. The prototype has dropped the shooter rating and floater touch sliders; the other rating sliders remain.
+Players are defined by their bodies, not by ratings. Height, wingspan and weight shape the mechanics, and the user's skill decides what to do with them. Players differ in what they can get away with, never in hidden accuracy. This is decided but not yet built. The prototype no longer has any ratings: every number that used to be one is now a setting in its own units, the same for every player, and those values are the anchor frame's (see Settings, not ratings, below).
 
 | Frame | Helps | Costs |
 | --- | --- | --- |
@@ -402,7 +398,7 @@ Each row replaces a placeholder or a rating. Multipliers are relative to the anc
 | Jumper release time | Height | 520 ms + 8 ms per inch above 6'5": about 455 ms at 5'9", 610 ms at 7'4". The ±12 ms perfect window doesn't change |
 | Jumper release height | Reach, vertical | Reach + 0.37 × vertical (anchor 9.6 ft) |
 | Floater and layup release | Reach, vertical, wingspan | Floater: reach + a few inches. Layups: reach + vertical, released further out the longer the arms |
-| Dunk eligibility | Reach, vertical | Can get the ball 6 in above the rim: reach + vertical (+4 in running) at least 126 in. Replaces the dunk rating gate |
+| Dunk eligibility | Reach, vertical | Can get the ball 6 in above the rim: reach + vertical (+4 in running) at least 126 in. Replaces today's rule that everyone can |
 | Contest hand | Reach, vertical | Hand up at reach − 4 in; a contest jump adds 0.75 × vertical. Replaces the 8.2 ft and 2.2 ft placeholders |
 | Dribble height and rhythm | Height | Bounce height ≈ waist (0.38 × H); rhythm scales with the square root of that. Lower and quicker is harder to reach |
 | Dribble reach | Wingspan | Arm reach ≈ 0.39 × W (anchor 2.6 ft) |
@@ -412,17 +408,23 @@ Each row replaces a placeholder or a rating. Multipliers are relative to the anc
 
 Two things stay universal on purpose: the shot noise floor (no accuracy by body) and the AI defender's reaction lag. Reaction time belongs to the person; in the real game a human is defending.
 
-### Sliders that go away
+### Settings, not ratings
 
-| Slider today | Replaced by |
-| --- | --- |
-| Ball handling | Dribble height, rhythm and reach |
-| Finishing | Release reach and extension. The finishing floor is already universal; the slider now only sets the speed control limit |
-| Dunk | Dunk eligibility from reach and vertical; poster duels from reach and mass |
-| Fadeaway | A universal fade cost. Height still matters because taller frames release higher |
-| On-ball quickness | The defender's speed and acceleration from their frame |
-| On-ball steals | Hand reach from wingspan |
-| On-ball length | Wingspan |
+There are no ratings left. What used to be a 40 to 99 number per skill is now the mechanic itself, in its own units, with one value shared by every player. Online there has only ever been one set, the host's, applied to whichever side has the ball. These are the values frames will later derive from a body, with today's numbers as the anchor's.
+
+| Was | Is now | Value | Frames will take it from |
+| --- | --- | --- | --- |
+| Shooter rating | Gone. Scatter was already one floor for everyone; its last uses were a constant for how far the AI takes a handler for a shooter, and the readout's bar | 0.75 | Nothing |
+| Floater touch | Gone. It only fed the readout's bar | | Nothing |
+| Fadeaway rating | Fade scatter | 2.0 in | A universal cost; height matters through release height |
+| Finishing rating | Layup speed limit | 11.4 ft/s | Release reach and extension |
+| Dunk rating | Gone. It was only a gate at 55; everyone can dunk | | Reach plus vertical clearing the rim |
+| Ball handling, on-ball quickness | The AI's read of the handler | 260 ms | Reaction belongs to the person; dribble height and rhythm from height |
+| On-ball quickness | The AI's top speed, with acceleration following | 13 ft/s | The defender's frame |
+| On-ball steals, ball handling | How long the ball must be left open before the AI reaches, and the wait before another | 1.8 s, 3 s | Hand reach from wingspan |
+| On-ball length | The defender's contest reach, still a multiplier | 1.0× | Wingspan |
+
+The change kept every default exactly: the scripted replay is identical at all 49 checkpoints.
 
 ### Balance checks
 
@@ -449,9 +451,9 @@ The output of this step is a 4 × 4 matrix (shooter against defender) of contest
 ### Build plan
 
 1. **Frame module:** pure functions from a frame to every derived value, with tests that the anchor reproduces today's constants exactly and that each relationship moves the right way (taller means a slower and higher release, and so on).
-2. **Shooting from frames:** release time and height, contest hands and jumps, blocks. Retire the fadeaway and length sliders.
-3. **Movement and dribbling from frames:** speed and acceleration, dribble height, rhythm and reach, contact by mass. Retire handling, quickness and steals.
-4. **Finishing and dunks from frames:** release reach and extension, dunk eligibility, poster duels. Retire finishing and dunk.
+2. **Shooting from frames:** release time and height, contest hands and jumps, blocks. Replace the fade scatter and contest reach settings.
+3. **Movement and dribbling from frames:** speed and acceleration, dribble height, rhythm and reach, contact by mass. Replace the AI's read, speed and reach settings.
+4. **Finishing and dunks from frames:** release reach and extension, dunk eligibility, poster duels. Replace the layup speed limit and the rule that everyone can dunk.
 5. **Balance pass:** build the archetype matrix and tune until no frame dominates.
 
 The prototype gets frame pickers for you and the on-ball defender: archetype presets plus height, wingspan and weight sliders. The rim protector stays a big.
@@ -792,7 +794,7 @@ The defenders exist to exercise the model, not as a design for game AI; in the r
 |  | On-ball defender | Rim protector |
 | --- | --- | --- |
 | Default position | Between ball and rim at the cushion from the perception model (guarding distance default 4.5 ft), shaded 0.8 ft toward the ball side they saw | Home 3.25 ft in front of the rim; inside 16 ft, blends 60% toward a point min(4.5, 0.45 × distance) ft out on the drive line |
-| Speed | 13 ft/s, accel 50 ft/s², both scaling with quickness | 11 ft/s (12 when contesting a finish), accel 40 ft/s² |
+| Speed | 13 ft/s, accel 50 ft/s² | 11 ft/s (12 when contesting a finish), accel 40 ft/s² |
 | On a shot | Reacts to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closes out to 1.8 ft in front at 15.5 ft/s | Finishes: blends 75% toward a point min(3, 0.6 × distance) ft out. Stay-home / step-up read on drives (see Floaters) |
 | Hand | Up once they react. Before that, 0.8 × the pull-up threat, or 0.64 against a dead dribble | Rises for jumpers and floaters within 8 ft |
 | Jumps | Within 5 ft of a shot they saw: 50%. On finishes, at a scheduled moment if within 7 ft | Within 7 ft of a shot they saw: 60%. Same finish jumps |
@@ -995,7 +997,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | Touches | Restitution 0.2, friction 0.3; a block changes the ball's velocity by 40% of its speed or more | A hand on the ball: block or tip |
 | Rebounds | Caught within 1.6 ft, at 8 ft standing plus up to 2.2 ft of jump; 0.35 s before whoever touched a shot can catch it | Loose balls |
 
-**Tuning sliders and defaults:** fadeaway rating 70, timing assist ±15 ms, perfect release bonus 30%, aim assist 40%, drift strength 1.0×, ball handling 80, finishing 80, dunk 75, on-ball defender and rim protector on, rim protector steps up 50% (when the handler is level with their defender), guarding distance 4.5 ft, on-ball quickness 70, on-ball steals 60, shot reaction time 250 ms, on-ball length 1.0×. The rating sliders are placeholders until frames replace them. The shooter rating and floater touch sliders are gone.
+**Tuning sliders and defaults:** timing assist ±15 ms, perfect release bonus 30%, fade scatter 2.0 in, aim assist 40%, drift strength 1.0×, layup speed limit 11.4 ft/s, on-ball defender and rim protector on, rim protector steps up 50% (when the handler is level with their defender), guarding distance 4.5 ft, the AI's read of you 260 ms, AI top speed 13 ft/s, AI reaches after 1.8 s and again after 3 s, AI sees a shot after 250 ms, defender's contest reach 1.0×. None is a rating: each is the mechanic in its own units, the same for every player.
 
 **Display:** the shot meter sits beside the player, or beside the cursor if the player ticks "Shot meter follows the cursor". Beside the cursor, the meter's release line is level with the cursor, so the bar reaches the cursor's height at the moment to let go, and aim and timing can be read in one place. It moves to the cursor's left where there is no room on the right. The choice is the player's own: it is remembered by their browser, is not one of the host's settings online, and applies only to their own shots.
 
@@ -1005,7 +1007,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 
 **Known gaps:**
 
-- **Ratings still drive everything except shooting accuracy;** frames are decided but not built.
+- **Every body is the same.** There are no ratings, and frames are decided but not built, so nothing yet makes one player different from another.
 - **A dunk's carry is a straight line at a fixed speed,** not a simulated arm. Layups always go at the rim's center; choosing glass versus rim from the finish side is still open.
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
