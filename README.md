@@ -2,7 +2,7 @@
 
 A proof-of-concept basketball game exploring a shot model where input sets the aim and the situation sets the scatter, so no input can guarantee a make.
 
-The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
+The prototype opens as a game: two sides take turns with the ball against an AI defense, first to 21, with a shot clock, live rebounds and free throws. Home is always white and Away always purple, on the court and on the scoreboard, whichever of them has the ball. Add `?lab` to the address, or untick Game rules on the page, for free shooting with the rules off.
 
 Two people can play each other, one against one with no rim protector, from the "Play online" panel under the court: one presses Host a game and sends the other the link it gives, and the game starts when they open it. A free public service introduces the two browsers; if it is down, the panel offers a way to connect by passing codes by hand. Whoever doesn't have the ball controls the on-ball defender. Your own input always lands after 25 ms; the other player is guessed and corrected, so a slow connection doesn't make you wait. The design doc lists its limits.
 

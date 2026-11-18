@@ -653,7 +653,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 
 With the rules on, the prototype is a game: two sides take turns with the ball against the same defense, first to 21. With them off it is the shot lab as before, where the ball comes straight back after every shot. The rules live in `sim/game.js` beside everything else and are covered by `sim/tests-rules.js`.
 
-**Sides and turns.** Home and Away alternate on every change of possession, including after a score. Until a second player can defend, one person plays offense for both sides and the AI defends both.
+**Sides and turns.** Home and Away alternate on every change of possession, including after a score. Each side keeps one color all game, on the court and on the scoreboard: Home is white and Away is purple. Whoever has the ball is drawn in their side's color and the defense in the other's, so the colors stay with the players when possession changes. The scoreboard rings the side that has the ball. Until a second player can defend, one person plays offense for both sides and the AI defends both.
 
 | Rule | How it works |
 | --- | --- |

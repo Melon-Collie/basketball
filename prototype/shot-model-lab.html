@@ -16,7 +16,7 @@
   --bg:#E6EBEF; --panel:#FFFFFF; --ink:#14202B; --muted:#56636F; --line:#CCD4DB;
   --court:#D9A96B; --grain:#CE9E60; --paint:#2A4C70; --courtline:#FFFFFF; --oob:#C08D52;
   --rim:#E2772A; --ball:#E07A2C;
-  --make:#1D8A57; --miss:#C23B4A; --accent:#2A4C70; --player:#FFFFFF; --defender:#6E2F60; --defender2:#2C6464;
+  --make:#1D8A57; --miss:#C23B4A; --accent:#2A4C70; --home:#FFFFFF; --away:#6E2F60;
   --seg1:#2A4C70; --seg2:#8FA3B8; --seg3:#D9A96B; --seg4:#C23B4A;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -26,7 +26,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
     --bg:#151D25; --panel:#1E2933; --ink:#E4EAEF; --muted:#9AA8B4; --line:#33414D;
     --court:#9C7548; --grain:#936D42; --paint:#1D3A57; --courtline:#ECE7DE; --oob:#7A5B38;
     --rim:#F08A3E; --ball:#E8863A;
-    --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --player:#FFFFFF; --defender:#B0629E; --defender2:#4FA3A3;
+    --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --home:#FFFFFF; --away:#B0629E;
     --seg1:#86B4E3; --seg2:#5E7489; --seg3:#C9995C; --seg4:#EE6474;
   }
 }
@@ -35,7 +35,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
   --bg:#151D25; --panel:#1E2933; --ink:#E4EAEF; --muted:#9AA8B4; --line:#33414D;
   --court:#9C7548; --grain:#936D42; --paint:#1D3A57; --courtline:#ECE7DE; --oob:#7A5B38;
   --rim:#F08A3E; --ball:#E8863A;
-  --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --player:#FFFFFF; --defender:#B0629E; --defender2:#4FA3A3;
+  --make:#3DBE82; --miss:#EE6474; --accent:#86B4E3; --home:#FFFFFF; --away:#B0629E;
   --seg1:#86B4E3; --seg2:#5E7489; --seg3:#C9995C; --seg4:#EE6474;
 }
 *,*::before,*::after{box-sizing:inherit}
@@ -55,9 +55,11 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .board[hidden]{display:none}
 .board .side{display:flex;align-items:baseline;gap:10px;font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700}
 .board .name{font-size:1.15rem;color:var(--muted)}
-.board .name::before{content:"";display:inline-block;width:.55em;height:.55em;border-radius:50%;margin-right:6px;background:transparent}
+.board .name::before{content:"";display:inline-block;width:.6em;height:.6em;border-radius:50%;margin-right:7px;border:1.5px solid var(--ink)}
+.board #bSide0 .name::before{background:var(--home)}
+.board #bSide1 .name::before{background:var(--away)}
 .board .side.has .name{color:var(--ink)}
-.board .side.has .name::before{background:var(--rim)}
+.board .side.has .name::before{box-shadow:0 0 0 2.5px var(--rim)}
 .board .pts{font-size:2.1rem;line-height:1;font-variant-numeric:tabular-nums}
 .board .mid{flex:1;text-align:center;min-width:0}
 .board .clock{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:1.5rem;line-height:1;font-variant-numeric:tabular-nums}
@@ -301,7 +303,7 @@ const cache = document.createElement("canvas");
 let dpr = 1, ppf = 10, T = {};
 function readTheme() {
   const cs = getComputedStyle(document.documentElement);
-  for (const k of ["court","grain","paint","courtline","oob","rim","ball","make","miss","accent","player","defender","defender2","ink","muted","line","panel"]) T[k] = cs.getPropertyValue("--" + k).trim();
+  for (const k of ["court","grain","paint","courtline","oob","rim","ball","make","miss","accent","home","away","ink","muted","line","panel"]) T[k] = cs.getPropertyValue("--" + k).trim();
 }
 // Court to screen. S0 is for things fixed to the floor. S is for a player and what they carry: it adds `nudge`,
 // which is how far that player is being drawn from where the game has them (see Sliding corrections, below).
@@ -414,6 +416,9 @@ function drawBall(x, y, h, alpha) {
   ctx.beginPath(); ctx.arc(sx, by, r, 0, 2*Math.PI); ctx.stroke();
   ctx.globalAlpha = 1;
 }
+// Each side keeps one colour all game: whoever has the ball is drawn in their side's, and the defense in the other's.
+const sideColor = side => side === 0 ? T.home : T.away;
+const OUTLINE = "#14202B";
 function drawDefender(def, color, radius) {
   const mine = def === D ? ease.D : ease.R, was = nudge, h = Math.max(0, def.h + mine.h);
   nudge = mine;
@@ -422,12 +427,13 @@ function drawDefender(def, color, radius) {
     ctx.globalAlpha = 0.25; ctx.fillStyle = "#000";
     ctx.beginPath(); ctx.ellipse(dx, dy, ppf*radius, ppf*radius*0.6, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1;
   }
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill();
+  ctx.fillStyle = color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.14;
+  ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1;
   const up = Math.max(def.hand, h), reach = radius*0.8 + 0.75*up;
   // a player's hand is where their cursor put it; the AI's reaches toward the ball handler
   const [hx, hy] = G.duo && def === D && D.hx !== undefined ? S(D.hx, D.hy) : S(def.x + tx/tl*reach, def.y + ty/tl*reach);
-  ctx.fillStyle = T.player; ctx.strokeStyle = color; ctx.lineWidth = ppf*0.12;
+  ctx.fillStyle = color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.1;
   ctx.beginPath(); ctx.arc(hx, hy - lift, ppf*(0.28 + 0.14*up)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   nudge = was;
 }
@@ -452,7 +458,7 @@ function drawHands() {
     ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.2; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(hx, hy); ctx.stroke();
     const isBall = hold.state === "none" && s === drib.side && !(drib.crossing && drib.phase < 0.5);
-    ctx.fillStyle = T.player; ctx.lineWidth = ppf*0.09;
+    ctx.fillStyle = sideColor(G.flow.offense); ctx.lineWidth = ppf*0.09;
     ctx.beginPath(); ctx.arc(hx, hy, ppf*(isBall ? 0.3 : 0.25), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   }
   ctx.restore();
@@ -515,13 +521,13 @@ function draw() {
     ctx.save(); ctx.globalAlpha = Math.min(0.9, live.con.c*1.1); ctx.strokeStyle = T.miss; ctx.lineWidth = ppf*0.18;
     ctx.beginPath(); ctx.arc(px, py, ppf*1.6, 0, 2*Math.PI); ctx.stroke(); ctx.restore();
   }
-  if (params.rimOn) drawDefender(R, T.defender2, 1.25);
-  if (params.defOn) drawDefender(D, T.defender, 1.05);
+  if (params.rimOn) drawDefender(R, sideColor(1 - G.flow.offense), 1.25);   // the rim protector is the bigger of the two
+  if (params.defOn) drawDefender(D, sideColor(1 - G.flow.offense), 1.05);
 
   // the handler, lifted off their shadow when they go up for a loose ball
   const ph = Math.max(0, P.h + ease.P.h);
   if (ph > 0.02) { ctx.globalAlpha = 0.25; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(px, py, ppf*1.05, ppf*0.63, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1; }
-  ctx.fillStyle = T.player; ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.14;
+  ctx.fillStyle = sideColor(G.flow.offense); ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.14;
   ctx.beginPath(); ctx.arc(px, py - ph*ppf*1.1, ppf*1.05*(1 + 0.2*ph), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
   if (shot.state === "idle" && hold.state === "pivot") drawFeet();   // on top, so the pivot foot is always readable
   else if (shot.state === "idle" && hold.state === "steps") drawGatherFeet();
