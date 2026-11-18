@@ -77,6 +77,7 @@ ltest("A hand on the ball takes it, but not through the handler's body or inside
   // the handler dribbles out to their right; the defender either stays in front and reaches across, or comes round to the ball
   const reach = side => {
     const g = GM.create({ seed: 2, rules: true, duo: true });
+    GM.step(g, [{ ...idle(g.P.x + 6, g.P.y), gather: true }, idle(g.D.x, g.D.y)]);    // the handler puts it on the floor
     for (let i = 0; i < 600; i++) {
       const b = GM.dribbleBallPos(g), goal = side ? { x: g.P.x + 2.7, y: g.P.y } : { x: g.P.x, y: g.P.y - 2.4 }, dx = goal.x - g.D.x, dy = goal.y - g.D.y;
       GM.step(g, [idle(g.P.x + 6, g.P.y), { ...idle(b.x, b.y), r: dx > 0.2, l: dx < -0.2, d: dy > 0.2, u: dy < -0.2 }]);
@@ -151,8 +152,9 @@ ltest("Reaching in is a foul: a hand that goes into the handler's body is whistl
   for (let i = 0; i < Math.round((GM.RULES.DEAD_T + 0.05)/GM.TICK); i++) GM.step(reach, [away(reach), near(reach)]);
   check(reach.flow.phase === "live" && reach.flow.offense === 0 && reach.flow.clock > GM.RULES.SHOT_CLOCK - 0.1 && reach.stats.to === 0, "the offense should keep the ball, from the top, with a fresh clock");
   // the same hand, put there before the handler arrives, and left still while they walk into it
-  const still = setup(); Object.assign(still.P, { y: 31 + 3 });
+  const still = setup(); Object.assign(still.P, { y: 31 + 3 }); Object.assign(still.hold.center, { y: 31 + 3 });
   const out = g => idle(g.D.x, g.D.y + 4);
+  GM.step(still, [{ ...away(still), gather: true }, out(still)]);                    // on the floor, so they can walk
   for (let i = 0; i < 60; i++) GM.step(still, [away(still), out(still)]);
   for (let i = 0; i < 90 && still.flow.phase === "live"; i++) GM.step(still, [{ ...away(still), u: true }, out(still)]);
   const gap = Math.hypot(still.D.hx - still.P.x, still.D.hy - still.P.y);
