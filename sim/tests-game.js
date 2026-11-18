@@ -97,6 +97,26 @@ gtest("On a drive, clicking early is a floater, clicking late is a layup, and Sh
   return kinds.join(", ");
 });
 
+gtest("Rim or glass is chosen when the shot starts: a cursor that slides onto the backboard during it is not a bank", () => {
+  const BOARD_Y = 4.0, rim = { x: RIM.x, y: RIM.y }, glass = { x: RIM.x + 1.6, y: BOARD_Y };
+  // a standing jumper from the wing, with the cursor in one place at the press and another by the release
+  const shoot = (atPress, atRelease) => {
+    const g = fresh(31, { defenders: false });
+    Object.assign(g.P, { x: 33, y: 13 }); run(g, 0.3, atPress);
+    for (let i = 0; i < 62; i++) GM.step(g, { ...(i < 3 ? atPress : atRelease), shot: true });
+    GM.step(g, atRelease);
+    return g.last;
+  };
+  check(shoot(rim, rim).glass === false && shoot(glass, glass).glass === true, "on the rim throughout is a shot at the rim, and on the glass throughout is a bank");
+  check(shoot(rim, glass).glass === false, "a cursor that started on the rim and ended on the backboard should still be a shot at the rim");
+  check(shoot(glass, rim).glass === true, "a bank that was chosen at the press stays a bank");
+  // just behind the rim and a little to one side: a near miss of the rim, which used to count as the glass
+  const near = { x: RIM.x + 0.9, y: RIM.y - 0.6 };
+  check(shoot(near, near).glass === false, "a cursor 0.9 ft to the side and 0.6 ft behind the rim's center is a miss of the rim, not a bank");
+  check(Math.abs(shoot(rim, glass).aim.theta) > 0.02, "and sliding off the rim still costs it as aim");
+  return "decided at the press; a near miss of the rim is not the glass";
+});
+
 gtest("Nothing in the game is rolled except a shot's scatter", () => {
   const src = require("fs").readFileSync(require("path").join(__dirname, "game.js"), "utf8");
   const calls = src.split("\n").filter(line => /\brnd\(\)/.test(line) && !/^const rnd = /.test(line));

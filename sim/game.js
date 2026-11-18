@@ -48,6 +48,7 @@ const C = {
   LEFT_OPEN: [0.12, 1.2],           // s the AI must have seen the ball left open before it reaches: under its nose, and at the end of its reach
   CONTACT_R: 1.9, FOUL_V: 3.5,      // a defender this close to a shooter and still coming at them this fast has run into them
   ARM_FOUL_R: 0.6,                  // a raised hand within this of a shooter's center is on their arms, not the ball (which leaves 0.7 ft out)
+  GLASS_DEPTH: 0.4, GLASS_SIDE: 1.1,  // aiming at the glass: the cursor within this of the backboard's line, and at least this far to the side of the rim's center
   LIVE_GAP: 3.4,                    // the AI stays at least this far off a triple threat: the drive is still there, so it can't crowd the shot
   BITE_R: 3.2,                      // the AI goes up for a jumper only from inside this, where a block is possible; so only there does a fake get it in the air
   SET_V: 0.5, OVER_V: 2,            // rebounding: a player moving this slowly is set; one in the air and coming into them this fast is over their back
@@ -177,15 +178,25 @@ function physOut(sr, layup) {
   if (r.tipped) return { make: r.made, big: r.made ? "Make" : "Miss", sub: r.made ? "Tipped, and in anyway" : "Tipped", touched: true };
   return { make: r.made, big: r.made ? "Make" : "Miss", sub: layup ? (LAYUP_LABEL[r.label] || r.label) : r.label };
 }
-// Aiming at the glass: the cursor on the backboard line, away from the rim. Height is chosen for you.
+// Aiming at the glass: the cursor on the backboard line, clear of the rim. Height is chosen for you.
+// Rim or glass is chosen when the shot starts, by where the cursor is then, and not again: a cursor that slides off
+// the rim during the shot is a worse aim at the rim, never a bank nobody asked for. The strip that counts as the
+// glass stops short of the rim on every side, so a near miss of the rim is not on it either.
 // A shot works its target out exactly. The live readout asks many times a second, so it reuses nearby answers.
+function onGlass() {
+  const B = PHX.PHYS.BOARD;
+  return Math.abs(mouse.y - B.y) <= C.GLASS_DEPTH && mouse.x >= B.x0 + 0.3 && mouse.x <= B.x1 - 0.3 && Math.abs(mouse.x - HOOP.x) >= C.GLASS_SIDE;
+}
 function glassAimFor(kind) {
   if (kind !== "jumper" && kind !== "floater") return null;
-  const B = PHX.PHYS.BOARD;
-  if (Math.abs(mouse.y - B.y) > 0.7 || mouse.x < B.x0 + 0.3 || mouse.x > B.x1 - 0.3 || Math.abs(mouse.x - HOOP.x) < 0.8) return null;
-  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1));
-  const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${mouse.x.toFixed(1)}`, gl = g.view.glass;
-  if (!gl.cache[key]) { if (++gl.n > 300) { gl.cache = {}; gl.n = 0; } gl.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, +mouse.x.toFixed(1)); }
+  const going = shot.state === "shooting";
+  if (going ? !shot.glass : !onGlass()) return null;
+  // once it is a bank, the cursor slides the target along the glass, on the side of the rim it started
+  const B = PHX.PHYS.BOARD, side = going ? shot.glassSide : (mouse.x >= HOOP.x ? 1 : -1);
+  const x = +(side > 0 ? clamp(mouse.x, HOOP.x + C.GLASS_SIDE, B.x1 - 0.3) : clamp(mouse.x, B.x0 + 0.3, HOOP.x - C.GLASS_SIDE)).toFixed(1);
+  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, kind, x);
+  const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${x.toFixed(1)}`, gl = g.view.glass;
+  if (!gl.cache[key]) { if (++gl.n > 300) { gl.cache = {}; gl.n = 0; } gl.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, x); }
   return gl.cache[key];
 }
 const liveZ = reuse => (reuse && g.view.zs) ? g.view.zs : (g.view.zs = Array.from({ length: 14 }, () => [gauss(), gauss()]));
@@ -371,6 +382,7 @@ function startShot(shift) {
   Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, held: true, upAt: null,
     gatherSpeed: Math.hypot(P.vx, P.vy), vPerpG: P.vx*f.r.x + P.vy*f.r.y, gx: P.x, gy: P.y,
     fade: false, fadeV: 0, fux: 0, fuy: 0, fadeAlong: 0, shift: 0, bvx: P.vx, bvy: P.vy, euro: fromSteps });
+  shot.glass = (cx.kind === "jumper" || cx.kind === "floater") && onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
   shot.fakeable = cx.kind === "jumper" || cx.kind === "floater" || hold.state === "pivot";
   shot.prev = hold.state === "pivot" && hold.pivot ? { pivot: { ...hold.pivot }, free: { ...hold.free }, freeSide: hold.freeSide,
                                                      center: { ...hold.center }, face: { ...hold.face } } : null;
@@ -410,7 +422,7 @@ function releaseJumper() {
   const shotRes = physShot(inp, sc, hs), out = fouledOut(physOut(shotRes), foul, three ? 3 : 2);
   if (g.flow.on && g.flow.phase === "ft") recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, false);
   g.flow.value = three ? 3 : 2; g.flow.fouled = !!foul;
-  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
+  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, glass: !!glass, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
   g.meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
   if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";
@@ -466,7 +478,7 @@ function releaseFloater() {
   fouledOut(out, foul, 2);
   record(out.make, 2, false, false, true);
   g.flow.value = 2; g.flow.fouled = !!foul;
-  g.last = { kind: "floater", out, e, q, b, con, sig, odds, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
+  g.last = { kind: "floater", out, e, q, b, con, sig, odds, glass: !!glass, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
   g.meterFlash = { e, t: 0.8, kind: "floater" };
   if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";

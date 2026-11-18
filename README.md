@@ -112,7 +112,8 @@ Mouse and keyboard:
 
 - A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Space** puts the ball on the floor.
 - Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand.
-- **Hold left mouse** to start a shot, **release** to let it go. Releasing before 150 ms is a pump fake.
+- **Hold left mouse** to start a shot, **release** to let it go. Releasing before 150 ms is a pump fake. The court holds still while you shoot, so your cursor stays where you put it.
+- To bank a shot, have the cursor on the backboard, clear of the rim, when you press.
 - **Shift** at the click attacks the rim (dunk attempt).
 - **Space** gathers the ball again, and that is the end of your dribble.
 
