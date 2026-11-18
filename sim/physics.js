@@ -13,6 +13,10 @@ const PHYS = {
   DT: 0.001, DT_NEAR: 0.0005, DT_FAR: 0.01,                 // finer steps near the rim, big ones far from it
   T_MAX: 3.5,
   NET_DEPTH: 0.6,                                           // make confirmed this far below the rim, still inside
+  // A ball that has all but stopped bouncing on the rim or the glass is resting on it, and a ball at rest on a
+  // slope rolls: REST_V is how gently it has to be touching (ft/s into the surface), ROLL_DRAG how fast a roll
+  // dies away (per second). STILL_V and STILL_T are when a ball that has stopped anyway is called at rest.
+  REST_V: 0.5, ROLL_DRAG: 0.5, STILL_V: 0.05, STILL_T: 0.5,
   // a defender's arm: a hand gives when the ball hits it, so the ball keeps little of the speed it had into it
   E_HAND: 0.2, MU_HAND: 0.3,
   ARM_R: 0.17,                                              // half the thickness of a forearm, ft
@@ -36,6 +40,15 @@ function bounce(vel, n, e, mu) {
   const tScale = tl > 1e-9 ? Math.max(0, 1 - mu*jn/tl) : 0;  // friction can stop sliding, never reverse it
   return v3.add(v3.mul(velT, tScale), v3.mul(velN, -e));
 }
+
+// Resting on a surface with outward normal n: nothing bounces, and what is left of the velocity runs along the
+// surface. Friction does not hold a ball on a slope as it would a block; it turns sliding into rolling. So gravity
+// carries the ball off whichever way the surface tilts, and only the roll's own drag slows it.
+function roll(vel, n, dt) {
+  const vn = v3.dot(vel, n);
+  return v3.mul(v3.sub(vel, v3.mul(n, vn)), Math.exp(-PHYS.ROLL_DRAG*dt));
+}
+const touches = (vel, n) => { const vn = v3.dot(vel, n); return vn < 0 && vn > -PHYS.REST_V; };   // into the surface, but barely
 
 // Ideal launch speed through `target` from `from` at elevation `elev` (radians). Null if unreachable.
 function idealSpeed(from, target, elev) {
@@ -101,6 +114,7 @@ function simulateShot(launch, opts = {}) {
   const path = [{ t, ...c }], contacts = [];
   let wentIn = false, made = false, madeAt = null, sinceSample = 0, floorBounces = 0, goaltend = false;
   let touch = null;                                          // the ball's velocity before an arm first touched it, and after it last did
+  let still = 0, rolling = false;                            // s the ball has been motionless off the floor; whether it is rolling along the rim
   const hands = opts.hands || [];                            // defenders' hands: { at: t => {x, y, z}, r }
   let maxSpeedAfter = [];                                    // for the energy check
   while (t < (opts.tMax ?? PHYS.T_MAX)) {
@@ -117,17 +131,20 @@ function simulateShot(launch, opts = {}) {
     if (rc) {
       const before = v3.len(vel);
       c = v3.add(c, v3.mul(rc.n, rc.depth));
-      vel = bounce(vel, rc.n, PHYS.E_RIM, PHYS.MU_RIM);
-      const last = contacts[contacts.length - 1];
-      if (!last || last.type !== "rim" || t - last.t > 0.02) contacts.push({ type: "rim", t, x: rc.p.x, y: rc.p.y, z: rc.p.z, before, after: v3.len(vel) });
+      const resting = touches(vel, rc.n), last = contacts[contacts.length - 1];
+      vel = resting ? roll(vel, rc.n, dt) : bounce(vel, rc.n, PHYS.E_RIM, PHYS.MU_RIM);
+      // the log is of bounces: rolling along the rim is part of the touch that began it, and a bounce after a roll is a new one
+      if (resting) rolling = true;
+      else if (rolling || !last || last.type !== "rim" || t - last.t > 0.02) { rolling = false; contacts.push({ type: "rim", t, x: rc.p.x, y: rc.p.y, z: rc.p.z, before, after: v3.len(vel) }); }
       else last.after = v3.len(vel);
     }
     const bc = boardContact(c);
     if (bc && vel.y < 0) {
       const before = v3.len(vel);
       c = v3.add(c, v3.mul(bc.n, bc.depth));
-      vel = bounce(vel, bc.n, PHYS.E_BOARD, PHYS.MU_BOARD);
-      contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel) });
+      const leaning = touches(vel, bc.n), lastB = contacts[contacts.length - 1];
+      vel = leaning ? roll(vel, bc.n, dt) : bounce(vel, bc.n, PHYS.E_BOARD, PHYS.MU_BOARD);
+      if (!leaning) contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel) });   // leaning on the glass is not a bounce
     }
     // arms: a touch on the way down over the rim is goaltending (counts as a make). Any other touch is a collision
     // with something soft that may be moving: the ball loses nearly all the speed it had into the arm and keeps the
@@ -166,6 +183,9 @@ function simulateShot(launch, opts = {}) {
       if (++floorBounces >= (opts.floorBounces ?? 2)) break;
     }
     if (opts.quick && (made || (c.z < R.z - 1.5 && vel.z < 0))) break;   // outcome decided: stop early
+    // a ball that has come to a stop up there, wedged or perfectly balanced, is not coming down: the flight is over
+    still = (rc || bc) && v3.len(vel) < PHYS.STILL_V ? still + dt : 0;
+    if (still >= PHYS.STILL_T) break;
     sinceSample += dt;
     if (sinceSample >= 0.01) { path.push({ t, ...c }); sinceSample = 0; }
   }

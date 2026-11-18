@@ -551,6 +551,8 @@ The whole flight is simulated instantly at release and then replayed for the ani
 - **Integration:** exact free flight under gravity between contacts, in steps of 1 ms, 0.5 ms near the rim, and 10 ms where there is nothing to hit.
 - **Rim contact:** find the closest point on the rim's ring to the ball's center. Contact when they're closer than ball radius plus tube radius. The contact normal points from that ring point to the ball's center. Push the ball out, reverse its velocity along the normal times the rim restitution, and reduce the sideways part by friction.
 - **Backboard contact:** a plane at the board's front face, bounded by its width and height. Same response with the board's values. Edge hits are ignored at first.
+- **Resting contact:** a ball that has all but stopped bouncing on the rim or the glass (touching it at under 0.5 ft/s) is resting on it, and a ball at rest on a slope rolls. Nothing bounces, the velocity that is left runs along the surface, and gravity carries the ball off whichever way the surface tilts. Without this, friction held a ball on the curved top of the rim as it would hold a block: about 1 shot in 150 came to rest up there, three quarters of them balanced on the ring and the rest wedged against the glass, and stayed for the whole 8 s of the flight. Now one set down on the ring is off it in 0.7 s and a wedged one in under 2 s, and none stays. The calibrated make rates moved by 1 point or less.
+- **Stopped:** if a ball does stop dead off the floor for half a second, the flight ends there, and the game whistles it dead a moment later.
 - **Floor:** the flight runs on through two floor bounces, so we know where the rebound goes.
 
 **Make detection.** A make is confirmed when the ball's center comes down through the rim plane inside the ring and reaches about 0.6 ft below the rim while still inside it, which is where the net takes over. Once in, the net damps the ball's speed for the animation. Anything else is a miss; the simulation gives up after 3.5 s.
@@ -625,6 +627,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - Small sideways errors produce some rim contacts that fall out (in-and-outs exist).
 - The same launch produces the identical path.
 - No bounce ever gains speed.
+- Nothing comes to rest on the rim: a ball set down on the ring rolls off, one wedged against the glass comes down, and no miss off the rim is still up there 3.5 s later.
 - A hand in the ball's path on the way up blocks it; a hand that stays low doesn't. An arm is solid from shoulder to hand, a graze is a tip that keeps most of its pace, and the same touch always gives the same path.
 - A touch on the way down over the rim is goaltending, and counts.
 - Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
