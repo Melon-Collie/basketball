@@ -110,10 +110,11 @@ To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss
 
 Mouse and keyboard:
 
-- **WASD** moves; the **cursor** aims and controls the ball hand.
+- A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Space** puts the ball on the floor.
+- Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand.
 - **Hold left mouse** to start a shot, **release** to let it go. Releasing before 150 ms is a pump fake.
 - **Shift** at the click attacks the rim (dunk attempt).
-- **Space** gathers the ball.
+- **Space** gathers the ball again, and that is the end of your dribble.
 
 On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
 

@@ -28,8 +28,11 @@ function shoot(g, ms, aim = AIM) { for (let i = 0, n = Math.round(ms/1000/GM.TIC
 // 80 estimates and then the shot itself, two normals each.
 const noNoise = g => g.forced.push(...Array(324).fill(1));
 const PERFECT = 517, EARLY = 380;                                // ms: on time, and early enough to come up well short
+// A possession starts with the ball held. One press of Space puts it on the floor.
+const floor = g => { GM.step(g, { ...AIM, gather: true }); GM.step(g, AIM); return g; };
 // drive in with nobody home and dunk: a sure two. Stops as the ball leaves the hand.
 function dunk(g) {
+  floor(g);
   until(g, TOWARD, x => distance(x) <= 8.5);
   until(g, { ...TOWARD, shot: true, shift: true }, x => x.last && x.last.kind === "dunk", 1);
 }
@@ -46,6 +49,43 @@ rtest("A game starts with a check ball at the top: full clock, defender at their
   check(g.P.x === RULES.CHECK.x && g.P.y === RULES.CHECK.y, `handler at ${g.P.x}, ${g.P.y}`);
   check(g.D.y === RULES.CHECK.y - g.params.sag && g.R.y === 8.5, `defenders at y ${g.D.y} and ${g.R.y}`);
   return `handler ${distance(g).toFixed(2)} ft out, behind the arc`;
+});
+
+rtest("A possession starts in a triple threat: jab, shoot or fake with the dribble still there, and Space puts it on the floor", () => {
+  const g = game(21, { defenders: false }), at = { ...g.P };
+  const moved = () => Math.hypot(g.P.x - at.x, g.P.y - at.y);
+  check(g.hold.state === "pivot" && g.hold.live && g.drib.lastMove === "Triple threat", `${g.hold.state}, live ${g.hold.live}`);
+  // WASD is the free foot: a jab goes out and comes back, and the player goes nowhere
+  run(g, 0.4, TOWARD);
+  const jab = moved();
+  run(g, 0.5);
+  check(jab > 0.5 && jab < 1.8 && moved() < 0.05 && g.hold.live, `the jab took them ${jab.toFixed(2)} ft and they ended ${moved().toFixed(2)} ft from where they began`);
+  // a pump fake does not use the dribble up
+  run(g, 0.08, { ...AIM, shot: true }); run(g, 0.5);
+  check(g.drib.lastMove === "Pump fake" && g.hold.state === "pivot" && g.hold.live && g.stats.fga === 0, `after a fake: ${g.drib.lastMove}, ${g.hold.state}, live ${g.hold.live}`);
+  // Space puts it on the floor, and now WASD runs
+  floor(g);
+  check(g.hold.state === "none" && !g.hold.live && g.drib.lastMove === "Put it on the floor", `${g.hold.state}, "${g.drib.lastMove}"`);
+  run(g, 0.6, TOWARD);
+  check(moved() > 4, `dribbling for 0.6 s should cover ground: ${moved().toFixed(1)} ft`);
+  // picking it up again is the end of the dribble: Space will not start another
+  run(g, 0.4); floor(g);
+  check(g.hold.state === "pivot" && !g.hold.live, `gathered at a standstill: ${g.hold.state}, live ${g.hold.live}`);
+  floor(g); const stuck = { ...g.P }; run(g, 0.5, TOWARD); run(g, 0.5);
+  check(g.hold.state === "pivot" && Math.hypot(g.P.x - stuck.x, g.P.y - stuck.y) < 0.05, "a dead dribble stays dead");
+  // and a shot straight out of the triple threat is an ordinary jumper
+  const h = game(21, { defenders: false }); run(h, 0.5); noNoise(h); shoot(h, PERFECT);
+  check(h.last.kind === "jumper" && Math.abs(h.last.e) <= GM.C.PERFECT_MS, `shooting from the catch: ${h.last.kind}, ${h.last.e.toFixed(0)} ms off`);
+  return `jab ${jab.toFixed(1)} ft and back; a fake keeps the dribble; Space, then ${moved().toFixed(0)} ft of dribbling; picked up, it stays dead`;
+});
+
+rtest("The AI gives a triple threat room, because the drive is still there, and crowds a dead dribble", () => {
+  const gap = g => Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y);
+  const live = game(22); run(live, 3);
+  check(live.hold.live && gap(live) >= GM.C.LIVE_GAP - 0.1 && live.stats.to === 0, `against a held, live ball it stood ${gap(live).toFixed(2)} ft off`);
+  const dead = floor(game(22)); run(dead, 0.6); floor(dead); run(dead, 2, { x: dead.P.x + 3, y: dead.P.y + 6 });   // on the floor, picked up again, ball held away
+  check(!dead.hold.live && dead.hold.state === "pivot" && gap(dead) < 2.4, `against a dead dribble it closed to ${gap(dead).toFixed(2)} ft`);
+  return `${gap(live).toFixed(1)} ft off a triple threat, ${gap(dead).toFixed(1)} ft off a dead dribble`;
 });
 
 rtest("A made three scores three for the side with the ball, and the other side takes it from the top", () => {
@@ -80,6 +120,7 @@ rtest("With nobody else there, the shooter can run down their own miss and play 
   const before = g.flow.clock;
   check(until(g, x => x.flow.loose ? chase(x) : AIM, x => !x.flow.loose, 10), "never got to the ball");
   check(g.flow.phase === "live" && g.flow.offense === 0 && g.ball === null && g.drib.lastMove === "Offensive rebound", describe(g));
+  check(g.hold.state === "pivot" && g.hold.live, "a rebound is a catch: held, with the dribble still there");
   check(before < RULES.SHOT_CLOCK - 2 && g.flow.clock === RULES.SHOT_CLOCK, `clock went from ${before.toFixed(1)} to ${g.flow.clock.toFixed(1)}`);
   run(g, 0.5); shoot(g, PERFECT);
   check(g.stats.fga === 2, "should be able to shoot again after the rebound");
@@ -210,9 +251,9 @@ rtest("An airball out of bounds goes to the other side", () => {
 });
 
 rtest("Dribbling the ball into a defender's hand loses it, and that ends the possession", () => {
-  const g = game(11);
-  // straight at the defender with the ball out in front
-  check(until(g, TOWARD, dead, 8) && g.flow.why === "Stolen", describe(g));
+  const g = game(11); g.params.sag = 3; floor(g);
+  // dribbling on the spot with the ball out in front, and a defender who plays 3 ft off: it bounces into their hand
+  check(until(g, AIM, dead, 8) && g.flow.why === "Stolen", describe(g));
   check(g.stats.to === 1 && g.simT > RULES.GRACE, `turnovers ${g.stats.to}, ${g.simT.toFixed(2)} s in`);
   run(g, RULES.DEAD_T + 0.05);
   check(g.flow.offense === 1, describe(g));
@@ -223,7 +264,7 @@ rtest("Dribbling the ball into a defender's hand loses it, and that ends the pos
 });
 
 rtest("A dunk met at the rim is a live ball; left alone it is whistled dead and given away", () => {
-  const g = game(10, { defenders: false });
+  const g = floor(game(10, { defenders: false }));
   until(g, TOWARD, x => distance(x) <= 8.5);
   GM.setDefender(g, "rimOn", true);
   for (let i = 0; i < 80 && !(g.last && g.last.kind === "dunk"); i++) {       // the rim protector in the way, at the top of a jump
@@ -264,7 +305,7 @@ rtest("A foul on a made finish is an and-one: one free throw, worth one, from a 
 });
 
 rtest("A foul on a missed finish is two free throws; a miss at the line scores nothing", () => {
-  const h = game(13, { defenders: false });
+  const h = floor(game(13, { defenders: false }));
   until(h, TOWARD, x => distance(x) <= 6.5);
   run(h, 0.2, { ...TOWARD, shot: true });                          // going up for a layup
   check(h.shot.kind === "layup" && h.shot.state === "shooting", `expected a layup in progress: ${h.shot.kind}, ${h.shot.state}`);

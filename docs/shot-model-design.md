@@ -293,9 +293,13 @@ The gather button (Space) is a state change, not a move: it turns a dribbled bal
 | Front or reverse pivot | Sweeping the ball around the body one way or the other |
 | Step-through | Free foot reaching past the defender toward the rim, then going up |
 | Rip through | Sweeping the ball low across the body |
-| Jab step | Free foot extended toward the defender and brought back. Mostly matters against a live ball, which comes with passing |
+| Jab step | Free foot extended toward the defender and brought back. It matters from the triple threat, where the drive is still there |
 
-**Dead versus live ball.** Gathering out of a dribble kills it. A live-ball triple threat, where you can still start a dribble, only comes from catching a pass, so jab steps mostly matter once passing exists.
+**The triple threat.** A possession starts with the ball held and the dribble still to come, and so does every catch, which for now means an offensive rebound. It is the same held-ball state as a dead dribble, with everything that allows (a set shot, a pump fake, pivots, a jab with the free foot), plus one thing more: Space puts the ball on the floor. Space is already the state change from dribbled to held; while the dribble is unused it is the same change the other way. A pump fake from here leaves the dribble alone. Once the ball has been dribbled and gathered again it is dead, and Space does nothing.
+
+- **Why a key, and not movement.** In a held-ball stance WASD is the free foot, which is what makes a jab possible. Something has to tell a jab from a first step, and a key press does it without a hidden timer.
+- **The defender has to honor all three.** The AI stays at least 3.4 ft off a live held ball, because the drive is still there; against a dead dribble it closes to 2 ft. So a jab at it brings the ball into its reach, and a fake from that range does not get it in the air (see Pump fakes).
+- **With the rules off** (the shot lab) the handler starts dribbling, as before.
 
 **Simplification:** after a one-two stop, real rules make the first foot down the pivot. The prototype leaves the pivot unset until you move a foot.
 
@@ -627,6 +631,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Scripted input plays out as designed, with no browser: a 517 ms hold is a perfect jumper, a release inside 150 ms is a pump fake, a drive gives a floater, layup or dunk by distance and Shift, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Space puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
 - Fouls are contact: a hand that goes into the handler is a reach-in and one that was already there is not; a hand on a shooter's arms or a defender who runs into them is free throws, and straight up beside the ball is clean; jumping into the back of a player who has the spot gives them the ball.
@@ -657,11 +662,11 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 
 | Rule | How it works |
 | --- | --- |
-| Check ball | Every possession starts at the top of the key, 25.75 ft out and behind the arc, with the defender at their guarding distance and the rim protector home. The ball can't be taken for the first second |
+| Check ball | Every possession starts at the top of the key, 25.75 ft out and behind the arc, in a triple threat: the ball held, the dribble still to come. The defender is at their guarding distance and the rim protector home. The ball can't be taken for the first second |
 | Shot clock | 14 s. It runs while the handler has the ball, including the shooting motion, and stops once the shot is in the air. Running out gives the ball away |
 | Scoring | Twos and threes as before, one for a free throw. First to 21 wins |
 | Loose ball | A miss, a tip or a block is a live ball. It keeps flying and bouncing as the physics says, and goes to whoever's reach it comes into first: within 1.6 ft of their body and no higher than their hands, which are at 8 ft standing and up to 10.2 ft at the top of a jump |
-| Offensive rebound | The handler gets it: play on with a fresh clock |
+| Offensive rebound | The handler gets it: play on with a fresh clock, from a triple threat |
 | Defensive rebound | A defender gets it: the other side's ball |
 | Out of bounds | Against the side that touched it last: the shooter, or the defense after a block. A ball left lying for 1.5 s is whistled dead the same way |
 | Steals and strips | A hand on the ball takes it, and that ends the possession at once |
@@ -996,7 +1001,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
 - **Forward momentum on pull-up jumpers** is still a depth bias with no clean correction, which conflicts with principle 4.
 - **Dribbling isn't final:** no between the legs, behind the back or spins yet.
-- **Live-ball triple threat and jab steps** need passing.
+- **The triple threat is only reached by starting a possession or catching a rebound.** Catching a pass will be the third way, once there is passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **Floaters don't get the clean-look premium yet.**
 - **How often a player blocks a tight jumper is not known yet.** The arm now has a length, a block has a window of about 170 ms, and its edges are tips (see Calibration). Whether that lands near the frames target of about 1 in 12 tight contests depends on how people time their jumps, which only play will show.

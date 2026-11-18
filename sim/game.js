@@ -48,6 +48,7 @@ const C = {
   LEFT_OPEN: [0.12, 1.2],           // s the AI must have seen the ball left open before it reaches: under its nose, and at the end of its reach
   CONTACT_R: 1.9, FOUL_V: 3.5,      // a defender this close to a shooter and still coming at them this fast has run into them
   ARM_FOUL_R: 0.6,                  // a raised hand within this of a shooter's center is on their arms, not the ball (which leaves 0.7 ft out)
+  LIVE_GAP: 3.4,                    // the AI stays at least this far off a triple threat: the drive is still there, so it can't crowd the shot
   BITE_R: 3.2,                      // the AI goes up for a jumper only from inside this, where a block is possible; so only there does a fake get it in the air
   SET_V: 0.5, OVER_V: 2,            // rebounding: a player moving this slowly is set; one in the air and coming into them this fast is over their back
 };
@@ -91,6 +92,7 @@ function create(opts = {}) {
     // gathered ball: "none" (dribbling), "steps" (gather steps on the move), "pivot" (dead dribble, feet planted)
     hold: { state: "none", step: 0, t: 0, speed: 0, dir: { x: 0, y: -1 }, from: null, to: null, euro: 0, jumpStop: false,
             landedT: 0, center: null, pivot: null, free: null, freeSide: 0, face: { x: 0, y: -1 }, ext: 0, stripT: 0,
+            live: false,                                     // a held ball that has not been dribbled yet: the triple threat
             firstFoot: 1, prints: [], stepDir: { x: 0, y: -1 }, stopping: false, fakeT: 0 },
     seen: [],                                                // what the defender has watched the handler do
     simT: 0,
@@ -595,7 +597,9 @@ function dribbleBallPos() {
   return { x: P.x + o.x, y: P.y + o.y, h };
 }
 // ---------- Gather: a state change, not a move ----------
+// Space changes what the ball is: dribbled to held, and, while the dribble has not been used yet, held to dribbled.
 function gather() {
+  if (shot.state === "idle" && ballFree() && hold.state === "pivot" && hold.live) return startDribble();
   if (shot.state !== "idle" || !ballFree() || hold.state !== "none" || shot.cooldown > 0) return;
   const sp = Math.hypot(P.vx, P.vy);
   if (sp < C.GATHER_SPEED) { enterPivot(); drib.lastMove = "Gathered: dead dribble"; return; }
@@ -654,6 +658,20 @@ function pumpFake() {
   drib.lastMove = "Pump fake";
   g.fx.push({ kind: "text", text: "Pump fake", t: 0, x: P.x, y: P.y });
 }
+// The triple threat: the ball in both hands with the dribble still to come. Everything a dead dribble allows (shoot,
+// fake, pivot, jab with the free foot), plus putting it on the floor. A possession starts here, and so does every
+// catch: for now that means an offensive rebound.
+function tripleThreat() {
+  enterPivot();
+  hold.live = true;
+  drib.lastMove = "Triple threat";
+}
+// Out of the triple threat and onto the floor. From here it is a dribble like any other: the next gather kills it.
+function startDribble() {
+  Object.assign(hold, { state: "none", live: false, pivot: null, free: null, prints: [], fakeT: 0 });
+  Object.assign(drib, { phase: 0, crossing: false });
+  drib.lastMove = "Put it on the floor";
+}
 function enterPivot() {
   P.vx = 0; P.vy = 0;
   Object.assign(hold, { state: "pivot", center: { x: P.x, y: P.y }, pivot: null, free: null, freeSide: 0, ext: 0, stripT: 0 });
@@ -688,7 +706,7 @@ function heldBallPos() {
 
 // The defender's eyes: a short history of what the ball handler was doing.
 function recordSeen() {
-  seen.push({ t: g.simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none",
+  seen.push({ t: g.simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none" && !hold.live, live: hold.state === "pivot" && hold.live,
               rising: shot.state === "shooting" || hold.fakeT > 0, ...seenBall(),
               threat: shot.state === "idle" && ballFree() ? pullUpThreat() : 0 });
   while (seen.length > 2 && seen[1].t < g.simT - 0.7) seen.shift();
@@ -838,7 +856,7 @@ function update(dt) {
       const ex = s0.x + s0.vx*lag*0.8, ey = s0.y + s0.vy*lag*0.8, pf = frame({ x: ex, y: ey });
       const drive = Math.max(0, s0.vx*pf.u.x + s0.vy*pf.u.y);                         // coming at them: give ground
       const cushion = s0.dead ? Math.min(2.0, pf.dist*0.6)                              // dead dribble: no drive threat, crowd them
-                              : Math.min(clamp(params.sag - (params.sag - 1.9)*s0.threat + drive*0.12, 1.9, params.sag + 2), pf.dist*0.6);
+                              : Math.min(clamp(params.sag - (params.sag - 1.9)*s0.threat + drive*0.12, s0.live ? C.LIVE_GAP : 1.9, params.sag + 2), pf.dist*0.6);
       const shadeT = shot.state === "idle" && ballFree() ? s0.side*0.8 : 0;                // shade toward the ball side they saw
       D.shade += (shadeT - D.shade)*Math.min(1, dt*8);
       D.threat = s0.dead ? 0.8 : s0.threat;
@@ -1080,6 +1098,7 @@ function looseTick() {
   if (!best) return;
   if (best.body === P) {                                               // the offense has it back: play on with a fresh clock
     fl.loose = false; fl.clock = RULES.SHOT_CLOCK; g.ball = null; shot.cooldown = 0.25; R.mode = null;
+    tripleThreat();                                                    // caught, not dribbled: the dribble is still there
     drib.lastMove = "Offensive rebound";
     g.fx.push({ kind: "text", text: "Offensive rebound", t: 0, x: P.x, y: P.y });
   } else {
@@ -1095,13 +1114,14 @@ function place(p, d, r) {
   Object.assign(R, { x: r.x, y: r.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, mode: null, sawPrev: false,
                      hx: r.x, hy: r.y + 0.85, hvx: 0, hvy: 0, reach: null, reachCd: 0 });
   Object.assign(shot, { state: "idle", kind: "jumper", t: 0, held: false, note: "", cooldown: 0.4, fade: false });
-  Object.assign(hold, { state: "none", fakeT: 0, prints: [] });
+  Object.assign(hold, { state: "none", fakeT: 0, prints: [], live: false });
   Object.assign(drib, { phase: 0, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9, hold: 0, crossing: false });
   g.ball = null; g.meterFlash = null; seen.length = 0;
 }
 function checkBall() {
   place(RULES.CHECK, { x: RULES.CHECK.x, y: RULES.CHECK.y - params.sag }, { x: 25, y: 8.5 });
   Object.assign(g.flow, { phase: "live", t: 0, next: null, why: "", clock: RULES.SHOT_CLOCK, loose: false, fouled: false, ft: 0, grace: RULES.GRACE });
+  tripleThreat();
 }
 // Free throws: the shooter at the line, the defenders outside the lane, more than 8 ft away so every one is a clean look.
 function freeThrows() {
