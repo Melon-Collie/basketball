@@ -278,6 +278,22 @@ ltest("A correction reports how far it moved each player, so drawing can slide t
   return `biggest move in one tick: ${raw.toFixed(2)} ft as corrected, ${slid.toFixed(2)} ft with the jumps taken off`;
 });
 
+ltest("After a rematch, packets still arriving from the game before are ignored", () => {
+  // a second game on the same connection: each side makes a new copy with the next id
+  const games = [0, 1].map(() => GM.create({ seed: 12, rules: true, duo: true })), out = [[], []];
+  const peers = games.map((g, me) => RB.create(g, me, m => out[me].push(JSON.parse(JSON.stringify(m))), { id: 1 }));
+  for (let t = 0; t < 30; t++) for (const p of peers) { RB.frame(p, GM.TICK, () => idle(RIM.x, RIM.y)); }
+  // a late packet from game 0: inputs for ticks far ahead, and a claim that everything up to tick 5000 has arrived
+  const before = { got: peers[0].got, acked: peers[0].acked };
+  RB.receive(peers[0], { k: "i", f: peers[0].got + 1, p: [8, 25000, 5250], a: 5000, v: 3 });
+  RB.receive(peers[0], { k: "i", g: 0, f: peers[0].got + 1, p: [8, 25000, 5250], a: 5000, v: 3 });
+  check(peers[0].got === before.got && peers[0].acked === before.acked, `an old packet got through: got ${before.got} to ${peers[0].got}, acked ${before.acked} to ${peers[0].acked}`);
+  // this game's own packets do get through
+  for (const m of out[1]) RB.receive(peers[0], m);
+  check(peers[0].got > before.got && out[1].every(m => m.g === 1), "packets of the current game should carry its id and be taken");
+  return `old packets dropped; ${peers[0].got - before.got} ticks of the new game's inputs taken`;
+});
+
 ltest("If the copies drift, side 1 takes side 0's game and they are identical again", () => {
   const p = pair(5, { lag: 8 });
   p.run(120*2, script);

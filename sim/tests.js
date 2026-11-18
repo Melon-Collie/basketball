@@ -123,6 +123,29 @@ test("No bounce ever gains speed", () => {
 function handAt(x, y, z0, rise = 0, dur = 0.5) {   // a hand at (x, y), rising by `rise` ft over `dur` s
   return { r: 0.35, at: t => ({ x, y, z: z0 + rise*Math.sin(Math.PI*Math.min(t, dur)/dur) }) };
 }
+test("Nothing comes to rest on the rim: a ball set down on it, or wedged against the glass, rolls off", () => {
+  const R = PHYS.RIM, B = PHYS.BOARD, full = { tMax: 8, floorBounces: 3 };
+  // when the ball was last up at the rim's height, and where it finished
+  const down = res => { const high = res.path.filter(q => q.z > R.z - 0.2); return { last: high.length ? high[high.length - 1].t : 0, end: res.path[res.path.length - 1] }; };
+  const setDown = pos => down(simulateShot({ pos, vel: { x: 0, y: 0, z: 0 } }, full));
+  // lowered onto the top of the ring, a hair to one side of dead center: the old model held it there until time ran out
+  const sides = [-0.01, 0.01].map(off => setDown({ x: R.x + R.r + off, y: R.y, z: R.z + PHYS.BALL_R + 0.05 }));
+  for (const r of sides) assert(r.last < 2 && r.end.z < 2, `set down on the ring's top it was still up there at ${r.last.toFixed(1)} s, and ended at ${r.end.z.toFixed(1)} ft`);
+  // dropped into the gap behind the rim, touching the glass, just off the middle
+  const w = setDown({ x: R.x + 0.03, y: B.y + PHYS.BALL_R + 0.01, z: R.z + 0.6 });
+  assert(w.last < 4 && w.end.z < 2, `wedged behind the rim it was still up there at ${w.last.toFixed(1)} s, and ended at ${w.end.z.toFixed(1)} ft`);
+  // and over a run of ordinary shots that catch the rim, none is still up there three and a half seconds later
+  const r = rng(8); let longest = 0, n = 0;
+  for (let i = 0; i < 1500; i++) {
+    const from = spot(6 + 20*r(), -60 + 120*r()), elev = deg(42 + 14*r()), v = idealSpeed(from, RIM, elev);
+    const res = simulateShot({ pos: from, vel: launchVelocity(from, RIM, v*(1 + 0.012*gauss(r)), elev, deg(0.9*gauss(r))) }, full);
+    const first = res.contacts.find(k => k.type === "rim"); if (!first || res.made) continue;
+    n++; longest = Math.max(longest, down(res).last - first.t);
+  }
+  assert(n > 300 && longest < 3.5, `${n} shots came off the rim, and one stayed up for ${longest.toFixed(1)} s`);
+  return `set on the ring: down in ${sides.map(x => x.last.toFixed(1)).join(" and ")} s; wedged: ${w.last.toFixed(1)} s; longest of ${n} misses off the rim: ${longest.toFixed(1)} s`;
+});
+
 test("A hand in the ball's path on the way up blocks it", () => {
   const from = spot(15), v = idealSpeed(from, RIM, deg(48));
   const L = { pos: from, vel: launchVelocity(from, RIM, v, deg(48), 0) };

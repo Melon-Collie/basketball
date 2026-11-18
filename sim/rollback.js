@@ -34,6 +34,8 @@ const alike = (a, b) => a.x === b.x && a.y === b.y && a.u === b.u && a.d === b.d
 
 // game: the game on screen. me: 0 or 1, the side this copy plays. Side 0 is the reference when the copies disagree.
 // opts.delay: ticks of input delay, if not DELAY. Both sides must be given the same.
+// opts.id: which game on this connection this is. Every message carries it, and one from another game is ignored:
+//   after a rematch, packets of the game before may still be on their way.
 // opts.watch: a function giving a list of numbers read off a game, such as where each player is. Whenever the game
 //   on screen is corrected, `jump` is how far each of them moved because of it (what it was less what it is now, at
 //   the same tick), added up until whoever is drawing takes it and sets it back to null. Drawing each thing that
@@ -42,7 +44,7 @@ function create(game, me, send, opts = {}) {
   const delay = opts.delay ?? DELAY, sure = GM.create();
   GM.load(sure, GM.snapshot(game));
   return {
-    game, sure, me, send, delay, watch: opts.watch || null, jump: null,
+    game, sure, me, send, delay, id: opts.id || 0, watch: opts.watch || null, jump: null,
     clock: 0,                    // ticks sampled so far; the game on screen is run up to this tick
     owed: 0, rate: 1, slow: 0,   // time not yet turned into ticks, and ticks still to give up because this clock is ahead
     mine: new Map(), theirs: new Map(), guess: new Map(),   // inputs by the tick they are used on; guess is what was assumed for theirs
@@ -70,7 +72,7 @@ function sample(p, input) {
 function flush(p) {
   const from = p.acked + 1, to = Math.min(p.clock + p.delay - 1, from + MOST - 1), flat = [];
   for (let t = from; t <= to; t++) { const i = p.mine.get(t); if (!i) break; flat.push(...pack(i)); }
-  p.send({ k: "i", f: from, p: flat, a: p.got, v: p.top < 0 ? null : advantage(p) });   // no view of their clock until they are heard from
+  p.send({ k: "i", g: p.id, f: from, p: flat, a: p.got, v: p.top < 0 ? null : advantage(p) });   // no view of their clock until they are heard from
 }
 // Run the sure game through every tick both inputs are in for, go back if a guess was wrong, then run the game on
 // screen up to now. Returns how many ticks were replayed because of a wrong guess.
@@ -81,7 +83,7 @@ function advance(p) {
     GM.step(S, p.me === 0 ? [a, b] : [b, a]);
     if (S.tick % CHECK_EVERY === 0) {
       const d = GM.digest(S);
-      p.prints.set(S.tick, d); p.send({ k: "h", t: S.tick, d, e: p.epoch });
+      p.prints.set(S.tick, d); p.send({ k: "h", g: p.id, t: S.tick, d, e: p.epoch });
       compare(p, S.tick);
       for (const m of [p.mine, p.theirs, p.prints, p.theirPrints]) for (const k of m.keys()) { if (k < S.tick - KEEP) m.delete(k); else break; }
     }
@@ -124,9 +126,10 @@ function compare(p, t) {
   const a = p.prints.get(t), b = p.theirPrints.get(t);
   if (p.me !== 0 || a === undefined || b === undefined || a === b) return;
   p.epoch++; p.resyncs++; p.theirPrints.clear();
-  p.send({ k: "s", e: p.epoch, g: GM.snapshot(p.sure) });
+  p.send({ k: "s", g: p.id, e: p.epoch, game: GM.snapshot(p.sure) });
 }
 function receive(p, m) {
+  if ((m.g || 0) !== p.id) return;                                     // from another game on this connection
   if (m.k === "i") {
     const n = m.p.length/3;
     for (let i = 0; i < n; i++) {
@@ -156,7 +159,7 @@ function receive(p, m) {
     p.theirPrints.set(m.t, m.d); compare(p, m.t);
   } else if (m.k === "s" && p.me !== 0 && m.e > p.epoch) {             // take the reference copy and carry on from its tick
     p.epoch = m.e; p.resyncs++;
-    GM.load(p.sure, m.g);
+    GM.load(p.sure, m.game);
     p.prints.clear(); p.theirPrints.clear();
     p.dirty = true;
   }

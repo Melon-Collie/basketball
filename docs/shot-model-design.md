@@ -551,6 +551,8 @@ The whole flight is simulated instantly at release and then replayed for the ani
 - **Integration:** exact free flight under gravity between contacts, in steps of 1 ms, 0.5 ms near the rim, and 10 ms where there is nothing to hit.
 - **Rim contact:** find the closest point on the rim's ring to the ball's center. Contact when they're closer than ball radius plus tube radius. The contact normal points from that ring point to the ball's center. Push the ball out, reverse its velocity along the normal times the rim restitution, and reduce the sideways part by friction.
 - **Backboard contact:** a plane at the board's front face, bounded by its width and height. Same response with the board's values. Edge hits are ignored at first.
+- **Resting contact:** a ball that has all but stopped bouncing on the rim or the glass (touching it at under 0.5 ft/s) is resting on it, and a ball at rest on a slope rolls. Nothing bounces, the velocity that is left runs along the surface, and gravity carries the ball off whichever way the surface tilts. Without this, friction held a ball on the curved top of the rim as it would hold a block: about 1 shot in 150 came to rest up there, three quarters of them balanced on the ring and the rest wedged against the glass, and stayed for the whole 8 s of the flight. Now one set down on the ring is off it in 0.7 s and a wedged one in under 2 s, and none stays. The calibrated make rates moved by 1 point or less.
+- **Stopped:** if a ball does stop dead off the floor for half a second, the flight ends there, and the game whistles it dead a moment later.
 - **Floor:** the flight runs on through two floor bounces, so we know where the rebound goes.
 
 **Make detection.** A make is confirmed when the ball's center comes down through the rim plane inside the ring and reaches about 0.6 ft below the rim while still inside it, which is where the net takes over. Once in, the net damps the ball's speed for the animation. Anything else is a miss; the simulation gives up after 3.5 s.
@@ -625,6 +627,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - Small sideways errors produce some rim contacts that fall out (in-and-outs exist).
 - The same launch produces the identical path.
 - No bounce ever gains speed.
+- Nothing comes to rest on the rim: a ball set down on the ring rolls off, one wedged against the glass comes down, and no miss off the rim is still up there 3.5 s later.
 - A hand in the ball's path on the way up blocks it; a hand that stays low doesn't. An arm is solid from shoulder to hand, a graze is a tip that keeps most of its pace, and the same touch always gives the same path.
 - A touch on the way down over the rim is goaltending, and counts.
 - Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
@@ -635,7 +638,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
 - Fouls are contact: a hand that goes into the handler is a reach-in and one that was already there is not; a hand on a shooter's arms or a defender who runs into them is free throws, and straight up beside the ball is clean; jumping into the back of a player who has the spot gives them the ball.
-- Two players: there is no rim protector, and the side without the ball moves, contests, jumps and takes the ball with their own input. A defender close enough who goes up in time blocks a jumper, and from further out, late or flat-footed does not; reaching out gets to shots that straight up cannot. After a miss, the player in the air takes the ball before it comes down to the other, and a player standing on the spot is not moved by one running into their back. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Each correction reports how far it moved each player, and with that taken off nobody moves more than a stride in a tick. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, and a copy that drifts is replaced by the host's.
+- Two players: there is no rim protector, and the side without the ball moves, contests, jumps and takes the ball with their own input. A defender close enough who goes up in time blocks a jumper, and from further out, late or flat-footed does not; reaching out gets to shots that straight up cannot. After a miss, the player in the air takes the ball before it comes down to the other, and a player standing on the spot is not moved by one running into their back. Over a link with lag, jitter and lost packets, a player's own input lands after the same 25 ms, neither side waits, and both end with exactly the game a single machine would have played from the same inputs. Each correction reports how far it moved each player, and with that taken off nobody moves more than a stride in a tick. Past 250 ms each way both wait and still agree. A side whose clock is ahead slows until the two match, a copy that drifts is replaced by the host's, and packets from the game before a rematch are ignored.
 
 **Milestones:**
 
@@ -752,6 +755,8 @@ The browsers talk directly over WebRTC, but two browsers can't find each other u
 
 If the introduction service can't be reached, the panel says so and opens the old way of connecting, which needs no service: the players carry the two messages themselves, as codes of about 830 characters, the host's first and then the guest's back. `?broker=wss://…/` on the page's address points it at a different introduction service that speaks the same protocol, such as one you run yourself.
 
+**Playing again.** When a game ends the scoreboard offers Play again. Online both players have to press it: the first to do so waits, and the other's button says they are ready. Then the host deals a new game on the same connection, exactly as it dealt the first, and the side that lost has the ball first. Every network message carries the number of the game it belongs to, so packets of the finished game that are still on their way are ignored and cannot be taken for the new game's. On your own, Play again simply starts a new game.
+
 **Trying a bad connection.** Once a game starts, the panel shows the round trip it measures and how far ahead it is guessing. Adding `?lag=80&jitter=20&loss=5` to the page's address holds everything that page sends for 80 to 100 ms and drops 5% of its input packets; put it on both pages for both directions. `?delay=40` on the host's page sets the input delay, in ms, for both players. `node tools/online.js` does the whole thing between two headless browsers and checks they agreed; with `--link` they connect by invite link, with the introduction service played by the script, and with `--broker wss://0.peerjs.com/` through the real one.
 
 **Measured** between two headless browsers on one machine, both players moving, pointing and shooting throughout:
@@ -772,7 +777,7 @@ The worst frames are the ones that replay a shot's release, which simulates the 
 - **Sliding only covers where players are.** A jump or a shot that the other player started a moment ago still appears already under way, and a ball leaving a sliding player's hands steps to its true path.
 - **A shot can change after release.** If the defender's real hand was somewhere other than guessed when you let go, the flight is worked out again. It settles within the lag, long before the ball arrives.
 - **Packets are plain text,** about 200 characters each at 60 a second. Fine for two players; a binary format would be a tenth of that.
-- **No rematch and no tuning online.** The host's settings are used; when a game ends, leave and host again.
+- **No tuning online.** The host's settings are used, and carry over into a rematch.
 - **The numbers are first guesses:** the 25 ms and 250 ms above, the 100 ms slide, the defender's speed, the reach that takes the ball, and the off arm stopping a reach outright.
 
 ## Prototype defense AI

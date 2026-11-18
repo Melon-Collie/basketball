@@ -130,6 +130,7 @@ dd small{color:var(--muted)}
         <div class="side" id="bSide0"><span class="name">Home</span><span class="pts" id="bScore0">0</span></div>
         <div class="mid"><div class="clock" id="bClock">14</div><div class="what" id="bWhat">Home ball</div></div>
         <div class="side" id="bSide1"><span class="pts" id="bScore1">0</span><span class="name">Away</span></div>
+        <button id="again" type="button" hidden>Play again</button>
         <button id="newGame" type="button">New game</button>
       </div>
       <div class="court-box"><canvas id="court" tabindex="0" aria-label="Half court. Move with W A S D, aim with the mouse, hold and release the mouse button to shoot."></canvas></div>
@@ -808,9 +809,13 @@ function renderBoard() {
              : fl.phase === "ft" ? `${name} at the line, ${fl.ft} to shoot` : fl.loose ? "Loose ball" : `${name} ball`;
   const clock = fl.phase === "live" ? String(Math.ceil(fl.clock - 1e-9)) : "–";
   const you = net && net.live ? net.me : -1;
-  const key = [fl.on, fl.score, fl.offense, what, clock, you].join("|");
+  // Play again shows once the game is over: online, once the game both sides agree on is, and it says where the rematch stands
+  const over = panelGame().flow.on && panelGame().flow.phase === "over", asked = net && net.live ? net.again : null;
+  const againText = !asked ? "Play again" : asked.mine ? "Waiting for the other player…" : asked.theirs ? "Play again (they're ready)" : "Play again";
+  const key = [fl.on, fl.score, fl.offense, what, clock, you, over, againText].join("|");
   if (key === boardShown) return;
   boardShown = key;
+  $("again").hidden = !over; $("again").textContent = againText; $("again").disabled = !!(asked && asked.mine);
   $("board").hidden = !fl.on;
   SIDES.forEach((side, i) => { $("bSide" + i).querySelector(".name").textContent = side + (i === you ? " (you)" : ""); });
   $("bScore0").textContent = fl.score[0]; $("bScore1").textContent = fl.score[1];
@@ -818,6 +823,15 @@ function renderBoard() {
   $("bClock").textContent = clock; $("bWhat").textContent = what;
 }
 $("newGame").addEventListener("click", () => { GM.newGame(G); clearLast(); renderBoard(); });
+// Play again. On your own it is a new game. Online both players have to press it; then the host starts another
+// game on the same connection, and the side that lost has the ball first.
+$("again").addEventListener("click", () => {
+  if (!net || !net.live) { GM.newGame(G); clearLast(); renderBoard(); return; }
+  if (net.again.mine) return;
+  net.again.mine = true; send({ k: "again" });
+  if (net.again.theirs) rematch(); else netSay("Asked for a rematch. Waiting for the other player…");
+  renderBoard();
+});
 $("rules").checked = G.flow.on;
 $("rules").addEventListener("change", e => {
   GM.setRules(G, e.target.checked); clearLast(); renderBoard();
@@ -875,7 +889,7 @@ function slide(peer, dt) {
 }
 const setOnlineUi = on => {
   document.querySelectorAll("aside input:not(.own)").forEach(el => { el.disabled = on; });   // the game's settings are the host's; how it is drawn stays your own
-  $("newGame").disabled = on; $("reset").disabled = on; $("netLeave").hidden = !on; $("netSetup").hidden = on; $("netManual").hidden = on;
+  $("newGame").disabled = on; $("newGame").hidden = on; $("reset").disabled = on;   // online a new game is a rematch, which both players ask for $("netLeave").hidden = !on; $("netSetup").hidden = on; $("netManual").hidden = on;
   $("netStats").hidden = !on;
 };
 // wait until the browser has listed the routes the other side could reach us by, or three seconds
@@ -906,7 +920,7 @@ function relayReady() {                                                 // resol
 function connection(me) {
   drop();
   const pc = new RTCPeerConnection({ iceServers: [...LOOKUPS, ...relay.servers], iceTransportPolicy: RELAY_ONLY ? "relay" : "all" });
-  const mine = net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0, ice: [], remote: false, started: false, via: "",
+  const mine = net = { pc, dc: null, fast: null, me, live: false, peer: null, parts: [], statsT: 0, ice: [], remote: false, started: false, via: "", gameNo: 0, again: { mine: false, theirs: false },
                        routes: { outside: [], relayed: 0 } };            // what this browser found of its own: outside addresses, and routes through a relay
   pc.addEventListener("icecandidate", e => {
     const c = e.candidate;
@@ -971,7 +985,15 @@ function send(m) {
   if (loose && Math.random() < FAKE.loss) return;
   setTimeout(go, FAKE.lag + (loose ? Math.random()*FAKE.jitter : FAKE.jitter));   // what must stay in order all waits the same
 }
+// Both have asked: the host deals the next game, exactly as it dealt the first.
+function rematch() {
+  if (!net || !net.live || net.me !== 0 || !(net.again.mine && net.again.theirs)) return;
+  const was = net.peer.sure.flow, first = was.winner === null ? 0 : 1 - was.winner;
+  const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params }, delay: net.peer.delay, n: net.gameNo + 1, first };
+  send(start); begin(start);
+}
 function got(m) {
+  if (m.k === "again") { if (net.live) { net.again.theirs = true; if (net.again.mine) rematch(); else netSay("The other player wants to play again."); renderBoard(); } return; }
   if (m.k === "part") { net.parts[m.i] = m.d; if (m.i === m.n - 1) { const whole = net.parts.join(""); net.parts = []; got(JSON.parse(whole)); } }
   else if (m.k === "start") begin(m);
   else if (net.peer) RB.receive(net.peer, m);
@@ -980,14 +1002,17 @@ function got(m) {
 function begin(start) {
   closeLobby();                                                         // introductions are over
   GM.load(G, GM.snapshot(GM.create({ seed: start.seed, rules: true, duo: true })));
+  if (start.first) G.flow.offense = start.first;                        // a rematch: the side that lost has the ball first
+  net.gameNo = start.n || 0; net.again = { mine: false, theirs: false }; net.waiting = false;       // so the first status, who has the ball, stays up
   Object.assign(params, start.params);
   for (const k of Object.keys(fmt)) { $(k).value = params[k]; $("o-" + k).textContent = fmt[k](String(params[k])); }
   $("rules").checked = true; $("defOn").checked = true; $("rimOn").checked = params.rimOn;
-  net.peer = RB.create(G, net.me, send, { delay: start.delay, watch }); net.live = true; settle();
+  net.peer = RB.create(G, net.me, send, { delay: start.delay, watch, id: net.gameNo }); net.live = true; settle();
+  shownLast = 0; shownStats = 0;
   { const mine = net; routeKind(net.pc).then(kind => { mine.via = kind; }); }
   CAM = CAMS.game; cam.x = D.x; cam.y = (net.me === 0 ? P.y : D.y) - CAM.lead; resize();
   setOnlineUi(true); clearLast(); renderBoard();
-  netSay(`Connected. You are ${SIDES[net.me]}; ${SIDES[0]} has the ball first.`);
+  netSay(`${net.gameNo ? "New game" : "Connected"}. You are ${SIDES[net.me]}; ${SIDES[G.flow.offense]} has the ball first.`);
   $("board").scrollIntoView({ block: "start" }); court.focus({ preventScroll: true });   // the codes were exchanged further down the page
   keepGoing();                                                          // the host's tab is often hidden when the guest opens the link
 }
