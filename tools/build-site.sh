@@ -21,6 +21,14 @@ scripts="$(grep -o 'src="\.\./sim/[^"]*"' "$root/$page" | sed 's/^src="\.\.\/sim
 if [ -z "$scripts" ]; then echo "found no ../sim/ scripts in $page" >&2; exit 1; fi
 for f in $scripts; do cp "$root/sim/$f" "$out/sim/$f"; done
 
+# Stamp this build on the page and on the game, and have the page ask for its scripts by the stamp. A browser that
+# still holds an old copy of a script then fetches the new one, because the address is new; and if a page and a game
+# from different builds do meet, the page can tell (see "One version, or none" in the page).
+build="$( (cat "$root/$page"; for f in $scripts; do cat "$root/sim/$f"; done) | sha1sum | cut -c1-10)"
+grep -q 'const BUILD = "dev";' "$out/$page" || { echo "found no build stamp to fill in, in $page" >&2; exit 1; }
+sed -i "s|const BUILD = \"dev\";|const BUILD = \"$build\";|; s|src=\"\.\./sim/\([^\"?]*\)\"|src=\"../sim/\1?v=$build\"|g" "$out/$page"
+printf '\nif (typeof window !== "undefined" && window.GameLib) window.GameLib.BUILD = "%s";\n' "$build" >> "$out/sim/game.js"
+
 cat > "$out/index.html" <<'HTML'
 <!doctype html>
 <html lang="en">
@@ -36,5 +44,5 @@ cat > "$out/index.html" <<'HTML'
 </html>
 HTML
 
-echo "Built $out:"
+echo "Built $out, build $build:"
 (cd "$out" && find . -type f | sort | sed 's/^\.\//  /')
