@@ -264,6 +264,29 @@ dd small{color:var(--muted)}
 // The page: canvas, input, drawing and readouts. The game itself is ../sim/game.js; this samples input, steps the
 // game at its fixed tick and draws the state it finds.
 const GM = window.GameLib, PHX = window.PhysicsLib;
+
+// ---------- One version, or none ----------
+// The page and the game are separate files, and a browser can hold on to an old copy of one of them after a new
+// version is published. They do not work mixed: the page asks the game for things only its own version has. So the
+// published page and the published game are both stamped with the same build (tools/build-site.sh), the page asks for
+// its scripts by that stamp, and if what arrived is still from another build the page says so and stops. Opened
+// straight from the files, both are "dev".
+const BUILD = "dev";
+// A bar across the top that says what is wrong, with a way out. It is only ever shown once.
+function trouble(text) {
+  if (document.getElementById("trouble")) return;
+  const bar = document.createElement("div"), button = document.createElement("button");
+  bar.id = "trouble"; bar.setAttribute("role", "alert");
+  bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:10;padding:12px 16px;background:#7A1F2B;color:#fff;font:600 15px/1.4 system-ui,sans-serif;display:flex;gap:12px;align-items:center;flex-wrap:wrap";
+  bar.append(text, button);
+  button.type = "button"; button.textContent = "Reload"; button.style.cssText = "font:inherit;padding:4px 12px;cursor:pointer";
+  // a new address, so the browser fetches the page afresh, and with it the scripts it names
+  button.addEventListener("click", () => location.replace(`${location.pathname}?r=${Date.now()}${location.hash}`));
+  document.body.append(bar);
+}
+const MIXED = (GM.BUILD || "dev") !== BUILD;
+if (MIXED) trouble("Your browser has mixed an old copy of this game with a new one, so it can't run. Reload to get one version.");
+window.addEventListener("error", e => trouble(`Something broke, and the game has stopped: ${e.message}. Reloading will start it again.`));
 const { C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint } = GM;
 const LAB = new URLSearchParams(location.search).has("lab");   // ...html?lab opens straight into free shooting, with the game rules off
 const G = GM.create({ seed: Math.floor(Math.random()*4294967296), rules: !LAB });
@@ -926,7 +949,7 @@ function attach(dc) {
     if (mine.me !== 0 || mine.started || net !== mine) return;
     mine.started = true;
     const delay = QUERY.has("delay") ? clamp(Math.round(queryNum("delay")/1000/GM.TICK), 0, 12) : RB.DELAY;
-    const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true, rimOn: false }, delay };   // one against one: no rim protector
+    const start = { k: "start", build: BUILD, seed: Math.floor(Math.random()*4294967296), params: { ...params, defOn: true, rimOn: false }, delay };   // one against one: no rim protector
     send(start); begin(start);
   };
   dc.addEventListener("open", opened);
@@ -947,17 +970,23 @@ function send(m) {
   if (loose && Math.random() < FAKE.loss) return;
   setTimeout(go, FAKE.lag + (loose ? Math.random()*FAKE.jitter : FAKE.jitter));   // what must stay in order all waits the same
 }
+const OTHER_VERSION = "You and the other player have different versions of the game. Both of you reload the page, then host again.";
 // Both have asked: the host deals the next game, exactly as it dealt the first.
 function rematch() {
   if (!net || !net.live || net.me !== 0 || !(net.again.mine && net.again.theirs)) return;
   const was = net.peer.sure.flow, first = was.winner === null ? 0 : 1 - was.winner;
-  const start = { k: "start", seed: Math.floor(Math.random()*4294967296), params: { ...params }, delay: net.peer.delay, n: net.gameNo + 1, first };
+  const start = { k: "start", build: BUILD, seed: Math.floor(Math.random()*4294967296), params: { ...params }, delay: net.peer.delay, n: net.gameNo + 1, first };
   send(start); begin(start);
 }
 function got(m) {
   if (m.k === "again") { if (net.live) { net.again.theirs = true; if (net.again.mine) rematch(); else netSay("The other player wants to play again."); renderBoard(); } return; }
   if (m.k === "part") { net.parts[m.i] = m.d; if (m.i === m.n - 1) { const whole = net.parts.join(""); net.parts = []; got(JSON.parse(whole)); } }
-  else if (m.k === "start") begin(m);
+  else if (m.k === "start") {
+    // two versions of the game cannot be kept in step: say so on both sides before anything starts
+    if (m.build !== BUILD) { send({ k: "wrong" }); netSay(OTHER_VERSION); return; }
+    begin(m);
+  }
+  else if (m.k === "wrong") netSay(OTHER_VERSION);
   else if (net.peer) RB.receive(net.peer, m);
 }
 // both sides build the same game from the host's seed and settings
@@ -1211,7 +1240,7 @@ function keepGoing() {
 }
 document.addEventListener("visibilitychange", keepGoing);
 refreshLive(); renderStats(); renderBoard();
-requestAnimationFrame(loop);
+if (!MIXED) requestAnimationFrame(loop);
 })();
 </script>
 </body>

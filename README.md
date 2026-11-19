@@ -66,6 +66,8 @@ node sim/measure.js
 
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the prototype whenever it or `sim/` changes on `main`. It needs Pages enabled for the repository with GitHub Actions as its source, under Settings > Pages.
 
+Each published build is stamped: the page asks for its scripts by the stamp, so a browser holding an old copy of one fetches the new one, and if a page and a game from different builds still meet, the page says so and offers to reload. Two players on different builds are told before a game starts.
+
 The site holds only the prototype, the `sim/` scripts it loads and an index page that redirects to it. To build the same folder locally:
 
 ```bash
