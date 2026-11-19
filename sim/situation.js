@@ -17,7 +17,7 @@ const SITU = {
   // shot context
   DRIVE_SPEED: 4,                  // ft/s toward the rim to count as driving
   CLOSE_RANGE: 4,                  // inside this, any shot is a finish
-  LAYUP_RANGE: 7, STEPS_LAYUP_RANGE: 9, DUNK_RANGE: 9, FLOATER_RANGE: 14,
+  LAYUP_RANGE: 7, STEPS_LAYUP_RANGE: 12, DUNK_RANGE: 9, FLOATER_RANGE: 14,
   DUNK_SPEED: 7,
   STEP_THROUGH_EXT: 1.2, STEP_THROUGH_RANGE: 8,
   // defenders' hands (reach heights are placeholders until frames)
@@ -26,6 +26,7 @@ const SITU = {
   ARM_FOR: 0.6,                    // s after the release that an arm is in the shot. Past that nobody knows where the defender will be
   // finishing
   FINISH_FLOOR: 1.8 + 15*0.045,    // in: the part of a layup's scatter nothing takes away, as shown in the readout
+  FINISH_NEAR: 4, FINISH_FAR_IN: 0.8,   // a finish let go further out than this pays this many inches for every foot of it: it is a heave
 };
 const clampS = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -54,7 +55,7 @@ function shotContext(p, hold) {
   }
   const driving = vAlong >= SITU.DRIVE_SPEED || hold.state === "steps";   // gather steps are always going somewhere
   // going up early on a drive = floater; keep driving and go up late = layup
-  const layupRange = hold.state === "steps" ? SITU.STEPS_LAYUP_RANGE : SITU.LAYUP_RANGE;   // the gather steps carry you in, so they reach a little farther
+  const layupRange = hold.state === "steps" ? SITU.STEPS_LAYUP_RANGE : SITU.LAYUP_RANGE;   // gather steps are a move to the rim, so going up out of them is a finish from further out
   const attack = f.dist <= SITU.CLOSE_RANGE || (driving && f.dist <= layupRange);
   if (!attack) return driving && f.dist <= SITU.FLOATER_RANGE ? { kind: "floater", note: "" } : { kind: "jumper", note: "" };
   return { kind: "layup", note: "" };
@@ -98,17 +99,18 @@ function cleanLook(p, defs, fade, moveSpeed) {
 
 // ---------- Finishing scatter ----------
 // What a ball let go at the rim pays for, in inches at the rim: [the floor nothing takes away, where the ball was
-// held and how long it was hung on to, speed]. side: -1 to 1, how far to the shooter's left or right of their line
-// to the rim the ball was held. limit is the speed, in ft/s, that a finish can be taken at under control; every foot
-// per second over it costs.
+// held and how long it was hung on to and how far out it was let go, speed]. side: -1 to 1, how far to the shooter's
+// left or right of their line to the rim the ball was held. limit is the speed, in ft/s, that a finish can be taken at
+// under control; every foot per second over it costs. dist: ft from the rim it was let go, if that is to count.
 function finishScatter(s) {
   const r = SITU.FINISH_FLOOR, limit = s.limit;
   const sp = 0.35*Math.max(0, s.speed - limit);
   const vp = clampS(s.vPerp/6, -1, 1);
   const turn = 2.2*Math.max(0, -s.side*vp) + 0.8*Math.abs(s.side) + 0.6*(s.euro || 0);   // the ball held across your momentum, held out wide, euro footwork
   const hang = 0.9*(s.hangMs || 0)/100;
-  const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang);
-  return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang), sp], limit };
+  const out = SITU.FINISH_FAR_IN*Math.max(0, (s.dist || 0) - SITU.FINISH_NEAR);
+  const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang + out*out);
+  return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang, out), sp], limit };
 }
 
 // ---------- Hands ----------

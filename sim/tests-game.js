@@ -176,6 +176,32 @@ gtest("The whole floor can be walked on: down to the baseline, under the basket,
   return `to ${g.P.y.toFixed(1)} ft from the baseline and along it under the basket; a shot from behind the backboard: ${b.last.out.sub}`;
 });
 
+gtest("A jump that starts as a finish has no timed release and no aim, wherever the ball is let go, and a release line never moves in the air", () => {
+  // a euro: gather on a drive at 14 ft, step, step out to the side, and up. The steps use most of the drive, so the
+  // jump starts well outside layup range off the dribble
+  const euro = letGo => {
+    const g = fresh(58, { defenders: false });
+    until(g, TOWARD, x => distance(x) <= 14);
+    GM.step(g, { ...TOWARD, gather: true }); run(g, 0.2, TOWARD); run(g, 0.2 - GM.TICK, { ...TOWARD, r: true });
+    const from = distance(g), out = { x: g.P.x + 1.8, y: g.P.y - 0.6 };                      // the ball held out to the right all the way
+    GM.step(g, { ...out, u: true, jump: true });
+    const start = { finish: g.shot.finish, kind: g.shot.kind };
+    for (let i = 1; i < Math.round(letGo/1000/GM.TICK); i++) GM.step(g, { x: g.P.x + 1.8, y: g.P.y - 0.6, u: true });
+    GM.step(g, { x: g.P.x + 1.8, y: g.P.y - 0.6, u: true, shot: true });
+    return { from, start, last: g.last };
+  };
+  const late = euro(650), early = euro(300);
+  check(late.from > 8.5 && late.from < 12 && late.start.finish && late.start.kind === "layup", `out of gather steps from ${late.from.toFixed(1)} ft: read as ${late.start.kind}`);
+  for (const e of [early, late]) check(e.last.kind === "layup" && e.last.near === 1 && e.last.con.c === 0, `let go ${e.last.upMs.toFixed(0)} ms in, ${e.last.dist.toFixed(1)} ft out: ${e.last.kind}, ${e.last.near} finish`);
+  check(early.last.dist > late.last.dist + 1.5 && early.last.sig.lat > late.last.sig.lat + 1, `let go further out it is a heave: σ ${early.last.sig.lat.toFixed(1)} in from ${early.last.dist.toFixed(1)} ft against ${late.last.sig.lat.toFixed(1)} from ${late.last.dist.toFixed(1)}`);
+  // a jump with a line: the line is where it is once the feet leave, however far the jump then carries
+  const g = fresh(58, { defenders: false }); until(g, TOWARD, x => distance(x) <= 12);
+  GM.step(g, { ...TOWARD, jump: true }); run(g, GM.C.LOAD/1000, TOWARD);
+  const at = g.shot.line, d0 = distance(g); run(g, 0.4, TOWARD);
+  check(g.shot.quick && g.shot.line === at && d0 - distance(g) > 3, `the quick line was at ${at} ms as the feet left and at ${g.shot.line} ms ${(d0 - distance(g)).toFixed(1)} ft further in`);
+  return `a euro going up from ${late.from.toFixed(1)} ft is a finish; let go ${late.last.dist.toFixed(1)} ft out σ ${late.last.sig.lat.toFixed(1)} in, ${early.last.dist.toFixed(1)} ft out σ ${early.last.sig.lat.toFixed(1)}; a floater's line stays at ${at} ms`;
+});
+
 gtest("Coming down with the ball is travelling", () => {
   const g = fresh(47); run(g, 0.5);
   GM.step(g, { ...AIM, jump: true }); run(g, 1);

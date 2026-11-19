@@ -36,10 +36,11 @@ stest("Context follows the design doc's table, in order", () => {
   return `${rows.length} situations`;
 });
 
-stest("Gather steps count as driving and reach 9 ft; a dead dribble is a set shot unless you step through", () => {
+stest("Gather steps count as driving and are a finish out to 12 ft; a dead dribble is a set shot unless you step through", () => {
   const steps = { state: "steps" };
   check(SIT.shotContext(at(8.5), steps).kind === "layup", "gather steps at 8.5 ft should be a layup");
-  check(SIT.shotContext(at(12), steps).kind === "floater", "gather steps at 12 ft should be a floater");
+  check(SIT.shotContext(at(11.5), steps).kind === "layup", "gather steps at 11.5 ft should be a finish");
+  check(SIT.shotContext(at(13), steps).kind === "floater", "gather steps at 13 ft should be a floater");
   const p = at(7), toRim = { state: "pivot", pivot: { x: p.x, y: p.y }, free: { x: p.x, y: p.y - 2 }, ext: 1.5 };
   const away = { ...toRim, free: { x: p.x, y: p.y + 2 } }, short = { ...toRim, ext: 1.0 };
   check(SIT.shotContext(p, { state: "pivot", pivot: null, free: null, ext: 0 }).kind === "jumper", "dead dribble at 7 ft should be a set shot");
@@ -110,6 +111,7 @@ stest("Finishing scatter: speed past the control limit, holding the ball out wid
   check(near(fs({ side: 1 }).parts[1], 0.8), "the ball held all the way out to one side should cost 0.8 in");
   check(near(fs({ side: 1, vPerp: -6 }).parts[1], 3.0) && near(fs({ side: 1, vPerp: 6 }).parts[1], 0.8), "held out across your momentum should cost 2.2 in more");
   check(fs({}).parts.length === 3, "a defender is not part of it: at the rim they are a body and an arm");
+  check(fs({ dist: 4 }).parts[1] === 0 && near(fs({ dist: 7 }).parts[1], 2.4), "let go 3 ft further out than 4 ft should cost 2.4 in");
   check(near(fs({ limit: 9, speed: 11 }).parts[2], 0.7) && fs({ limit: 13, speed: 11 }).parts[2] === 0, "the limit is the speed it is given: 2 ft/s over a 9 ft/s limit costs, and 11 ft/s under a 13 ft/s one does not");
   return `limit ${base.limit.toFixed(1)} ft/s; floor ${base.parts[0].toFixed(2)} in`;
 });
