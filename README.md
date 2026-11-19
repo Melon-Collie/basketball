@@ -12,7 +12,7 @@ Two people can play each other, one against one with no rim protector, from the 
 - [`docs/shot-model-design.md`](docs/shot-model-design.md): the design doc, covering principles, the shot resolver, dribbling, defense, frames, physics, calibration and the roadmap.
 - [`sim/`](sim): the shot simulation. The prototype loads these files directly, and they also run in Node for tests and calibration.
   - `physics.js`: ball flight, rim, backboard and hand collisions, make detection and outcome labels.
-  - `situation.js`: the rules that read the floor: what a click would produce, contests, clean looks, finishing scatter and defenders' hands.
+  - `situation.js`: the rules that read the floor: what a jump would be, contests, clean looks, finishing scatter and defenders' hands.
   - `launch.js`: turns aim, timing, momentum and contest into a launch.
   - `game.js`: the game itself: movement, dribbling, the defenders' AI, shots and the rules, advanced in fixed ticks from plain input. Deterministic for a given seed.
   - `noise.js`: launch-space noise and simulated make rates.
@@ -84,7 +84,7 @@ npm install
 npx playwright install chromium
 ```
 
-`replay.js` is a check that a refactor didn't change behavior. It plays one scripted session of free shooting, covering every shot type, in the working tree and in a git ref (`HEAD` by default), compares the panels and both canvases at each checkpoint, and exits 1 on any difference:
+`replay.js` is a check that a refactor didn't change behavior. It plays one scripted session of free shooting, covering every way of shooting, in the working tree and in a git ref (`HEAD` by default), compares the panels and both canvases at each checkpoint, and exits 1 on any difference:
 
 ```bash
 node tools/replay.js
@@ -110,12 +110,16 @@ To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss
 
 Mouse and keyboard:
 
-- A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Space** puts the ball on the floor.
+- A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Go up and shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Shift** puts the ball on the floor.
 - Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand.
-- **Hold left mouse** to start a shot, **release** to let it go. Releasing before 150 ms is a pump fake. The court holds still while you shoot, so your cursor stays where you put it.
-- To bank a shot, have the cursor on the backboard, clear of the rim, when you press.
-- **Shift** at the click attacks the rim (dunk attempt).
-- **Space** gathers the ball again, and that is the end of your dribble.
+- **Space** jumps, and **left mouse** lets the ball go. Every shot is the same jump: about half a second to the top, and then down again. Come down still holding the ball and it is travelling. The court holds still while you are in the air, so your cursor stays where you put it.
+- The jump carries half the speed you arrived with, plus up to 5 ft/s the way you hold **WASD** as you take off. Nothing steers it after that. Hold away from the rim for a fadeaway, toward it for a runner, against your own momentum to stop.
+- Away from the rim the ball has to be let go on the meter's **release line**, and the cursor aims. For most jumps the line is the top of the jump: the set shot. Jump while driving at the rim from about 7 to 14 ft and it is on the way up instead: a floater, off sooner, with more arc and less touch.
+- At the rim the line fades out and **the cursor is the ball**: close to your body it puts the ball there, to either side, behind you or straight up; out at the rim it is up in a shooting form. A defender there is a body and an arm, and the ball has to get past the arm. Let go on the way up to beat a shot blocker, or on the way down to wait them out. Get the ball over the rim near the top of a running jump and it is a dunk.
+- Flying into a defender who was set is a charge. Into one who was not, it is a bump, and the shot pays for it.
+- A **left click with your feet on the floor** is a pump fake.
+- To bank a shot, have the cursor on the backboard, clear of the rim, when you jump.
+- **Shift** gathers the ball again, and that is the end of your dribble.
 
 On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
 
@@ -125,4 +129,4 @@ After a miss the ball is live. **Space** jumps for it, for whoever is on offense
 
 The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.
 
-See the design doc for how context picks the shot type.
+See the design doc for how the jump and the one shot work.

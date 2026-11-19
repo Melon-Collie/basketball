@@ -4,8 +4,15 @@
 const PL = (typeof module !== "undefined") ? require("./physics.js") : window.PhysicsLib;
 
 const LAUNCH = {
-  ELEV: { jumper: 48, floater: 60, layup: 58 },       // degrees
-  REL_Z: { jumper: 9.6, floater: 8.7, layup: 9.6 },   // release height, ft: jumpers release near the top of their jump (placeholders until frames)
+  ELEV: { jumper: 48, floater: 60 },                  // degrees the ball leaves the hand at
+  // A layup is let go from anywhere between right under the rim and several feet out, and from low or high in the
+  // jump, so no one angle suits it: from close and low, a fixed one runs into the front of the rim. What stays the
+  // same is the angle it comes down into the rim at, and the hand finds whatever angle up gives that.
+  ENTRY: { layup: 60 },                               // degrees
+  REL_Z: { jumper: 9.6, floater: 9.2, layup: 9.6 },   // release height, ft, when nobody says where the ball is: the game does, from the hand
+  // ft past the rim's center that a shot is aimed. Up close a ball that is a little long still drops and one that is
+  // a little short hits the front of the rim, so the middle of what goes in is behind the center.
+  PAST: { jumper: 0, floater: 2/12, layup: 2/12 },
   REL_FWD: 0.7,                                       // release point this far in front of the body, toward the target
   CONTEST_ARC: 6,                                     // degrees of extra arc at full contest
   // Calibrated by calibrateLaunch() so sensitivities match today's model at 24 ft (see below)
@@ -31,16 +38,27 @@ function rimPlaneOffset(L, from) {
   return { lat: (dx*r.x + dy*r.y)*12, dep: (dx*u.x + dy*u.y)*12, t };
 }
 
+// The angle a shot of this kind leaves the hand at, in degrees. For a layup: the one that brings it down to the
+// target at the entry angle, tan(up) = tan(down) + 2*(rise needed)/(distance), and no steeper than 82.
+function elevFor(kind, pos, target) {
+  if (LAUNCH.ENTRY[kind] === undefined) return LAUNCH.ELEV[kind];
+  const d = Math.hypot(target.x - pos.x, target.y - pos.y) || 1e-6;
+  return Math.min(82, Math.atan(Math.tan(rad(LAUNCH.ENTRY[kind])) + 2*(target.z - pos.z)/d)*180/Math.PI);
+}
+
 // inputs: kind, player {x, y}, aimTheta (radians, + = right), timingMs (post-assist), body {vx, vy}, contest 0..1,
-// noise { dv (fraction), de (deg), da (deg) } added on top
+// noise { dv (fraction), de (deg), da (deg) } added on top.
+// form: a weight for each kind, adding to 1, in place of one kind: the arc and the aim point are then mixed by weight.
+// pos: where the ball leaves from {x, y, z}, if not the usual spot in front of the body.
 function buildLaunch(inp) {
-  const R = RIMC(), kind = inp.kind || "jumper";
+  const R = RIMC(), form = inp.form || { [inp.kind || "jumper"]: 1 };
+  const mix = of => { let v = 0; for (const k in form) if (form[k] > 0) v += form[k]*of(k); return v; };
   const ux = R.x - inp.player.x, uy = R.y - inp.player.y, ul = Math.hypot(ux, uy) || 1;
   const u = { x: ux/ul, y: uy/ul }, r = { x: -u.y, y: u.x };
-  const pos = { x: inp.player.x + u.x*LAUNCH.REL_FWD, y: inp.player.y + u.y*LAUNCH.REL_FWD, z: inp.relZ ?? LAUNCH.REL_Z[kind] };
-  const target = inp.target || R;
+  const pos = inp.pos || { x: inp.player.x + u.x*LAUNCH.REL_FWD, y: inp.player.y + u.y*LAUNCH.REL_FWD, z: inp.relZ ?? mix(k => LAUNCH.REL_Z[k]) };
+  const past = mix(k => LAUNCH.PAST[k]), target = inp.target || { x: R.x + u.x*past, y: R.y + u.y*past, z: R.z };
   const n = inp.noise || { dv: 0, de: 0, da: 0 };
-  const elev = rad(LAUNCH.ELEV[kind] + LAUNCH.CONTEST_ARC*(inp.contest || 0));
+  const elev = rad(mix(k => elevFor(k, pos, target)) + LAUNCH.CONTEST_ARC*(inp.contest || 0));
   const ideal = PL.idealSpeed(pos, target, elev);
   if (!ideal) return null;
   const speed = ideal*(1 + LAUNCH.K_SPEED*(inp.timingMs || 0) + n.dv);
@@ -73,10 +91,11 @@ calibrateLaunch();
 
 // The spot on the glass, at lateral position aimX, that banks a perfect shot from here into the rim:
 // the middle of the range of heights that work. works = false if no height banks it in from here.
-function glassTarget(player, kind, aimX) {
+// from: what else is known about the launch: { relZ } or { pos, form }, as buildLaunch takes them.
+function glassTarget(player, kind, aimX, from = {}) {
   const B = PL.PHYS.BOARD, y = B.y + PL.PHYS.BALL_R, zs = [];
   for (let z = 10.1; z <= 12.6; z += 0.1) {
-    const L = buildLaunch({ kind, player, target: { x: aimX, y, z } });
+    const L = buildLaunch({ kind, player, ...from, target: { x: aimX, y, z } });
     if (!L) continue;
     const r = PL.simulateShot(L, { quick: true });
     if (r.made && r.contacts[0] && r.contacts[0].type === "board") zs.push(z);

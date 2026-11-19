@@ -45,18 +45,19 @@ function timedTable(title, kind, dist, move, body, gaps) {
   table(title, "defender", states.map(([name]) => name), rows);
 }
 
-// Layups: the shooter is 3 ft out at the end of the finish, arriving at 11 ft/s (under control: the limit is 11.4).
+// Finishes: the shooter is 3 ft out, arriving at 11 ft/s (under control: the limit is 11.4). At the rim a defender is
+// only an arm, so the contest is nothing and the block rate is everything. side: where the ball is held, -1 to 1.
 function layup(angle, state, side) {
-  const p = { x: R.x, y: R.y + 3, vx: 0, vy: 0 };
+  const p = { x: R.x, y: R.y + 3, vx: 0, vy: 0 }, f = SIT.frame(p);
   const defs = [defenderAt(p, 2.3, { ...BIG, angle, ...state })];
-  const con = SIT.rimContest(p, defs, side);
-  const fs = SIT.finishScatter({ speed: 11, vPerp: 0, side, hangMs: 0, euro: 0, contest: con.c, limit: 11.4 });
-  const r = N.makeRate({ kind: "layup", dist: 3, contest: con.c, extra: Math.hypot(fs.parts[1], fs.parts[2]), hands: SIT.handPaths(p, defs, null) }, n, seed);
-  return { c: con.c, rate: r.rate, blocks: r.blocks };
+  const fs = SIT.finishScatter({ speed: 11, vPerp: 0, side, hangMs: 0, euro: 0, limit: 11.4 });
+  const pos = { x: p.x + f.u.x*0.7 + f.r.x*1.6*side, y: p.y + f.u.y*0.7 + f.r.y*1.6*side, z: 9.6 - 0.5*Math.abs(side) };
+  const r = N.makeRate({ kind: "layup", dist: 3, player: p, pos, extra: Math.hypot(fs.parts[1], fs.parts[2]), hands: SIT.handPaths(p, defs, null) }, n, seed);
+  return { c: 0, rate: r.rate, blocks: r.blocks };
 }
 function layupTable(title, angle) {
   const states = [["standing", {}], ["rising", airborne(0.1)], ["at the peak", airborne(0.25)], ["just landed", { land: 0.3 }]];
-  const sides = [["away", -1], ["middle", 0], ["into them", 1]];
+  const sides = [["held away", -1], ["in front", 0], ["held their way", 1]];
   table(title, "finish", states.map(([name]) => name), sides.map(([name, s]) => [name, states.map(([, st]) => layup(angle, st, s))]));
 }
 
@@ -67,7 +68,7 @@ timedTable("Floater from 10 ft at 12 ft/s, rim protector between the shooter and
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, straight between the shooter and the rim", 0);
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, 40 degrees to the shooter's right", 40);
 
-// In play: a fresh game per shot, a second to settle, then a jumper held 517 ms (a perfect release) aimed at the rim.
+// In play: a fresh game per shot, a second to settle, then a jumper let go 517 ms after the jump (a perfect release) aimed at the rim.
 // tight: during that second the ball is pulled in close, not dribbled out in front where a near defender can take it.
 function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
   const aim = { x: R.x, y: R.y }, t = s => Math.round(s/GM.TICK);
@@ -77,10 +78,10 @@ function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
     if (guard !== null) g.params.sag = guard;
     for (let k = 0; k < t(back); k++) GM.step(g, { ...aim, d: true });
     for (let k = 0; k < t(1); k++) GM.step(g, tight ? { x: g.P.x + 0.3, y: g.P.y - 0.6 } : aim);
-    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, shot: true });
+    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, jump: k === 0 });
     if (g.shot.state !== "shooting") continue;                    // the ball was taken first
     if (g.D.jumpT >= 0 || g.D.land > 0) jumped++;
-    GM.step(g, aim);
+    GM.step(g, { ...aim, shot: true });
     off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++; if (g.last.out.foul) fouled++;
   }
   const pct = x => off ? `${(x/off*100).toFixed(0).padStart(3)}%` : "   –";

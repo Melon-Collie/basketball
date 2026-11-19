@@ -46,9 +46,31 @@ ltest("Perfect inputs still swish through the full simulation", () => {
   out.forEach((r, i) => { if (!r.made) throw new Error(`${[10, 15, 24][i]} ft: ${r.label}`); });
   return out.map((r, i) => `${[10, 15, 24][i]} ft: ${r.label}`).join(", ");
 });
+ltest("A ball can leave from wherever the hand is, and a shot can be part one kind and part another", () => {
+  const N = require("./noise.js");
+  const player = { x: R.x, y: R.y + 3 }, pos = { x: R.x + 1.6, y: R.y + 2.4, z: 9.1 };
+  const placed = L.buildLaunch({ kind: "layup", player, pos });
+  if (placed.pos !== pos) throw new Error("the launch should start at the spot it was given");
+  const res = PL.simulateShot(placed, { quick: true });
+  if (!res.made) throw new Error(`a perfect layup from out to the side should go in: ${res.label}`);
+  // all of one kind is that kind; half and half is in between
+  const p15 = { x: R.x, y: R.y + 6 };
+  const speed = form => { const v = L.buildLaunch({ form, player: p15 }).vel; return Math.hypot(v.x, v.y, v.z); };
+  const j = speed({ jumper: 1 }), f = speed({ layup: 1 }), mix = speed({ jumper: 0.5, layup: 0.5 });
+  const kind = k => { const v = L.buildLaunch({ kind: k, player: p15 }).vel; return Math.hypot(v.x, v.y, v.z); };
+  if (Math.abs(j - kind("jumper")) > 1e-9 || Math.abs(f - kind("layup")) > 1e-9) throw new Error("a form that is all one kind should be that kind");
+  if (!(mix > Math.min(j, f) && mix < Math.max(j, f))) throw new Error(`half and half should launch between the two: ${j.toFixed(2)}, ${mix.toFixed(2)}, ${f.toFixed(2)}`);
+  // scatter mixes the same way, by variance, and a bump adds to any of it
+  const sc = { dist: 6, q: 1, move: 4, contest: 0, extra: 1 };
+  const a = N.scatterIn({ ...sc, kind: "jumper" }).lat, b = N.scatterIn({ ...sc, kind: "layup" }).lat, m = N.scatterIn({ ...sc, form: { jumper: 0.5, layup: 0.5 } }).lat;
+  if (Math.abs(m - Math.sqrt((a*a + b*b)/2)) > 1e-9) throw new Error(`mixed scatter should add the variances by weight: ${a}, ${b}, ${m}`);
+  if (!(N.scatterIn({ ...sc, kind: "layup", bump: 2 }).lat > b)) throw new Error("a bump should add scatter");
+  return `from 1.6 ft to the side: ${res.label}; scatter ${a.toFixed(1)} in set, ${b.toFixed(1)} at the rim, ${m.toFixed(1)} half and half`;
+});
+
 if (typeof module !== "undefined" && require.main === module) {
   console.log("constants", JSON.stringify(L.LAUNCH.K_SPEED), L.LAUNCH.F_LAT.toFixed(3), L.LAUNCH.F_DEP.toFixed(3));
-  for (const t of launchTests) { try { console.log("PASS ", t.name, "\n     ", t.fn()); } catch (e) { console.log("FAIL ", t.name, "\n     ", e.message); } }
+  for (const t of launchTests) { try { console.log("PASS ", t.name, "\n     ", t.fn()); } catch (e) { console.log("FAIL ", t.name, "\n     ", e.message); process.exitCode = 1; } }
 }
 if (typeof module !== "undefined") module.exports = { launchTests };
 else window.LaunchTests = { launchTests };

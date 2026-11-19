@@ -24,13 +24,13 @@ const KEEP = 600;                // ticks of inputs kept behind the sure game, f
 const MOST = 120;                // most inputs in one packet
 const SYNC_OVER = 40;            // packets averaged before judging whether this side's clock is ahead
 const SETTLE = 30;               // packets ignored after slowing down, while the other side's view of us catches up
-const NEUTRAL = { u: false, d: false, l: false, r: false, shot: false, shift: false, gather: false, x: GM.HOOP.x, y: GM.HOOP.y };
+const NEUTRAL = { u: false, d: false, l: false, r: false, shot: false, jump: false, gather: false, x: GM.HOOP.x, y: GM.HOOP.y };
 
 // An input on the wire: seven bits and a cursor to the nearest thousandth of a foot. Both sides use the unpacked
 // form, so what is sent is exactly what is played.
-const pack = i => [(i.u ? 1 : 0) | (i.d ? 2 : 0) | (i.l ? 4 : 0) | (i.r ? 8 : 0) | (i.shot ? 16 : 0) | (i.shift ? 32 : 0) | (i.gather ? 64 : 0), Math.round(i.x*1000), Math.round(i.y*1000)];
-const unpack = p => ({ u: !!(p[0] & 1), d: !!(p[0] & 2), l: !!(p[0] & 4), r: !!(p[0] & 8), shot: !!(p[0] & 16), shift: !!(p[0] & 32), gather: !!(p[0] & 64), x: p[1]/1000, y: p[2]/1000 });
-const alike = (a, b) => a.x === b.x && a.y === b.y && a.u === b.u && a.d === b.d && a.l === b.l && a.r === b.r && a.shot === b.shot && a.shift === b.shift && a.gather === b.gather;
+const pack = i => [(i.u ? 1 : 0) | (i.d ? 2 : 0) | (i.l ? 4 : 0) | (i.r ? 8 : 0) | (i.shot ? 16 : 0) | (i.jump ? 32 : 0) | (i.gather ? 64 : 0), Math.round(i.x*1000), Math.round(i.y*1000)];
+const unpack = p => ({ u: !!(p[0] & 1), d: !!(p[0] & 2), l: !!(p[0] & 4), r: !!(p[0] & 8), shot: !!(p[0] & 16), jump: !!(p[0] & 32), gather: !!(p[0] & 64), x: p[1]/1000, y: p[2]/1000 });
+const alike = (a, b) => a.x === b.x && a.y === b.y && a.u === b.u && a.d === b.d && a.l === b.l && a.r === b.r && a.shot === b.shot && a.jump === b.jump && a.gather === b.gather;
 
 // game: the game on screen. me: 0 or 1, the side this copy plays. Side 0 is the reference when the copies disagree.
 // opts.delay: ticks of input delay, if not DELAY. Both sides must be given the same.

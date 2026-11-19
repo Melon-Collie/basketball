@@ -18,7 +18,7 @@ for (const ct of [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2]) {
 }
 out.jumper = NN.MULT.jumper; out.contestIn = NN.CONTEST_IN;
 out.floater = solve('floater', { kind: 'floater', dist: 10, move: 12 }, 0.50);
-out.layup = solve('layup', { kind: 'layup', dist: 4, extra: 1.26 }, 0.80, 0.5, 4);
+out.layup = solve('layup', { kind: 'layup', dist: 3, extra: 1.26 }, 0.80, 0.5, 4);   // 3 ft: about where a layup off a drive is let go
 // clean looks: smallest premium whose best cap gives 60% with at least 95% near misses and no airballs
 let best = null;
 for (const prem of [0.04, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12]) {
@@ -49,6 +49,8 @@ const checks = {
   'heavy contest three (target mid-teens)': { dist: 24, contest: 1 },
   'open 15ft straight fade, fadeaway 70 (old 49)': { dist: 15, fadeIn: 2.0 },
   'floater 10ft moving (target 50)': { kind: 'floater', dist: 10, move: 12 },
-  'layup 4ft open sprint (target 80)': { kind: 'layup', dist: 4, extra: 1.26 },
+  'layup 3ft open sprint (target 80)': { kind: 'layup', dist: 3, extra: 1.26 },
+  'the same layup from 5 ft': { kind: 'layup', dist: 5, extra: 1.26 },
+  'the same layup let go a foot lower': { kind: 'layup', dist: 3, extra: 1.26, relZ: 8.6 },
 };
 for (const [k, s] of Object.entries(checks)) { const r = N.makeRate(s, 4000, 7); console.log(k.padEnd(48), (r.rate*100).toFixed(1)+'%', 'near misses', (r.nearOfMisses*100).toFixed(0)+'%', 'airballs', (r.airballs/40).toFixed(1)+'%'); }

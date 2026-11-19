@@ -19,16 +19,11 @@ function defender(p, d, opts = {}) {
 const DRIBBLING = { state: "none" };
 
 stest("Context follows the design doc's table, in order", () => {
-  const kind = (p, shift = false, hold = DRIBBLING, canDunk = true) => SIT.shotContext(p, hold, shift, canDunk).kind;
+  const kind = (p, hold = DRIBBLING) => SIT.shotContext(p, hold).kind;
   const rows = [
     ["standing 3 ft", kind(at(3)), "layup"],
-    ["standing 3 ft, Shift (no speed)", kind(at(3), true), "layup"],
     ["driving 6 ft", kind(at(6, 10)), "layup"],
-    ["driving 6 ft, Shift", kind(at(6, 10), true), "dunk"],
     ["driving 8.5 ft", kind(at(8.5, 10)), "floater"],
-    ["driving 8.5 ft, Shift", kind(at(8.5, 10), true), "dunk"],
-    ["driving 8.5 ft, Shift, 6 ft/s", kind(at(8.5, 6), true), "layup"],
-    ["driving 8.5 ft, Shift, by someone who can't get up there", kind(at(8.5, 10), true, DRIBBLING, false), "layup"],
     ["driving 13 ft", kind(at(13, 10)), "floater"],
     ["driving 15 ft", kind(at(15, 10)), "jumper"],
     ["standing 10 ft", kind(at(10)), "jumper"],
@@ -36,24 +31,24 @@ stest("Context follows the design doc's table, in order", () => {
     ["strafing 10 ft", kind(at(10, 0, 10)), "jumper"],
   ];
   for (const [name, got, want] of rows) check(got === want, `${name}: ${got}, expected ${want}`);
-  const why = SIT.shotContext(at(8.5, 6), DRIBBLING, true).note;
-  check(/needs more speed/.test(why), `note: ${why}`);
+  // a dunk is never the answer here: it is what a finish becomes when it is let go with the hand over the rim
+  check(rows.every(r => r[1] !== "dunk"), "context should not name a dunk");
   return `${rows.length} situations`;
 });
 
 stest("Gather steps count as driving and reach 9 ft; a dead dribble is a set shot unless you step through", () => {
   const steps = { state: "steps" };
-  check(SIT.shotContext(at(8.5), steps, false, 75).kind === "layup", "gather steps at 8.5 ft should be a layup");
-  check(SIT.shotContext(at(12), steps, false, 75).kind === "floater", "gather steps at 12 ft should be a floater");
+  check(SIT.shotContext(at(8.5), steps).kind === "layup", "gather steps at 8.5 ft should be a layup");
+  check(SIT.shotContext(at(12), steps).kind === "floater", "gather steps at 12 ft should be a floater");
   const p = at(7), toRim = { state: "pivot", pivot: { x: p.x, y: p.y }, free: { x: p.x, y: p.y - 2 }, ext: 1.5 };
   const away = { ...toRim, free: { x: p.x, y: p.y + 2 } }, short = { ...toRim, ext: 1.0 };
-  check(SIT.shotContext(p, { state: "pivot", pivot: null, free: null, ext: 0 }, false, 75).kind === "jumper", "dead dribble at 7 ft should be a set shot");
-  const through = SIT.shotContext(p, toRim, false, 75);
+  check(SIT.shotContext(p, { state: "pivot", pivot: null, free: null, ext: 0 }).kind === "jumper", "dead dribble at 7 ft should be a set shot");
+  const through = SIT.shotContext(p, toRim);
   check(through.kind === "layup" && through.note === "Step-through finish", `step-through: ${through.kind}`);
-  check(SIT.shotContext(p, away, false, 75).kind === "jumper", "free foot away from the rim is not a step-through");
-  check(SIT.shotContext(p, short, false, 75).kind === "jumper", "free foot not extended is not a step-through");
-  check(SIT.shotContext(at(9), toRim, false, 75).kind === "jumper", "step-through past 8 ft should be a set shot");
-  check(SIT.shotContext(at(3), { state: "pivot", pivot: null, free: null, ext: 0 }, false, 75).kind === "layup", "dead dribble inside 4 ft is a finish");
+  check(SIT.shotContext(p, away).kind === "jumper", "free foot away from the rim is not a step-through");
+  check(SIT.shotContext(p, short).kind === "jumper", "free foot not extended is not a step-through");
+  check(SIT.shotContext(at(9), toRim).kind === "jumper", "step-through past 8 ft should be a set shot");
+  check(SIT.shotContext(at(3), { state: "pivot", pivot: null, free: null, ext: 0 }).kind === "layup", "dead dribble inside 4 ft is a finish");
   return "steps, pivot and step-through";
 });
 
@@ -95,16 +90,6 @@ stest("Floater contest: the arc clears anyone 4 ft away, and closing speed doesn
   return `3 ft ${c(3).toFixed(2)}, 2.5 ft ${c(2.5).toFixed(2)}, 2 ft ${c(2).toFixed(2)}`;
 });
 
-stest("Rim contest: shielding the ball helps, finishing into the defender hurts, and a jump beats standing", () => {
-  const p = at(4, 10), big = o => defender(p, 2.4, { angle: 35, stand: 8.9, len: 1.2, ...o });   // to the shooter's right
-  const c = (side, o) => SIT.rimContest(p, [big(o)], side).c;
-  check(c(-1) < c(0) && c(0) < c(1), `away ${c(-1)}, middle ${c(0)}, into ${c(1)}`);
-  check(c(0, { h: 1 }) > c(0) && c(0, { land: 0.3 }) < c(0), "airborne should beat standing, and just landed should be weakest");
-  check(c(0, { vx: 8, vy: 0 }) < c(0), "arriving late should be weaker than set");
-  check(SIT.rimContest(p, [defender(p, 2.4, { angle: 180, len: 1.2 })], 0).c < 0.5*c(0), "a chase-down should be much weaker");
-  return `standing: away ${c(-1).toFixed(2)}, middle ${c(0).toFixed(2)}, into ${c(1).toFixed(2)}; at the peak of a jump ${c(0, { h: 1 }).toFixed(2)}; just landed ${c(0, { land: 0.3 }).toFixed(2)}`;
-});
-
 stest("A clean look needs nobody within 8 ft, feet set, and no fade", () => {
   const p = at(24), cl = (d, speed = 0, fade = false) => SIT.cleanLook(p, [defender(p, d)], fade, speed);
   check(cl(8) === 1 && cl(12) === 1 && SIT.cleanLook(p, [], false, 0) === 1, "wide open and set should be fully clean");
@@ -115,16 +100,16 @@ stest("A clean look needs nobody within 8 ft, feet set, and no fade", () => {
   return "ramps from 5 to 8 ft and from 3 to 1 ft/s";
 });
 
-stest("Finishing scatter: speed past the control limit, cutting back, hang and euro steps all cost", () => {
-  const fs = o => SIT.finishScatter({ speed: 10, vPerp: 0, side: 0, hangMs: 0, euro: 0, contest: 0, limit: 11.4, ...o });
+stest("Finishing scatter: speed past the control limit, holding the ball out wide or across your momentum, hang and euro steps all cost", () => {
+  const fs = o => SIT.finishScatter({ speed: 10, vPerp: 0, side: 0, hangMs: 0, euro: 0, limit: 11.4, ...o });
   const base = fs({});
   check(near(base.limit, 11.4) && near(base.parts[0], 2.475) && base.parts[1] === 0 && base.parts[2] === 0, `base: ${JSON.stringify(base)}`);
   check(near(fs({ speed: 13.4 }).parts[2], 0.7), "2 ft/s over the limit should cost 0.7 in");
   check(near(fs({ hangMs: 200 }).parts[1], 1.8), "200 ms of hang should cost 1.8 in");
   check(near(fs({ euro: 2 }).parts[1], 1.2), "a 2 ft euro step should cost 1.2 in");
-  check(near(fs({ side: 1 }).parts[1], 0.8), "finishing at the side of the rim should cost 0.8 in");
-  check(near(fs({ side: 1, vPerp: -6 }).parts[1], 3.0) && near(fs({ side: 1, vPerp: 6 }).parts[1], 0.8), "cutting back across your momentum should cost 2.2 in more");
-  check(near(fs({ contest: 1 }).parts[3], 3.5), "a full contest should add 3.5 in");
+  check(near(fs({ side: 1 }).parts[1], 0.8), "the ball held all the way out to one side should cost 0.8 in");
+  check(near(fs({ side: 1, vPerp: -6 }).parts[1], 3.0) && near(fs({ side: 1, vPerp: 6 }).parts[1], 0.8), "held out across your momentum should cost 2.2 in more");
+  check(fs({}).parts.length === 3, "a defender is not part of it: at the rim they are a body and an arm");
   check(near(fs({ limit: 9, speed: 11 }).parts[2], 0.7) && fs({ limit: 13, speed: 11 }).parts[2] === 0, "the limit is the speed it is given: 2 ft/s over a 9 ft/s limit costs, and 11 ft/s under a 13 ft/s one does not");
   return `limit ${base.limit.toFixed(1)} ft/s; floor ${base.parts[0].toFixed(2)} in`;
 });

@@ -1,12 +1,12 @@
 // Noise settings that hit the design targets (milestone 3). Written by calibrate.js: don't edit by hand.
 const CALIBRATION = {
  "MULT": {
-  "jumper": 1.2315551757812497,
-  "floater": 1.41915283203125,
-  "layup": 1.40020751953125
+  "jumper": 1.23238525390625,
+  "floater": 1.4984252929687498,
+  "layup": 1.74371337890625
  },
  "DIST_IN": 0,
- "CONTEST_IN": 6.173828125,
+ "CONTEST_IN": 6.185546875,
  "PREMIUM": 0.04,
  "CAP": 1.6,
  "TAIL_IN": 12.5,
