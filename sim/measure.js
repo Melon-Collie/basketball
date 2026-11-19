@@ -67,7 +67,7 @@ timedTable("Floater from 10 ft at 12 ft/s, rim protector between the shooter and
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, straight between the shooter and the rim", 0);
 layupTable("Layup from 3 ft, rim protector 2.3 ft away, 40 degrees to the shooter's right", 40);
 
-// In play: a fresh game per shot, a second to settle, then a jumper held 517 ms (a perfect release) aimed at the rim.
+// In play: a fresh game per shot, a second to settle, then a jumper let go 517 ms after the jump (a perfect release) aimed at the rim.
 // tight: during that second the ball is pulled in close, not dribbled out in front where a near defender can take it.
 function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
   const aim = { x: R.x, y: R.y }, t = s => Math.round(s/GM.TICK);
@@ -77,10 +77,10 @@ function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
     if (guard !== null) g.params.sag = guard;
     for (let k = 0; k < t(back); k++) GM.step(g, { ...aim, d: true });
     for (let k = 0; k < t(1); k++) GM.step(g, tight ? { x: g.P.x + 0.3, y: g.P.y - 0.6 } : aim);
-    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, shot: true });
+    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, jump: k === 0 });
     if (g.shot.state !== "shooting") continue;                    // the ball was taken first
     if (g.D.jumpT >= 0 || g.D.land > 0) jumped++;
-    GM.step(g, aim);
+    GM.step(g, { ...aim, shot: true });
     off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++; if (g.last.out.foul) fouled++;
   }
   const pct = x => off ? `${(x/off*100).toFixed(0).padStart(3)}%` : "   –";

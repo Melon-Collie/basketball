@@ -19,16 +19,11 @@ function defender(p, d, opts = {}) {
 const DRIBBLING = { state: "none" };
 
 stest("Context follows the design doc's table, in order", () => {
-  const kind = (p, shift = false, hold = DRIBBLING, canDunk = true) => SIT.shotContext(p, hold, shift, canDunk).kind;
+  const kind = (p, hold = DRIBBLING) => SIT.shotContext(p, hold).kind;
   const rows = [
     ["standing 3 ft", kind(at(3)), "layup"],
-    ["standing 3 ft, Shift (no speed)", kind(at(3), true), "layup"],
     ["driving 6 ft", kind(at(6, 10)), "layup"],
-    ["driving 6 ft, Shift", kind(at(6, 10), true), "dunk"],
     ["driving 8.5 ft", kind(at(8.5, 10)), "floater"],
-    ["driving 8.5 ft, Shift", kind(at(8.5, 10), true), "dunk"],
-    ["driving 8.5 ft, Shift, 6 ft/s", kind(at(8.5, 6), true), "layup"],
-    ["driving 8.5 ft, Shift, by someone who can't get up there", kind(at(8.5, 10), true, DRIBBLING, false), "layup"],
     ["driving 13 ft", kind(at(13, 10)), "floater"],
     ["driving 15 ft", kind(at(15, 10)), "jumper"],
     ["standing 10 ft", kind(at(10)), "jumper"],
@@ -36,24 +31,24 @@ stest("Context follows the design doc's table, in order", () => {
     ["strafing 10 ft", kind(at(10, 0, 10)), "jumper"],
   ];
   for (const [name, got, want] of rows) check(got === want, `${name}: ${got}, expected ${want}`);
-  const why = SIT.shotContext(at(8.5, 6), DRIBBLING, true).note;
-  check(/needs more speed/.test(why), `note: ${why}`);
+  // a dunk is never the answer here: it is what a finish becomes when it is let go with the hand over the rim
+  check(rows.every(r => r[1] !== "dunk"), "context should not name a dunk");
   return `${rows.length} situations`;
 });
 
 stest("Gather steps count as driving and reach 9 ft; a dead dribble is a set shot unless you step through", () => {
   const steps = { state: "steps" };
-  check(SIT.shotContext(at(8.5), steps, false, 75).kind === "layup", "gather steps at 8.5 ft should be a layup");
-  check(SIT.shotContext(at(12), steps, false, 75).kind === "floater", "gather steps at 12 ft should be a floater");
+  check(SIT.shotContext(at(8.5), steps).kind === "layup", "gather steps at 8.5 ft should be a layup");
+  check(SIT.shotContext(at(12), steps).kind === "floater", "gather steps at 12 ft should be a floater");
   const p = at(7), toRim = { state: "pivot", pivot: { x: p.x, y: p.y }, free: { x: p.x, y: p.y - 2 }, ext: 1.5 };
   const away = { ...toRim, free: { x: p.x, y: p.y + 2 } }, short = { ...toRim, ext: 1.0 };
-  check(SIT.shotContext(p, { state: "pivot", pivot: null, free: null, ext: 0 }, false, 75).kind === "jumper", "dead dribble at 7 ft should be a set shot");
-  const through = SIT.shotContext(p, toRim, false, 75);
+  check(SIT.shotContext(p, { state: "pivot", pivot: null, free: null, ext: 0 }).kind === "jumper", "dead dribble at 7 ft should be a set shot");
+  const through = SIT.shotContext(p, toRim);
   check(through.kind === "layup" && through.note === "Step-through finish", `step-through: ${through.kind}`);
-  check(SIT.shotContext(p, away, false, 75).kind === "jumper", "free foot away from the rim is not a step-through");
-  check(SIT.shotContext(p, short, false, 75).kind === "jumper", "free foot not extended is not a step-through");
-  check(SIT.shotContext(at(9), toRim, false, 75).kind === "jumper", "step-through past 8 ft should be a set shot");
-  check(SIT.shotContext(at(3), { state: "pivot", pivot: null, free: null, ext: 0 }, false, 75).kind === "layup", "dead dribble inside 4 ft is a finish");
+  check(SIT.shotContext(p, away).kind === "jumper", "free foot away from the rim is not a step-through");
+  check(SIT.shotContext(p, short).kind === "jumper", "free foot not extended is not a step-through");
+  check(SIT.shotContext(at(9), toRim).kind === "jumper", "step-through past 8 ft should be a set shot");
+  check(SIT.shotContext(at(3), { state: "pivot", pivot: null, free: null, ext: 0 }).kind === "layup", "dead dribble inside 4 ft is a finish");
   return "steps, pivot and step-through";
 });
 

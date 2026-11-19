@@ -41,10 +41,10 @@ function isThree(p) {
   return Math.hypot(p.x - PLs.PHYS.RIM.x, p.y - PLs.PHYS.RIM.y) >= 23.75;
 }
 
-// ---------- Context: what does a click do right now? ----------
+// ---------- Context: what would a jump from here be? ----------
 // hold: { state: "none" | "steps" | "pivot", pivot, free, ext } (the gathered ball; pivot and free are the feet)
-// canDunk: whether this player can get up there at all. Everyone can for now; with frames it will come from reach and vertical.
-function shotContext(p, hold, shift, canDunk = true) {
+// A dunk is not one of the answers: it is a finish let go with the hand over the rim, which only the jump itself decides.
+function shotContext(p, hold) {
   const f = frame(p), vAlong = p.vx*f.u.x + p.vy*f.u.y;
   if (hold.state === "pivot") {
     // stepping through toward the rim with the free foot is a finish; otherwise it's a set shot
@@ -53,16 +53,11 @@ function shotContext(p, hold, shift, canDunk = true) {
     return f.dist <= SITU.CLOSE_RANGE || through ? { kind: "layup", note: through ? "Step-through finish" : "" } : { kind: "jumper", note: "" };
   }
   const driving = vAlong >= SITU.DRIVE_SPEED || hold.state === "steps";   // gather steps are always going somewhere
-  // click early on a drive = floater, keep driving and click late = layup; Shift attacks the rim from a bit farther
+  // going up early on a drive = floater; keep driving and go up late = layup
   const layupRange = hold.state === "steps" ? SITU.STEPS_LAYUP_RANGE : SITU.LAYUP_RANGE;   // the gather steps carry you in, so they reach a little farther
-  const attack = f.dist <= SITU.CLOSE_RANGE || (driving && f.dist <= layupRange) || (shift && driving && f.dist <= SITU.DUNK_RANGE);
+  const attack = f.dist <= SITU.CLOSE_RANGE || (driving && f.dist <= layupRange);
   if (!attack) return driving && f.dist <= SITU.FLOATER_RANGE ? { kind: "floater", note: "" } : { kind: "jumper", note: "" };
-  if (!shift) return { kind: "layup", note: "" };
-  let why = "";
-  if (!canDunk) why = "can't get up there";
-  else if (f.dist > SITU.DUNK_RANGE) why = "too far out";
-  else if (vAlong < SITU.DUNK_SPEED) why = "needs more speed";
-  return why ? { kind: "layup", note: `Dunk unavailable, ${why}` } : { kind: "dunk", note: "" };
+  return { kind: "layup", note: "" };
 }
 
 // ---------- Contests ----------

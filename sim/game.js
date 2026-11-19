@@ -21,9 +21,17 @@ if (NODE) Object.assign(NZX.NOISE, require("./calibration.js"));   // in the pag
 
 // ---------- Model constants (inches, feet, ms) ----------
 const C = {
-  IDEAL: 520, MAX: 820,          // jumper: perfect release point, auto-release
+  // The jump with the ball, the same for every shot. Space starts it: LOAD ms with the feet still down while the legs
+  // bend, then RISE ms up and RISE ms down. The top of the jump, IDEAL ms after the press, is where a jumper is let
+  // go. A floater is let go on the way up, FL_IDEAL ms after it: that is what gets it off before a shot blocker is there.
+  LOAD: 170, RISE: 350, IDEAL: 520, FL_IDEAL: 330,
+  KEEP: 0.5, LEAN: 5,            // takeoff: this share of the speed you arrived with is carried into the air, plus up to LEAN ft/s the way WASD is held
+  REL_DROP: 2.0,                 // ft lower the ball leaves the hand at the bottom of the jump than at the top
+  P_STAND: 8.3, P_JUMP: 2.3,     // ft: the handler's standing reach, and how much a full jump adds (placeholders until frames)
+  RUN_UP: 7, STAND_LIFT: 0.85,   // a jump from a standstill reaches this share of one taken at RUN_UP ft/s or more
+  DUNK_Z: 10.3, DUNK_R: 4.2,     // a dunk: the hand at least this high, with the rim's center within this of the body
+  AIR_LAND: 0.25,                // s to recover after coming down
   KT: 0.09,                      // in of depth bias per ms of post-assist timing error
-  TAU: 0.40,                     // s, momentum bleed once a jumper starts
   PSPEED: 15, PACC: 70,
   DSPEED: 13, DACC: 50, CLOSE_SPEED: 15.5, CLOSE_ACC: 60,
   DRIFT_LAT: 1.6, DRIFT_DEP: 1.0,
@@ -31,15 +39,11 @@ const C = {
   PERFECT_MS: 12,
   // dribbling
   STEP_T: 0.2, GATHER_SPEED: 6,   // gather steps
-  COMMIT_MS: 150,                  // release before this and the shot is a pump fake
   ARM: 2.6, SHOULDER: 0.75,       // hands: reach from each shoulder (will come from wingspan)
   DEF_SPEED: 14, DEF_ACC: 60, STEAL_R: 0.55,                               // a player on defense: top speed, acceleration, and how close a hand must get to the ball
   DRIB_SPEED: 13.5, ACC0: 85, DECEL: 95, REACH_MIN: 0.7, REACH_MAX: 2.4,   // explosive from a stop, sharper to stop than to start
-  FADE_SPEED: 5, FADE_COMMIT: 150,   // canned fade: always the same, so its release timing is learnable
-  // finishing
-  RISE_LAYUP: 320, RISE_DUNK: 380, MAX_HANG: 450,
   // floaters: lenient timed release, high arc
-  FL_IDEAL: 330, FL_MAX: 560, FL_KT: 0.07, FL_PERFECT: 20, FL_CONTEST_SIG: 5.0,
+  FL_KT: 0.07, FL_PERFECT: 20, FL_CONTEST_SIG: 5.0,
   // contact: nothing here is rolled. A foul is a hand or a body that was somewhere it had no right to be
   BODY_R: 0.75, ARM_HIT: 0.3,       // a hand within this of the handler's center is on their body; within this of their off arm, on the arm
   REACH_V: 4,                       // ft/s: a hand that got there faster than this reached in. A hand that was already there did not
@@ -80,22 +84,24 @@ function create(opts = {}) {
     defIn: { u: false, d: false, l: false, r: false, x: 25, y: 20 },   // that defender's keys and cursor this tick
     seed: (opts.seed ?? 1) | 0,                              // the game's random stream
     forced: [],                                              // values the next random rolls will take, for tests
-    prev: [{ shot: false, gather: false }, { shot: false, gather: false }],   // each side's buttons as of the last tick, to see presses and releases
+    prev: [{ shot: false, gather: false, jump: false }, { shot: false, gather: false, jump: false }],   // each side's buttons as of the last tick, to see presses and releases
     // Settings, the same for every player. None of them is a rating: each is the thing itself, in its own units.
     //   tAssist ms, bonus %, aAssist %, drift x       the shot: free timing error, what a perfect release tightens, aim help, how much momentum carries
-    //   fadeIn in                                      scatter a straight fade adds (a sideways one, a quarter more)
+    //   fadeIn in                                      scatter that moving at 5 ft/s in the air adds to a jumper (a fadeaway's speed)
     //   layupSpeed ft/s                                the speed a layup can be taken at under control
     //   readMs ms, aiSpeed ft/s                        the AI on the ball: how old its picture of the handler is, and its top speed
     //   reachWait s, reachEvery s                      the AI's reach: how long the ball must have been left open at the end of its reach, and the wait before another
     //   stepUp %, sag ft, react ms, length x           the AI's help, its cushion, how late it sees a shot; and the on-ball defender's contest reach
     params: { tAssist: 15, bonus: 30, aAssist: 40, drift: 1, fadeIn: 2, layupSpeed: 11.4, readMs: 260, aiSpeed: 13, reachWait: 1.8, reachEvery: 3, stepUp: 50,
               defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 },
-    P: { x: 25, y: 26, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0 },   // the ball handler. h, jumpT, land: a jump for a loose ball, as for a defender
+    // The ball handler. up: s into a jump with the ball, or -1; v0x, v0y: the velocity they arrived with; lift: how
+    // much of a full jump this one is. h: how high they are, 0 to 1. jumpT, land: a jump for a loose ball, as for a defender.
+    P: { x: 25, y: 26, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0, up: -1, v0x: 0, v0y: 0, lift: 1 },
     D: makeDef(25, 20),                                      // on-ball defender
     R: makeDef(25, 9.5),                                     // rim protector
     mouse: { x: 25, y: 5.25 },                               // the cursor, in court coordinates
     keys: { u: false, d: false, l: false, r: false },        // movement keys held
-    shot: { state: "idle", kind: "jumper", t: 0, held: false, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0 },
+    shot: { state: "idle", kind: "jumper", t: 0, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0, shift: 0, line: 520, avx: 0, avy: 0 },
     ball: null,                                              // the ball in flight, or null while it is in the handler's hands
     drib: { phase: 0, period: 400, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9,
             top: 3, hold: 0, crossing: false, lastMove: "" },
@@ -203,7 +209,7 @@ function glassAimFor(kind) {
   // once it is a bank, the cursor slides the target along the glass, on the side of the rim it started
   const B = PHX.PHYS.BOARD, side = going ? shot.glassSide : (mouse.x >= HOOP.x ? 1 : -1);
   const x = +(side > 0 ? clamp(mouse.x, HOOP.x + C.GLASS_SIDE, B.x1 - 0.3) : clamp(mouse.x, B.x0 + 0.3, HOOP.x - C.GLASS_SIDE)).toFixed(1);
-  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, kind, x);
+  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, kind, x, relZNow(kind));
   const key = `${kind}:${(Math.round(P.x*2)/2)}:${(Math.round(P.y*2)/2)}:${x.toFixed(1)}`, gl = g.view.glass;
   if (!gl.cache[key]) { if (++gl.n > 300) { gl.cache = {}; gl.n = 0; } gl.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, kind, x); }
   return gl.cache[key];
@@ -273,7 +279,7 @@ function driftOf(vx, vy, f) {
 }
 
 // ---------- Context: what does a click do right now? ----------
-const shotContext = shift => SIT.shotContext(P, hold, shift);
+const shotContext = () => SIT.shotContext(P, hold);
 
 // ---------- Jumpers ----------
 function inputDir() {
@@ -281,27 +287,40 @@ function inputDir() {
   if (keys.u) ay -= 1; if (keys.d) ay += 1; if (keys.l) ax -= 1; if (keys.r) ax += 1;
   const l = Math.hypot(ax, ay); return l ? { x: ax/l, y: ay/l } : null;
 }
-// Fades are read relative to the shot line: any input with a component away from the rim.
-// Straight back = fadeaway; back plus a side = side fade at 45 degrees.
-function fadeIntent(f) {
-  const d = inputDir(); if (!d) return null;
-  const along = d.x*f.u.x + d.y*f.u.y, lat = d.x*f.r.x + d.y*f.r.y;
-  if (along > -0.3) return null;
-  if (Math.abs(lat) < 0.38) return { type: "back", x: -f.u.x, y: -f.u.y, along: 1 };
-  const sg = Math.sign(lat), k = Math.SQRT1_2;
-  return { type: sg < 0 ? "left" : "right", x: -f.u.x*k + f.r.x*sg*k, y: -f.u.y*k + f.r.y*sg*k, along: k };
+// ---------- The jump ----------
+// One jump for every shot. What you carry into the air is decided at takeoff and nothing changes it after that:
+// KEEP of the speed you arrived with, plus up to LEAN ft/s the way WASD is held while the legs load. So holding away
+// from the rim from a standstill is a fadeaway, holding toward it off a drive is a runner, and holding against your
+// own momentum is a hard stop.
+function airVelocity(vx, vy) {
+  const d = inputDir();
+  return { x: vx*C.KEEP + (d ? d.x*C.LEAN : 0), y: vy*C.KEEP + (d ? d.y*C.LEAN : 0) };
 }
-// The later release offsets the depth part of the fade exactly; the sideways part is left for the cursor.
-const fadeShiftFor = along => Math.round(C.DRIFT_DEP*params.drift*C.FADE_SPEED*along/C.KT);
-const fadeSigmaFor = type => params.fadeIn*(type === "back" ? 1 : 1.25);
+// Moving along the shot line carries the ball long or short, and the release makes up for it: later when going away
+// from the rim, earlier when going at it. The meter's line moves to show where that is, so the line is always the
+// release that puts the depth right. A layup has no timed release.
+function lineShift(kind, vx, vy, f) {
+  const k = kind === "jumper" ? 1 : kind === "floater" ? 0.5 : 0;
+  return -Math.round(k*C.DRIFT_DEP*params.drift*(vx*f.u.x + vy*f.u.y)/C.KT);
+}
+// What a jumper taken with this velocity in the air is called. Going away from the rim is a fade; anything else is drift.
+function fadeOf(vx, vy, f) {
+  const along = vx*f.u.x + vy*f.u.y, lat = vx*f.r.x + vy*f.r.y;
+  if (along > -2) return false;
+  return Math.abs(lat) < 0.4*Math.abs(along) ? "back" : lat < 0 ? "left" : "right";
+}
+// in of scatter from moving through the air at this speed
+const airScatter = speed => params.fadeIn*speed/C.LEAN;
 const FADE_NAME = { back: "Fadeaway", left: "Side fade left", right: "Side fade right" };
-function commitFade(fi) {
-  const along = shot.bvx*fi.x + shot.bvy*fi.y;   // momentum already heading the fade's way folds into it
-  let start = 0;
-  if (along > 0) { shot.bvx -= along*fi.x; shot.bvy -= along*fi.y; start = Math.min(C.FADE_SPEED, along); }
-  Object.assign(shot, { fade: fi.type, fadeV: start, fux: fi.x, fuy: fi.y, fadeAlong: fi.along,
-                        shift: fadeShiftFor(fi.along), gatherSpeed: Math.hypot(shot.bvx, shot.bvy) });
-}
+// How far up the jump is, 0 to 1, t ms after Space; and where the hand and the ball are for it.
+const jumpCurve = t => { const a = t - C.LOAD; return a <= 0 || a >= 2*C.RISE ? 0 : 1 - ((a - C.RISE)/C.RISE)**2; };
+// The release line before momentum moves it, ms after Space; and how high the ball leaves from. Each kind's usual
+// release height is the one at its own line: let go lower in the jump than that and the ball leaves lower.
+const lineBase = kind => kind === "floater" ? C.FL_IDEAL : C.IDEAL;
+const relZNow = kind => LNX.LAUNCH.REL_Z[kind] - (shot.state === "shooting" ? C.REL_DROP*(jumpCurve(lineBase(kind)) - jumpCurve(shot.t)) : 0);
+const handZ = () => C.P_STAND + C.P_JUMP*P.h;
+// High and close: the hand over the rim, and the rim within reach. Then the ball is not shot, it is put through.
+const canDunk = f => shot.state === "shooting" && f.dist <= C.DUNK_R && handZ() >= C.DUNK_Z && !(g.flow.on && g.flow.phase === "ft");
 const jumperContest = () => SIT.jumperContest(P, defenders());
 function releaseQ(e) { return clamp(1 - Math.max(0, Math.abs(e) - C.PERFECT_MS)/40, 0, 1); }
 // Component sizes for the breakdown bar in the live readout. The scatter a shot is resolved with comes from the noise model.
@@ -337,9 +356,13 @@ function shotFoul(hs) {
   }
   for (const a of hs) {
     if (a.z0 < 7 && !(a.jumpStart !== null && a.jumpStart <= 0.1)) continue;           // the arm is down
-    // where the hand is now and where it is carried in the next moment, against where the shooter is now: a hand
-    // that stays put is not at fault if the shooter goes into it
-    for (const t of [0, 0.05, 0.1]) if (Math.hypot(a.hx + a.vx*t - P.x, a.hy + a.vy*t - P.y) < C.ARM_FOUL_R) return "On the arm";
+    // A hand that is on the shooter now is a foul unless the shooter is the one who brought them together: a jump
+    // carries its momentum, and flying into a hand that was already there is not the hand's doing.
+    const dx = P.x - a.hx, dy = P.y - a.hy, dl = Math.hypot(dx, dy) || 1, d = defenders()[a.i];
+    const hand = ((d.hvx ?? a.vx)*dx + (d.hvy ?? a.vy)*dy)/dl, shooter = -(P.vx*dx + P.vy*dy)/dl;   // how fast each is closing on the other
+    if (dl < C.ARM_FOUL_R && hand >= shooter - 0.5) return "On the arm";
+    // and where the hand is carried in the next moment, against where the shooter is now
+    for (const t of [0.05, 0.1]) if (Math.hypot(a.hx + a.vx*t - P.x, a.hy + a.vy*t - P.y) < C.ARM_FOUL_R) return "On the arm";
   }
   return null;
 }
@@ -383,47 +406,67 @@ function floaterBias(e, f, vx, vy) {
   return { eEff, aim: aimOf(P, f), dr: driftOf(vx, vy, f), assistK: 1 - params.aAssist/100 };
 }
 
-function startShot(shift) {
-  if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree()) return;
+// Space, with the ball: leave the floor. What kind of shot this is follows from where you are and how you are moving,
+// as before; when the ball leaves is up to the click.
+function takeOff() {
+  if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree() || P.up >= 0 || P.jumpT >= 0 || P.land > 0) return;
   if (g.ball) g.ball = null;
   const fromSteps = hold.state === "steps" ? hold.euro : 0;
-  const cx = shotContext(shift), f = frame(P);
-  Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, held: true, upAt: null,
-    gatherSpeed: Math.hypot(P.vx, P.vy), vPerpG: P.vx*f.r.x + P.vy*f.r.y, gx: P.x, gy: P.y,
-    fade: false, fadeV: 0, fux: 0, fuy: 0, fadeAlong: 0, shift: 0, bvx: P.vx, bvy: P.vy, euro: fromSteps });
+  const cx = shotContext(), f = frame(P), v0 = Math.hypot(P.vx, P.vy);
+  Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, gatherSpeed: v0, vPerpG: P.vx*f.r.x + P.vy*f.r.y,
+    gx: P.x, gy: P.y, shift: 0, line: lineBase(cx.kind), avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps });
   shot.glass = (cx.kind === "jumper" || cx.kind === "floater") && onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
-  shot.fakeable = cx.kind === "jumper" || cx.kind === "floater" || hold.state === "pivot";
-  shot.prev = hold.state === "pivot" && hold.pivot ? { pivot: { ...hold.pivot }, free: { ...hold.free }, freeSide: hold.freeSide,
-                                                     center: { ...hold.center }, face: { ...hold.face } } : null;
   hold.state = "none";   // going up ends the gather
-  if (cx.kind === "jumper") { const fi = fadeIntent(f); if (fi) commitFade(fi); }
+  Object.assign(P, { up: 0, v0x: P.vx, v0y: P.vy, lift: C.STAND_LIFT + (1 - C.STAND_LIFT)*clamp(v0/C.RUN_UP, 0, 1) });
   D.jumpAt = null; R.jumpAt = null;
-  if (cx.kind === "layup" || cx.kind === "dunk") {
-    // the AI's shot blockers leave their feet a set time into a finish; the shooter can hang to wait them out
+  if (cx.kind === "layup") {
+    // the AI's shot blockers leave their feet a set time into a finish; the shooter can go early or hang to beat them
     for (const d of defenders()) { if (g.duo && d === D) continue; d.jumpAt = params.react*0.5 + 130; }
   }
+}
+// The body through a jump with the ball: the legs load, the feet leave, and it comes down where its momentum takes it.
+// The ball may be gone by then. If it isn't, that is travelling.
+function jumpMove(dt) {
+  if (P.up*1000 < C.LOAD) {
+    const v1 = airVelocity(P.v0x, P.v0y), k = clamp((P.up + dt)*1000/C.LOAD, 0, 1);
+    P.vx = P.v0x + (v1.x - P.v0x)*k; P.vy = P.v0y + (v1.y - P.v0y)*k;
+    if (shot.state === "shooting") { shot.avx = v1.x; shot.avy = v1.y; }
+  }
+  P.up += dt;
+  P.h = jumpCurve(P.up*1000)*P.lift;
+  if (shot.state === "shooting") { shot.t = P.up*1000; shot.shift = lineShift(shot.kind, shot.avx, shot.avy, frame(P)); shot.line = lineBase(shot.kind) + shot.shift; }
+  if (P.up*1000 >= C.LOAD + 2*C.RISE) {
+    Object.assign(P, { up: -1, h: 0, land: C.AIR_LAND });
+    if (shot.state === "shooting") travel();
+  }
+}
+function travel() {
+  const fl = g.flow;
+  shot.state = "idle"; shot.cooldown = 0.5; g.meterFlash = null;
+  drib.lastMove = "Travelling: came down with the ball";
+  g.fx.push({ kind: "text", text: "Travelling", t: 0, x: P.x, y: P.y });
+  if (fl.on && fl.phase === "ft") { recordFreeThrow(false); g.statsSeq++; shotDecided(false, false); return; }
+  stats.to++; g.statsSeq++;
+  if (fl.on) whistle("Travelling", "change");
 }
 
 // ---------- Release ----------
 function releaseJumper() {
-  const fade = shot.fade, ideal = C.IDEAL + shot.shift;
-  const e = shot.t - ideal;
+  const e = shot.t - shot.line;
   const eEff = Math.sign(e)*Math.max(0, Math.abs(e) - params.tAssist);
   const f = frame(P);
-  // drift comes from the momentum you carried in; the fade itself is canned and paid for by the later release
-  const aim = aimOf(P, f), dr = driftOf(shot.bvx, shot.bvy, f), con = jumperContest();
+  // what the body is doing in the air pushes the ball sideways; along the shot line it is in the release line already
+  const aim = aimOf(P, f), dr = driftOf(P.vx, P.vy, f), con = jumperContest();
   const q = releaseQ(e);
-  const clean = cleanLook(fade, shot.gatherSpeed);
-  const fadeBack = fade ? (P.x - shot.gx)*shot.fux + (P.y - shot.gy)*shot.fuy : 0;
-  const fadeLat = fade ? C.DRIFT_LAT*params.drift*shot.fadeV*(shot.fux*f.r.x + shot.fuy*f.r.y) : 0;
+  const air = dr.speed, fade = fadeOf(P.vx, P.vy, f);
+  const clean = cleanLook(false, Math.max(shot.gatherSpeed, air));
   const assistK = 1 - params.aAssist/100;
   // physics: the same inputs, as a launch. Clean-look shaping and calibration live in the noise model.
-  const fadeAng = fade ? Math.atan(fadeLat/12/f.dist) : 0;
   const glass = glassAimFor("jumper");
   const hs = handSpecs();
-  const inp = { kind: "jumper", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : (clamp(aim.theta, -0.6, 0.6) + fadeAng)*assistK, timingMs: eEff,
-                body: liftBody(f, shot.bvx, shot.bvy, assistK, 1), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
-  const sc = { kind: "jumper", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
+  const inp = { kind: "jumper", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK, timingMs: eEff, relZ: relZNow("jumper"),
+                body: liftBody(f, P.vx, P.vy, assistK, 0), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
+  const sc = { kind: "jumper", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c, clean, fadeIn: airScatter(air) };
   const odds = oddsLater(inp, sc, hs);                 // blocks are real collisions now, so they're in here
   const sig = NZX.scatterIn(sc);
   const three = isThree({ x: shot.gx, y: shot.gy });   // zone is where you took off, not where you landed
@@ -431,8 +474,9 @@ function releaseJumper() {
   const shotRes = physShot(inp, sc, hs), out = fouledOut(physOut(shotRes), foul, three ? 3 : 2);
   if (g.flow.on && g.flow.phase === "ft") recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, false);
   g.flow.value = three ? 3 : 2; g.flow.fouled = !!foul;
-  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, glass: !!glass, dist: f.dist, assistK, fade, fadeBack, fadeLat, shift: shot.shift };
-  g.meterFlash = { e, t: 0.8, kind: fade ? "fade" : "jumper", shift: shot.shift };
+  g.last = { kind: "jumper", out, e, eEff, q, aim, dr, con, sig, odds, three, glass: !!glass, dist: f.dist, assistK, fade, air, airIn: airScatter(air), gather: shot.gatherSpeed,
+           carried: Math.hypot(P.x - shot.gx, P.y - shot.gy), shift: shot.shift };
+  g.meterFlash = { e, t: 0.8, kind: "jumper", line: shot.line };
   if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
@@ -440,8 +484,7 @@ function releaseJumper() {
 
 function releaseFinish() {
   const f = frame(P), dunk = shot.kind === "dunk";
-  const rise = dunk ? C.RISE_DUNK : C.RISE_LAYUP;
-  const hangMs = dunk ? 0 : Math.max(0, (shot.upAt !== null ? Math.min(shot.upAt, shot.t) : shot.t) - rise);
+  const hangMs = dunk ? 0 : Math.max(0, shot.t - C.IDEAL);            // past the top of the jump is a hang: it costs control
   const side = finishSideOf(f);
   const con = rimContest(side);
   const bank = bankOf(shot.gx, shot.gy);
@@ -456,7 +499,7 @@ function releaseFinish() {
   } else {
     sig = finishSigma(shot.gatherSpeed, shot.vPerpG, side, hangMs, con.c);
     // physics: finish-side, speed and hang costs come through as extra scatter; contact costs a little more
-    const inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: hs.map(SIT.handPath) };
+    const inp = { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: hs.map(SIT.handPath), relZ: relZNow("layup") };
     const sc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2])*(foul ? 1.15 : 1), contest: con.c };
     odds = oddsLater(inp, sc, hs);
     res = physShot(inp, sc, hs);
@@ -466,19 +509,20 @@ function releaseFinish() {
   record(out.make, 2, false, true);
   g.flow.value = 2; g.flow.fouled = !!foul;
   g.last = { kind: shot.kind, out, side, con, hangMs, sig, block, foul, chance, odds, bank,
-           speed: shot.gatherSpeed, note: shot.note, dist: f.dist };
+           speed: shot.gatherSpeed, note: shot.note, dist: f.dist, upMs: shot.t };
+  g.meterFlash = { e: shot.t - C.IDEAL, t: 0.8, kind: shot.kind, line: C.IDEAL };
   g.lastSeq++; g.statsSeq++;
   if (res) startPathBall(res); else launchBall(f, 0.38, 3);
   shot.state = "flight";
 }
 
 function releaseFloater() {
-  const e = shot.t - C.FL_IDEAL, f = frame(P);
+  const e = shot.t - shot.line, f = frame(P);
   const con = floaterContest(), q = floaterQ(e);
   const b = floaterBias(e, f, P.vx, P.vy);
   const glass = glassAimFor("floater"), hs = handSpecs();
-  const inp = { kind: "floater", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, timingMs: b.eEff,
-                body: liftBody(f, P.vx, P.vy, 0.6*b.assistK, 0.5), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
+  const inp = { kind: "floater", player: { x: P.x, y: P.y }, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, timingMs: b.eEff, relZ: relZNow("floater"),
+                body: liftBody(f, P.vx, P.vy, 0.6*b.assistK, 0), contest: con.c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
   const sc = { kind: "floater", dist: f.dist, q, move: shot.gatherSpeed, contest: con.c };
   const odds = oddsLater(inp, sc, hs);
   const sig = NZX.scatterIn(sc);
@@ -487,8 +531,8 @@ function releaseFloater() {
   fouledOut(out, foul, 2);
   record(out.make, 2, false, false, true);
   g.flow.value = 2; g.flow.fouled = !!foul;
-  g.last = { kind: "floater", out, e, q, b, con, sig, odds, glass: !!glass, dist: f.dist, rimMode: params.rimOn ? R.mode : "off" };
-  g.meterFlash = { e, t: 0.8, kind: "floater" };
+  g.last = { kind: "floater", out, e, q, b, con, sig, odds, glass: !!glass, dist: f.dist, rimMode: params.rimOn ? R.mode : "off", shift: shot.shift };
+  g.meterFlash = { e, t: 0.8, kind: "floater", line: shot.line };
   if (shotRes) startPathBall(shotRes); else launchBall(f, 0.4, 3);
   shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
@@ -617,7 +661,7 @@ function dribbleBallPos() {
   return { x: P.x + o.x, y: P.y + o.y, h };
 }
 // ---------- Gather: a state change, not a move ----------
-// Space changes what the ball is: dribbled to held, and, while the dribble has not been used yet, held to dribbled.
+// Shift changes what the ball is: dribbled to held, and, while the dribble has not been used yet, held to dribbled.
 function gather() {
   if (shot.state === "idle" && ballFree() && hold.state === "pivot" && hold.live) return startDribble();
   if (shot.state !== "idle" || !ballFree() || hold.state !== "none" || shot.cooldown > 0) return;
@@ -669,12 +713,11 @@ function plantStep() {
     beginStep();
   } else if (hold.euro > 0.8) drib.lastMove = `Euro step: ${hold.euro.toFixed(1)} ft sideways`;
 }
+// A click with the feet on the floor: the ball goes up and the feet stay down. From a dribble that picks the ball up.
 function pumpFake() {
-  const prev = shot.prev;
-  shot.state = "idle"; shot.cooldown = 0.15; g.meterFlash = null;
-  enterPivot();                                                        // rising into a shot picks up the dribble
-  if (prev) Object.assign(hold, prev);
-  hold.fakeT = 0.3;
+  if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree() || P.up >= 0 || P.jumpT >= 0) return;
+  if (hold.state !== "pivot") enterPivot();                            // rising into a shot picks up the dribble
+  hold.fakeT = 0.3; shot.cooldown = 0.15;
   drib.lastMove = "Pump fake";
   g.fx.push({ kind: "text", text: "Pump fake", t: 0, x: P.x, y: P.y });
 }
@@ -778,16 +821,6 @@ function moveDef(def, dt, sep = 1.7) {
   }
   def.x = clamp(def.x, 0.6, 49.4); def.y = clamp(def.y, 4.8, 40);
 }
-function finishMove(dt) {
-  const f = frame(P);
-  if (f.dist <= 2.6) { P.vx = 0; P.vy = 0; return; }
-  const cur = Math.hypot(P.vx, P.vy), sp = Math.max(4, cur)*Math.exp(-dt/1.2);
-  const want = Math.atan2(f.u.y, f.u.x);
-  let heading = cur < 0.1 ? want : Math.atan2(P.vy, P.vx);
-  let da = want - heading; while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
-  heading += clamp(da, -4*dt, 4*dt);
-  P.vx = Math.cos(heading)*sp; P.vy = Math.sin(heading)*sp;
-}
 function update(dt) {
   const fl = g.flow, loose = fl.loose, sawLoose = loose && fl.looseT >= params.react/1000;   // the AI reacts to a miss a reaction time late
   if (fl.on && (fl.phase === "dead" || fl.phase === "over")) { deadTick(dt); return; }
@@ -798,24 +831,7 @@ function update(dt) {
   if (keys.u) ay -= 1; if (keys.d) ay += 1; if (keys.l) ax -= 1; if (keys.r) ax += 1;
   const al = Math.hypot(ax, ay); if (al) { ax /= al; ay /= al; }
 
-  if (shot.state === "shooting" && shot.kind === "jumper") {
-    if (!shot.fade && shot.t <= C.FADE_COMMIT) { const fi = fadeIntent(frame(P)); if (fi) commitFade(fi); }
-    const k = Math.exp(-dt/C.TAU);
-    shot.bvx *= k; shot.bvy *= k;                                  // carried momentum bleeds off; no steering mid-shot
-    if (shot.fade) shot.fadeV += (C.FADE_SPEED - shot.fadeV)*(1 - Math.exp(-dt/0.15));
-    P.vx = shot.bvx + shot.fux*shot.fadeV; P.vy = shot.bvy + shot.fuy*shot.fadeV;
-    shot.t += dt*1000;
-    if (shot.t >= C.MAX + shot.shift) releaseJumper();
-  } else if (shot.state === "shooting" && shot.kind === "floater") {
-    const k = Math.exp(-dt/0.12);                   // one-step stop: a little carry, no steering
-    P.vx *= k; P.vy *= k;
-    shot.t += dt*1000;
-    if (shot.t >= C.FL_MAX) releaseFloater();
-  } else if (shot.state === "shooting") {
-    finishMove(dt);
-    shot.t += dt*1000;
-    const dunk = shot.kind === "dunk", rise = dunk ? C.RISE_DUNK : C.RISE_LAYUP;
-    if (shot.t >= rise && (dunk || !shot.held || shot.t >= rise + C.MAX_HANG)) releaseFinish();
+  if (P.up >= 0) { jumpMove(dt);                                      // in a jump with the ball, or coming down from one: no steering
   } else if (hold.state === "steps") { stepMove(dt);
   } else if (hold.state === "pivot") { pivotMove(dt);
   } else {
@@ -1050,7 +1066,7 @@ function playerDefender(dt) {
   handOnHandler();
 }
 function defenderJump() { if (D.jumpT < 0 && D.land <= 0) D.jumpT = 0; }
-function handlerJump() { if (P.jumpT < 0 && P.land <= 0 && shot.state !== "shooting") P.jumpT = 0; }
+function handlerJump() { if (P.jumpT < 0 && P.up < 0 && P.land <= 0 && shot.state !== "shooting") P.jumpT = 0; }
 
 // ---------- Rules: score, shot clock, possessions ----------
 // Blow the whistle: play stops for a moment, then `next` happens: "change" (the other side's ball), "keep" (same
@@ -1106,6 +1122,7 @@ function looseTick() {
   let best = null;
   for (const body of [P, ...defenders()]) {
     if (b.toucher && body === g[b.toucher] && b.t < b.touchT + RULES.TOUCH_LOCK) continue;   // they batted it; they haven't got hold of it
+    if (body === P && P.up >= 0) continue;                             // still coming down from their own shot
     const reach = RULES.CATCH_Z + SIT.SITU.HAND_JUMP*body.h, d = Math.hypot(body.x - bp.x, body.y - bp.y);
     if (bp.z <= reach && d <= RULES.CATCH_R && (!best || d < best.d)) best = { body, d };
   }
@@ -1128,12 +1145,12 @@ function looseTick() {
 }
 // Put everyone in place with the ball in the handler's hands and nothing in progress.
 function place(p, d, r) {
-  Object.assign(P, { x: p.x, y: p.y, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0 });
+  Object.assign(P, { x: p.x, y: p.y, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0, up: -1 });
   Object.assign(D, { x: d.x, y: d.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, shade: 0, threat: 0, sawPrev: false,
                      hx: d.x, hy: d.y + 0.85, hvx: 0, hvy: 0, reach: null, reachCd: 0, openT: 0, foulT: 0 });
   Object.assign(R, { x: r.x, y: r.y, vx: 0, vy: 0, hand: 0, h: 0, jumpT: -1, jumpAt: null, land: 0, mode: null, sawPrev: false,
                      hx: r.x, hy: r.y + 0.85, hvx: 0, hvy: 0, reach: null, reachCd: 0 });
-  Object.assign(shot, { state: "idle", kind: "jumper", t: 0, held: false, note: "", cooldown: 0.4, fade: false });
+  Object.assign(shot, { state: "idle", kind: "jumper", t: 0, note: "", cooldown: 0.4, shift: 0 });
   Object.assign(hold, { state: "none", fakeT: 0, prints: [], live: false });
   Object.assign(drib, { phase: 0, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9, hold: 0, crossing: false });
   g.ball = null; g.meterFlash = null; seen.length = 0;
@@ -1153,6 +1170,7 @@ function deadTick(dt) {
   const fl = g.flow;
   g.simT += dt;
   P.vx = 0; P.vy = 0;
+  if (P.up >= 0) jumpMove(dt);                                         // whoever was in the air comes down
   for (const d of [D, R]) { d.vx = 0; d.vy = 0; }
   tickBall(dt);
   if (fl.phase !== "dead") return;
@@ -1177,62 +1195,50 @@ function setRules(on) {
 }
 
 // ---------- Preview: what would a shot from here be? ----------
-function previewNow(shift) {
+function previewNow() {
   let live;
-  const f = frame(P);
-  const cx = shot.state === "shooting" ? { kind: shot.kind, note: shot.note } : shotContext(shift);
+  const f = frame(P), shooting = shot.state === "shooting";
+  const cx = shooting ? { kind: canDunk(f) ? "dunk" : shot.kind, note: shot.note } : shotContext();
+  // what the body will be doing in the air: settled once the feet have left, a forecast before that
+  const av = shooting ? { x: shot.avx, y: shot.avy } : airVelocity(P.vx, P.vy), air = Math.hypot(av.x, av.y);
+  const moving = shooting ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
+  cx.air = air; cx.shift = lineShift(cx.kind, av.x, av.y, f); cx.line = lineBase(cx.kind) + cx.shift;
   if (cx.kind === "jumper") {
     const con = jumperContest();
-    const shooting = shot.state === "shooting";
-    const fi = shooting ? (shot.fade ? { type: shot.fade, x: shot.fux, y: shot.fuy, along: shot.fadeAlong } : null) : fadeIntent(f);
-    const fade = fi ? fi.type : false;
-    let bvx = shooting ? shot.bvx : P.vx, bvy = shooting ? shot.bvy : P.vy;
-    if (fi && !shooting) { const al = bvx*fi.x + bvy*fi.y; if (al > 0) { bvx -= al*fi.x; bvy -= al*fi.y; } }
-    const moving = shooting ? shot.gatherSpeed : Math.hypot(bvx, bvy);
-    const clean = cleanLook(fade, moving);
-    cx.clean = clean;
-    const shift = shooting ? shot.shift : (fi ? fadeShiftFor(fi.along) : 0);
-    const ideal = C.IDEAL + shift;
-    const fadeLat = fi ? C.DRIFT_LAT*params.drift*C.FADE_SPEED*(fi.x*f.r.x + fi.y*f.r.y) : 0;
-    const remain = shooting ? Math.max(0, ideal - shot.t) : ideal;
-    const k = Math.exp(-remain/1000/C.TAU);
+    const fade = fadeOf(av.x, av.y, f);
+    const clean = cleanLook(false, Math.max(moving, air));
+    cx.clean = clean; cx.fade = fade;
     const aim = aimOf(P, f);
-    cx.fade = fade; cx.shift = shift;
     const assistK = 1 - params.aAssist/100;
     const glass = glassAimFor("jumper"); cx.glass = glass;
     const base = { kind: "jumper", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
-    const sc = { kind: "jumper", dist: f.dist, q: 1, move: moving, contest: con.c, clean, fadeIn: fade ? fadeSigmaFor(fade) : 0 };
-    const fadeAng = fi ? Math.atan(fadeLat/12/f.dist) : 0;
-    const withAim = { ...base, aimTheta: glass ? 0 : (clamp(aim.theta, -0.6, 0.6) + fadeAng)*assistK, body: liftBody(f, bvx*k, bvy*k, assistK, 1) };
-    const sig = { ...NZX.scatterIn(sc), parts: jumperParts(f.dist, moving, con.c, 1, fade ? fadeSigmaFor(fade) : 0) };
-    live = { cx, f, con, sig, three: isThree(P),
+    const sc = { kind: "jumper", dist: f.dist, q: 1, move: moving, contest: con.c, clean, fadeIn: airScatter(air) };
+    const withAim = { ...base, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK, body: liftBody(f, av.x, av.y, assistK, 0) };
+    const sig = { ...NZX.scatterIn(sc), parts: jumperParts(f.dist, moving, con.c, 1, airScatter(air)) };
+    live = { cx, f, con, sig, three: isThree(shooting ? { x: shot.gx, y: shot.gy } : P),
              v1: liveChance("j1", base, sc, liveZ()), v2: liveChance("j2", withAim, sc, liveZ(true)) };
   } else if (cx.kind === "floater") {
     const con = floaterContest();
-    const moving = shot.state === "shooting" ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
-    const remain = shot.state === "shooting" ? Math.max(0, C.FL_IDEAL - shot.t) : C.FL_IDEAL;
-    const k = Math.exp(-remain/1000/0.12);
-    const b = floaterBias(0, f, P.vx*k, P.vy*k);
+    const b = floaterBias(0, f, av.x, av.y);
     const glass = glassAimFor("floater"); cx.glass = glass;
     const base = { kind: "floater", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths(), target: glass ? glass.target : undefined };
     const sc = { kind: "floater", dist: f.dist, q: 1, move: moving, contest: con.c };
-    const withAim = { ...base, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, body: liftBody(f, P.vx*k, P.vy*k, 0.6*b.assistK, 0.5) };
+    const withAim = { ...base, aimTheta: glass ? 0 : clamp(b.aim.theta, -0.6, 0.6)*b.assistK, body: liftBody(f, av.x, av.y, 0.6*b.assistK, 0) };
     const sig = { ...NZX.scatterIn(sc), parts: floaterParts(f.dist, moving, con.c, 1) };
     live = { cx, f, con, sig, three: false,
              v1: liveChance("f1", base, sc, liveZ()), v2: liveChance("f2", withAim, sc, liveZ(true)) };
   } else {
     const side = finishSideOf(f), con = rimContest(side);
-    const gs = shot.state === "shooting" ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
-    const vp = shot.state === "shooting" ? shot.vPerpG : P.vx*f.r.x + P.vy*f.r.y;
-    const hang = shot.state === "shooting" && shot.kind === "layup" ? Math.max(0, shot.t - C.RISE_LAYUP) : 0;
+    const vp = shooting ? shot.vPerpG : P.vx*f.r.x + P.vy*f.r.y;
+    const hang = shooting ? Math.max(0, shot.t - C.IDEAL) : 0;
     if (cx.kind === "dunk") {
       const met = dunkShot(f, handSpecs()).res;                           // nothing rolled: with the arms where they are now, it goes or it is met
       live = { cx, f, con, side, sig: { lat: 1.2, dep: 1.2, parts: [1, 0, 0, 0] },
                v1: met.made ? 1 : 0, v2: met.blocked ? 1 : 0, three: false };
     } else {
-      const sig = finishSigma(gs, vp, side, hang, con.c);
+      const sig = finishSigma(moving, vp, side, hang, con.c);
       const lsc = { kind: "layup", dist: f.dist, extra: Math.hypot(sig.parts[1], sig.parts[2]), contest: con.c };
-      const lr = liveRates("l1", { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths() }, lsc);
+      const lr = liveRates("l1", { kind: "layup", player: { x: P.x, y: P.y }, contest: con.c, hands: handPaths(), relZ: relZNow("layup") }, lsc);
       live = { cx, f, con, side, sig, v1: lr.make, v2: lr.block, three: false };
     }
   }
@@ -1240,37 +1246,38 @@ function previewNow(shift) {
 }
 
 // The live readout calls this as often as it likes. It reads the game and writes only to game.view.
-function preview(shift) { viewing = true; try { return previewNow(shift); } finally { viewing = false; } }
+function preview() { viewing = true; try { return previewNow(); } finally { viewing = false; } }
 
 // ---------- Input ----------
-function letGo() { if (shot.kind === "jumper") releaseJumper(); else if (shot.kind === "floater") releaseFloater(); else { shot.held = false; shot.upAt = shot.t; } }
-// the shot button came up: a pump fake if it is early enough, otherwise the release (or the end of a finish's hang)
-function releaseShot() {
-  if (shot.state !== "shooting") return;
-  if (shot.fakeable && shot.t < C.COMMIT_MS) { pumpFake(); return; }
-  letGo();
+// A click in the air: the ball leaves the hand now. High and close enough, it is a dunk; otherwise the shot the jump
+// began as. While the legs are still loading there is nothing to release.
+function shootNow() {
+  if (shot.state !== "shooting" || shot.t < C.LOAD) return;
+  if (canDunk(frame(P))) shot.kind = "dunk";
+  if (shot.kind === "jumper") releaseJumper(); else if (shot.kind === "floater") releaseFloater(); else releaseFinish();
 }
 // One tick. An input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
-// shot (the shot button is down), shift (held, read when the shot starts), gather (Space is down). Presses and
-// releases are read off the change since the last tick.
+// jump (Space is down), shot (the mouse button is down), gather (Shift is down). Presses are read off the change since
+// the last tick.
+//   jump     with the ball, leave the floor; without it, go up for a loose ball
+//   shot     in the air, let the ball go; on the floor, a pump fake
+//   gather   pick the dribble up, or put a ball that has not been dribbled yet on the floor
 // With one player, pass their input. With two, pass [side 0's input, side 1's input]: the side with the ball plays
-// offense and the other controls the on-ball defender, for whom Space is a jump.
+// offense and the other controls the on-ball defender, for whom Space is a jump as well.
 function step(input) {
   const fl = g.flow, live = !fl.on || fl.phase === "live", ft = fl.on && fl.phase === "ft";
   const two = Array.isArray(input), side = two ? fl.offense : 0, off = two ? input[side] : input;
   keys.u = live && !!off.u; keys.d = live && !!off.d; keys.l = live && !!off.l; keys.r = live && !!off.r;   // nobody moves at the line or on a dead ball
   mouse.x = off.x; mouse.y = off.y;
-  const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather };
-  if (live && now.gather && !was.gather) { if (fl.on && !ballFree()) handlerJump(); else gather(); }   // without the ball there is nothing to gather: Space goes up for it
-  if (live || ft) {
-    if (now.shot && !was.shot) startShot(!!off.shift);
-    else if (!now.shot && was.shot) releaseShot();
-  }
+  const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather, jump: !!off.jump };
+  if (live && now.gather && !was.gather) gather();
+  if (now.jump && !was.jump) { if (live && fl.on && !ballFree()) handlerJump(); else if (live || ft) takeOff(); }
+  if ((live || ft) && now.shot && !was.shot) { if (shot.state === "shooting") shootNow(); else pumpFake(); }
   g.prev[side] = now;
   if (two) {
-    const def = input[1 - side], dWas = g.prev[1 - side], dNow = { shot: !!def.shot, gather: !!def.gather };
+    const def = input[1 - side], dWas = g.prev[1 - side], dNow = { shot: !!def.shot, gather: !!def.gather, jump: !!def.jump };
     Object.assign(g.defIn, { u: live && !!def.u, d: live && !!def.d, l: live && !!def.l, r: live && !!def.r, x: def.x, y: def.y });
-    if (g.duo && live && dNow.gather && !dWas.gather) defenderJump();
+    if (g.duo && live && dNow.jump && !dWas.jump) defenderJump();
     g.prev[1 - side] = dNow;
   }
   g.tick++;
@@ -1321,7 +1328,7 @@ return {
   digest: on(digest), snapshot: on(snapshot), load: on(load), lastOdds: on(lastOdds),
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
-  dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), fadeSigmaFor: on(fadeSigmaFor),
+  dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness),
 };
 })();
 if (typeof module !== "undefined") module.exports = GAME_EXPORTS;
