@@ -548,7 +548,8 @@ Coordinates stay in feet, with x and y on the court as in the prototype and z up
 | Object | Value |
 | --- | --- |
 | Rim | Center (25, 5.25, 10.0) ft. Inner radius 9 in (0.75 ft). Tube radius 0.31 in (5/8 in diameter) |
-| Backboard | Front face at y = 4.0 ft (rim center 15 in from it). 6 ft wide (x 22–28) by 3.5 ft tall (z 9.5–13.0) |
+| Backboard | Front face at y = 4.0 ft (rim center 15 in from it), back face 0.12 ft behind it. 6 ft wide (x 22–28) by 3.5 ft tall (z 9.5–13.0), so its bottom edge is above head height and the floor under it is open |
+| The floor | A player's center can be anywhere on the half court up to 0.6 ft from its lines: x 0.6–49.4, y 0.6–46.4. That includes the baseline and the floor under the backboard. Nobody's center gets closer than 1.0 ft to the rim's |
 | Ball | Radius 4.7 in (0.39 ft). Mass 22 oz |
 | Gravity | 32.17 ft/s² |
 | Rim bounce | Restitution 0.6, friction 0.3 (starting values) |
@@ -591,7 +592,7 @@ The whole flight is simulated instantly at release and then replayed for the ani
 
 - **Integration:** exact free flight under gravity between contacts, in steps of 1 ms, 0.5 ms near the rim, and 10 ms where there is nothing to hit.
 - **Rim contact:** find the closest point on the rim's ring to the ball's center. Contact when they're closer than ball radius plus tube radius. The contact normal points from that ring point to the ball's center. Push the ball out, reverse its velocity along the normal times the rim restitution, and reduce the sideways part by friction.
-- **Backboard contact:** a plane at the board's front face, bounded by its width and height. Same response with the board's values. Edge hits are ignored at first.
+- **Backboard contact:** a slab with two faces, bounded by its width and height. A ball is on whichever side of the board's middle its center is on, and that face pushes it out its own way, so a ball thrown at the rim from behind the board comes off the back of the glass ("Off the back of the backboard"). Same response with the board's values on both faces. Steps stay small within a foot of the board, so a hard throw cannot pass through. Edge hits are ignored at first.
 - **Resting contact:** a ball that has all but stopped bouncing on the rim or the glass (touching it at under 0.5 ft/s) is resting on it, and a ball at rest on a slope rolls. Nothing bounces, the velocity that is left runs along the surface, and gravity carries the ball off whichever way the surface tilts. Without this, friction held a ball on the curved top of the rim as it would hold a block: about 1 shot in 150 came to rest up there, three quarters of them balanced on the ring and the rest wedged against the glass, and stayed for the whole 8 s of the flight. Now one set down on the ring is off it in 0.7 s and a wedged one in under 2 s, and none stays. The calibrated make rates moved by 1 point or less.
 - **Stopped:** if a ball does stop dead off the floor for half a second, the flight ends there, and the game whistles it dead a moment later.
 - **Floor:** the flight runs on through two floor bounces, so we know where the rebound goes.

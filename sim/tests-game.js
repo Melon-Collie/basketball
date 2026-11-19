@@ -155,6 +155,27 @@ gtest("Moving sideways in the air does not push the ball: with the cursor on the
   return `at ${side.sideways.toFixed(1)} ft/s sideways the ball still comes down ${(12*Math.hypot(side.at.x - RIM.x, side.at.y - RIM.y)).toFixed(1)} in from the rim's center; σ ${side.last.sig.lat.toFixed(1)} in against ${still.last.sig.lat.toFixed(1)} standing`;
 });
 
+gtest("The whole floor can be walked on: down to the baseline, under the basket, and along it", () => {
+  const g = fresh(57, { defenders: false });
+  // down the side of the lane to the baseline, then along it under the backboard and out the other side
+  check(until(g, { ...AIM, u: true, r: true }, x => x.P.x >= RIM.x + 6, 8), "never got to the right of the lane");
+  check(until(g, { ...AIM, u: true }, x => x.P.y <= 0.61, 8), `stopped ${g.P.y.toFixed(2)} ft from the baseline`);
+  check(g.P.y < 1 && g.P.y >= 0.6, `on the baseline: ${g.P.y.toFixed(2)} ft from it`);
+  let under = false;
+  for (let i = 0; i < 600 && g.P.x > RIM.x - 6; i++) { GM.step(g, { ...AIM, l: true }); if (Math.abs(g.P.x - RIM.x) < 0.5 && g.P.y < 1.5) under = true; }
+  check(under && g.P.x <= RIM.x - 6, `along the baseline under the backboard: got to x ${g.P.x.toFixed(1)}`);
+  // nobody gets inside the rim itself, from behind either
+  const h = fresh(57, { defenders: false }); Object.assign(h.P, { x: RIM.x, y: 2 }); run(h, 1, { ...AIM, d: true });
+  check(Math.abs(distance(h) - GM.C.KEEP_OUT) < 0.05 && h.P.y < RIM.y, `walking at the rim from behind: stopped ${distance(h).toFixed(2)} ft from its center`);
+  // and from directly behind the backboard, a shot at the rim hits the back of the glass
+  const b = fresh(57, { defenders: false }); Object.assign(b.P, { x: RIM.x, y: 2 }); run(b, 0.2); shoot(b, TOP);
+  check(!b.last.out.make && b.last.out.sub === "Off the back of the backboard", `from behind the backboard: ${b.last.out.big} / ${b.last.out.sub}`);
+  // the far end of the half court as well
+  const far = fresh(57, { defenders: false }); until(far, { ...AIM, d: true }, x => x.P.y >= 46.39, 8);
+  check(far.P.y > 46, `back toward half court: got to ${far.P.y.toFixed(1)} ft`);
+  return `to ${g.P.y.toFixed(1)} ft from the baseline and along it under the basket; a shot from behind the backboard: ${b.last.out.sub}`;
+});
+
 gtest("Coming down with the ball is travelling", () => {
   const g = fresh(47); run(g, 0.5);
   GM.step(g, { ...AIM, jump: true }); run(g, 1);

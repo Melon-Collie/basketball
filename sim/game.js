@@ -68,6 +68,9 @@ const C = {
   SET_V: 0.5, OVER_V: 2,            // rebounding: a player moving this slowly is set; one in the air and coming into them this fast is over their back
 };
 const HOOP = { x: PHX.PHYS.RIM.x, y: PHX.PHYS.RIM.y };
+// Where a player's center can be: anywhere on the half court, up to their own width from its lines. That includes the
+// baseline and the floor under the backboard, whose bottom edge is 9.5 ft up.
+const FLOOR = { x0: 0.6, x1: 49.4, y0: 0.6, y1: 46.4 };
 const TICK = 1/120;                                  // seconds per step
 // The rules of a game, for when they are switched on (game.flow.on).
 const RULES = {
@@ -826,7 +829,7 @@ function moveDef(def, dt, sep = 1.7) {
       def.x += nx*over; def.y += ny*over;
     }
   }
-  def.x = clamp(def.x, 0.6, 49.4); def.y = clamp(def.y, 4.8, 40);
+  def.x = clamp(def.x, FLOOR.x0, FLOOR.x1); def.y = clamp(def.y, FLOOR.y0, FLOOR.y1);
 }
 function update(dt) {
   const fl = g.flow, loose = fl.loose, sawLoose = loose && fl.looseT >= params.react/1000;   // the AI reacts to a miss a reaction time late
@@ -860,7 +863,7 @@ function update(dt) {
   if (P.land > 0) P.land -= dt;
   const cap = C.PSPEED;
   const sp = Math.hypot(P.vx, P.vy); if (sp > cap) { P.vx *= cap/sp; P.vy *= cap/sp; }
-  P.x = clamp(P.x + P.vx*dt, 0.6, 49.4); P.y = clamp(P.y + P.vy*dt, 4.8, 38.5);
+  P.x = clamp(P.x + P.vx*dt, FLOOR.x0, FLOOR.x1); P.y = clamp(P.y + P.vy*dt, FLOOR.y0, FLOOR.y1);
   { const hx = P.x - HOOP.x, hy = P.y - HOOP.y, hd = Math.hypot(hx, hy);
     if (hd < C.KEEP_OUT) { P.x = HOOP.x + hx/(hd || 1)*C.KEEP_OUT; P.y = HOOP.y + (hd ? hy/hd : 1)*C.KEEP_OUT; } }
 

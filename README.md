@@ -113,7 +113,7 @@ To try a bad connection by hand, open the prototype with `?lag=80&jitter=20&loss
 Mouse and keyboard:
 
 - A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Go up and shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Shift** puts the ball on the floor.
-- Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand.
+- Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand. You can go anywhere on the half court, the baseline and under the basket included. The backboard is solid from behind too.
 - **Space** jumps, and **left mouse** lets the ball go. Every shot is the same jump: about half a second to the top, and then down again. Come down still holding the ball and it is travelling. The court holds still while you are in the air, so your cursor stays where you put it.
 - The jump carries half the speed you arrived with, plus up to 5 ft/s the way you hold **WASD** as you take off. Nothing steers it after that. Hold away from the rim for a fadeaway, toward it for a runner, against your own momentum to stop.
 - Away from the rim the ball has to be let go on the meter's **release line**, and the cursor aims. For most jumps the line is the top of the jump: the set shot. Jump while driving at the rim from about 7 to 14 ft and it is on the way up instead: a floater, off sooner, with more arc and less touch.
