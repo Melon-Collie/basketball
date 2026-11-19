@@ -101,37 +101,40 @@ gtest("A jump carries half the speed you arrived with, plus up to 5 ft/s the way
   // from a standstill, leaning away from the rim is a fadeaway, and its release line is later
   const g = fresh(46, { defenders: false }); run(g, 0.3);
   GM.step(g, { ...AIM, d: true, jump: true }); run(g, 0.4, { ...AIM, d: true });
-  check(Math.abs(g.P.vy - GM.C.LEAN) < 1e-9 && g.shot.lines.top > GM.C.IDEAL + 40, `standing fade: ${g.P.vy.toFixed(2)} ft/s back, line at ${g.shot.lines.top} ms`);
-  run(g, g.shot.lines.top/1000 - 0.4 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true });
+  check(Math.abs(g.P.vy - GM.C.LEAN) < 1e-9 && g.shot.line > GM.C.IDEAL + 40 && !g.shot.quick, `standing fade: ${g.P.vy.toFixed(2)} ft/s back, line at ${g.shot.line} ms`);
+  run(g, g.shot.line/1000 - 0.4 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true });
   check(g.last.fade === "back" && Math.abs(g.last.e) <= GM.C.PERFECT_MS && g.last.carried > 1 && g.last.airIn > 1.9, `fade ${g.last.fade}, ${g.last.e.toFixed(1)} ms off its line, ${g.last.carried.toFixed(1)} ft back, +${g.last.airIn.toFixed(1)} in`);
   return `at ${none.v0.toFixed(1)} ft/s: ${none.toward.toFixed(1)} carried, ${lean.toward.toFixed(1)} leaning in, ${stop.toward.toFixed(1)} leaning back; standing fade ${g.last.carried.toFixed(1)} ft back, line +${g.last.shift} ms`;
 });
 
-gtest("There are two release lines, a quick one on the way up and one at the top; the nearer one is the shot, and momentum moves both", () => {
-  const up = keys => {
+gtest("A jump has one release line: the top of it, or, off a drive from floater range, a quick one on the way up; momentum moves either", () => {
+  const up = (from, keys) => {
     const g = fresh(48, { defenders: false });
-    until(g, TOWARD, x => distance(x) <= 12);
+    if (from === "drive") until(g, TOWARD, x => distance(x) <= 12); else { Object.assign(g.P, { x: RIM.x, y: RIM.y + 12 }); run(g, 0.2); }
     GM.step(g, { ...AIM, ...keys, jump: true }); run(g, 0.2, { ...AIM, ...keys });
     return g;
   };
-  const stop = up({ d: true }), none = up({}), lean = up({ u: true });
-  const L = g => g.shot.lines;
-  check(L(stop).quick < GM.C.FL_IDEAL && L(stop).quick > L(none).quick && L(none).quick > L(lean).quick && L(lean).quick > GM.C.LOAD + 60,
-        `quick lines: braking ${L(stop).quick}, no lean ${L(none).quick}, leaning in ${L(lean).quick} ms`);
-  check(GM.C.IDEAL - L(lean).top > 1.9*(GM.C.FL_IDEAL - L(lean).quick), "the top line should move twice as far as the quick one");
-  // let go on the quick line it is a floater, from lower in the jump; held to the top line from the same jump it is a jumper
-  const quick = up({ d: true }); run(quick, L(quick).quick/1000 - 0.2 - 2*GM.TICK); GM.step(quick, { ...AIM, shot: true });
-  check(quick.last.kind === "floater" && quick.last.quick && Math.abs(quick.last.e) <= GM.C.FL_PERFECT && quick.P.h > 0.2 && quick.P.h < 0.8, `${quick.last.kind}, ${quick.last.e.toFixed(1)} ms off, ${quick.P.h.toFixed(2)} of the way up`);
-  const top = up({ d: true }); run(top, L(top).top/1000 - 0.2 - 2*GM.TICK); GM.step(top, { ...AIM, shot: true });
-  check(top.last.kind === "jumper" && !top.last.quick && Math.abs(top.last.e) <= GM.C.PERFECT_MS, `${top.last.kind}, ${top.last.e.toFixed(1)} ms off`);
-  check(quick.last.sig.lat > top.last.sig.lat*1.2 && quick.last.ball.z < top.last.ball.z - 0.5, `pushed up early it is looser and lower: σ ${quick.last.sig.lat.toFixed(1)} against ${top.last.sig.lat.toFixed(1)} in, let go at ${quick.last.ball.z.toFixed(1)} against ${top.last.ball.z.toFixed(1)} ft`);
-  // between the two it is off both
-  const mid = up({ d: true }); run(mid, (L(mid).quick + L(mid).top)/2000 - 0.2 - 2*GM.TICK); GM.step(mid, { ...AIM, shot: true });
-  check(Math.abs(mid.last.e) > 60 && mid.last.q === 0, `halfway between the lines: ${mid.last.e.toFixed(0)} ms off`);
-  // and at the rim neither line is anything: there is no timed release
+  const onLine = g => { run(g, g.shot.line/1000 - 0.2 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true }); return g.last; };
+  // driving, from 12 ft: the quick line, earlier the faster you are still going at the rim
+  const stop = up("drive", { d: true }), none = up("drive", {}), lean = up("drive", { u: true });
+  check(stop.shot.quick && none.shot.quick && lean.shot.quick, "a jump off a drive from 12 ft should have the quick line");
+  check(stop.shot.line < GM.C.FL_IDEAL && stop.shot.line > none.shot.line && none.shot.line > lean.shot.line && lean.shot.line > GM.C.LOAD + 60,
+        `quick line: braking ${stop.shot.line}, no lean ${none.shot.line}, leaning in ${lean.shot.line} ms`);
+  const floater = onLine(stop);
+  check(floater.kind === "floater" && floater.quick && Math.abs(floater.e) <= GM.C.FL_PERFECT && stop.P.h > 0.2 && stop.P.h < 0.8, `${floater.kind}, ${floater.e.toFixed(1)} ms off, ${stop.P.h.toFixed(2)} of the way up`);
+  // standing at the same spot: the top of the jump, and the same shot is tighter and let go higher
+  const set = up("stand", {});
+  check(!set.shot.quick && set.shot.line === GM.C.IDEAL, `standing at 12 ft: line at ${set.shot.line} ms`);
+  const jumper = onLine(set);
+  check(jumper.kind === "jumper" && Math.abs(jumper.e) <= GM.C.PERFECT_MS, `${jumper.kind}, ${jumper.e.toFixed(1)} ms off`);
+  check(floater.sig.lat > jumper.sig.lat*1.2 && floater.ball.z < jumper.ball.z - 0.3, `pushed up early it is looser and lower: σ ${floater.sig.lat.toFixed(1)} against ${jumper.sig.lat.toFixed(1)} in, let go at ${floater.ball.z.toFixed(1)} against ${jumper.ball.z.toFixed(1)} ft`);
+  // there is only the one line: early is early and short of it, whichever line it is
+  const early = up("stand", {}); run(early, 0.2); GM.step(early, { ...AIM, shot: true });
+  check(early.last.kind === "jumper" && early.last.e < -100 && early.last.q === 0, `let go 400 ms after Space, standing: ${early.last.kind}, ${early.last.e.toFixed(0)} ms`);
+  // and at the rim there is no timed release at all
   const rim = fresh(48, { defenders: false }); Object.assign(rim.P, { x: RIM.x, y: RIM.y + 3.5 }); run(rim, 0.2); shoot(rim, 400);
-  check(rim.last.kind === "layup" && rim.last.near === 1 && rim.last.eEff*0 === 0, `at 3.5 ft: ${rim.last.kind}`);
-  return `quick line at ${L(stop).quick} ms braking, ${L(none).quick} with no lean, ${L(lean).quick} leaning in; the top line at ${L(stop).top}, ${L(none).top}, ${L(lean).top}`;
+  check(rim.last.kind === "layup" && rim.last.near === 1, `at 3.5 ft: ${rim.last.kind}`);
+  return `off a drive from 12 ft the line is at ${stop.shot.line} ms braking, ${none.shot.line} with no lean, ${lean.shot.line} leaning in; standing there it is at ${set.shot.line}`;
 });
 
 gtest("Coming down with the ball is travelling", () => {

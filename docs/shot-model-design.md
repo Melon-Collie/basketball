@@ -17,7 +17,7 @@ Design principles:
 
 1. **Input sets the aim (bias); a universal noise floor and the situation set the scatter (variance).** The make-rate ceiling comes from the situation, never from execution.
 2. **Contests change the dice, not the button press.** A contest adds scatter and bias. It never tightens a timing window.
-3. **Timing must be learnable.** There are two release lines, the same for every shot from anywhere. They move only with what the player chose to carry into the air, by the same rule every time, and the meter shows where they are.
+3. **Timing must be learnable.** A jump has one release line. Which one follows from a choice the player made (going up off a drive from floater range, or not), it moves only with what they chose to carry into the air, by the same rule every time, and the meter shows where it is. Early is always short of it and late is always long.
 4. **Every drift axis needs a control.** Lateral error is corrected with the cursor. Depth error can only be corrected through timing, so speed along the shot line moves the release line, and the meter shows where it has moved to. It is never left as a bias with no way to correct it.
 5. **Decisions over dexterity.** Skill expression lives mainly in creating good shots: separation, finish choice, reading the defender.
 6. **Expected value keeps the game basketball-shaped.** Points per shot by shot type is the primary tuning metric. If percentages are inflated for fun, inflate them proportionally.
@@ -59,18 +59,20 @@ Three buttons, and each means one thing.
 - **Shift** gathers the ball, or puts a ball that has not been dribbled yet on the floor.
 - **WASD as you take off** is a lean: it decides what you carry into the air (see The jump). Inputs are read relative to the floor, not the shot line.
 
-**No kind of shot is chosen, by the player or for them.** There used to be a table here: a click was a jumper, a floater, a layup or a dunk according to distance and speed at the moment it was pressed, and each was resolved by its own rules. Now there is one shot, and what it is follows from where the ball was let go and when (see One shot).
+**How a shot is resolved is not picked from a list.** There used to be a table here: a click was a jumper, a floater, a layup or a dunk according to distance and speed at the moment it was pressed, and each was resolved by its own rules. Now there is one shot, and what it is follows from where the ball was let go (see One shot).
 
-**What a defender takes a jump for** is the one place that table survives, as the AI's read of a jump as it starts. "Driving" means velocity toward the rim of at least 4 ft/s:
+**What a jump is taken for** is where that table survives. A jump is read as it starts. "Driving" means velocity toward the rim of at least 4 ft/s:
 
-| Order | Condition at the jump | The AI reads it as |
-| --- | --- | --- |
-| 1 | Within 4 ft of the rim, any motion | A finish |
-| 2 | Driving, within 7 ft (9 ft out of gather steps) | A finish |
-| 3 | Driving, 7–14 ft | A floater |
-| 4 | Anything else | A shot from range |
+| Order | Condition at the jump | Read as | Release line |
+| --- | --- | --- | --- |
+| 1 | Within 4 ft of the rim, any motion | A finish | The top of the jump |
+| 2 | Driving, within 7 ft (9 ft out of gather steps) | A finish | The top of the jump |
+| 3 | Driving, 7–14 ft | A floater | The quick line, on the way up |
+| 4 | Anything else | A shot from range | The top of the jump |
 
-A shot blocker goes up for a finish on a timer and stays down for a floater. Nothing the shooter does depends on the read.
+The read does two things. The AI goes by it: a shot blocker goes up for a finish on a timer and stays down for a floater. And it settles which release line the jump has. Going up early on a drive is a floater; keeping the drive going and going up late is a finish; slowing down first is a set shot.
+
+Two lines on every jump, with the nearer one counting, was tried and taken out before anyone played it. A set shot let go 90 ms early came out as a late quick shot and went long, so early no longer meant short, and the meter carried a line that was seldom wanted.
 
 **Also:**
 
@@ -82,7 +84,7 @@ A shot blocker goes up for a finish on a timer and stays down for a floater. Not
 
 This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth, the cursor sets lateral aim, and carried momentum drifts the ball. Distance, movement and contest set the scatter.
 
-**Timing (depth).** The ball has to be let go on one of two lines: the top of the jump, 520 ms after Space, or the quick line, 330 ms after it (see The quick line). Both are moved by whatever you are carrying along the shot line (see The jump). Error is measured to the nearer line. There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
+**Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after Space, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
@@ -128,13 +130,13 @@ Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop 
 
 **How high.** A jump from a standstill reaches 85% of one taken at 7 ft/s or more. Standing reach is 8.3 ft, and a full jump adds 2.3 ft.
 
-**The release lines.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's lines move to show where that is, so a line is always the release that puts the depth right.
+**The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's line moves to show where that is, so the line is always the release that puts the depth right.
 
 ```latex
 \text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{drift strength} \times v_{along}}{0.09\ \text{in/ms}}
 ```
 
-That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. Near the rim neither moves, because neither counts.
+That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. Near the rim the line does not move, because it does not count.
 
 **What it costs.** Speed in the air adds scatter to a jumper, 0.4 in per ft/s, so 2.0 in for a fadeaway from a standstill (the "Scatter in the air" slider). A clean look needs less than 3 ft/s both at the jump and in the air. Sideways speed pushes the ball sideways, so the cursor has to make up for it.
 
@@ -182,11 +184,11 @@ There is one shot, and two things decide what it is.
 | Arc | Whatever brings the ball down into the rim at 60° | 48° set, 60° quick |
 | Aimed | 2 in past the rim's center | At the rim's center (2 in past, quick) |
 
-**When.** From range, the nearer of the two lines is the shot. On the top line it is set. On the quick line it is pushed: off 190 ms sooner, with more arc and less touch.
+**Which line.** From range, a jump with the top line is a set shot. One with the quick line (off a drive from 7 to 14 ft) is pushed: off 190 ms sooner, with more arc and less touch.
 
 **In the mix,** each part is weighted: aim error, timing error, the contest, and what the body's sideways speed does to the ball are all multiplied by the from-range share, and the scatter is the weighted sum of the variances. So at 6 ft, aim and timing count half.
 
-**Names come afterwards.** A dunk, a layup, a scoop, a hanging layup, a reverse, a bank, a floater, a push shot, a jump shot, a pull-up, a runner and a fadeaway are what the last-shot panel calls what you did. Stats count a ball let go inside 6 ft as at the rim and one on the quick line beyond that as a floater.
+**Names come afterwards.** A dunk, a layup, a scoop, a hanging layup, a reverse, a bank, a floater, a jump shot, a pull-up, a runner and a fadeaway are what the last-shot panel calls what you did. Stats count a ball let go inside 6 ft as at the rim and one on the quick line beyond that as a floater.
 
 ## At the rim
 
@@ -229,7 +231,7 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 
 ## The quick line
 
-The quick line is the early release: let go on the way up, 330 ms after Space, 160 ms after the feet leave and 190 ms before the top. Off a drive it is a floater. It is the same from anywhere: from 24 ft it is a push shot, off before a closeout, at about 34% against the set shot's 60% with nobody near.
+The quick line is the early release: let go on the way up, 330 ms after Space, 160 ms after the feet leave and 190 ms before the top. A jump has it when it starts on a drive from 7 to 14 ft, and that shot is a floater.
 
 - **Timing:** perfect window ±20 ms plus the timing assist, against ±12 on the top line. The perfect release bonus applies.
 - **Touch:** a floor of 4.6 in × (1 − bonus × q) against 3.93, movement 0.08 × ft/s against 0.14 and with no cost for speed in the air: it is built for moving. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration).
@@ -381,7 +383,7 @@ NBA wide-open threes average about 1.15 points per shot (approximate, from memor
 
 **Held in reserve:** anti-streak smoothing (quietly raising the odds after a perfect clean miss). It works, but it's hidden manipulation; use it only if playtests show streaks are still the problem.
 
-The panel shows "clean look" on the contest line when the premium applies. It is for the set shot only: a ball let go on the quick line, or at the rim, does not get it.
+The panel shows "clean look" on the contest line when the premium applies. It is for the set shot only: a floater, or a ball let go at the rim, does not get it.
 
 ## Frames instead of ratings
 
@@ -678,7 +680,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, there are two release lines and the nearer is the shot, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
@@ -1054,7 +1056,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **Nobody has played the reworked shot.** Every number in it (reach, the lines, the finish range, the charge, the bump) is a first value, checked by tests and by scripted drives, and waiting for hands.
 - **The ball cannot be taken out of a shooter's hand.** In the air it can only be met after it is let go, though a ball let go into a hand is met at once.
 - **The AI contests with the hand it has,** going to the ball as far as its arm reaches. It does not anticipate, and it does not choose between taking a charge and going for the block.
-- **Three ways of letting go are still mixed, not one.** Set, quick and finish each have their own touch and arc, weighted by distance and by which line the ball was let go on. It is continuous in distance and has a step between the lines.
+- **Three ways of letting go are still mixed, not one.** Set, quick and finish each have their own touch and arc. Finish is weighted in by distance, continuously. Set or quick is settled at the jump, by whether it started on a drive from floater range, so that part is still a choice the game reads off the player and not something that follows from the release.
 - **A dunk's carry is a straight line at a fixed speed,** not a simulated arm.
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).

@@ -31,7 +31,7 @@ function shoot(g, ms, aim = AIM) {
 // The next shot gets no noise at all: every random draw comes up 1, which is zero on the bell curve. A jumper draws
 // 80 estimates and then the shot itself, two normals each.
 const noNoise = g => g.forced.push(...Array(324).fill(1));
-const PERFECT = 517, EARLY = 210;                                // ms after Space: at the top of the jump, and so early, well before even the quick line, that it comes up well short
+const PERFECT = 517, EARLY = 380;                                // ms after Space: at the top of the jump, and early enough to come up well short
 // A possession starts with the ball held. One press of Shift puts it on the floor.
 const floor = g => { GM.step(g, { ...AIM, gather: true }); GM.step(g, AIM); return g; };
 // drive in with nobody home and dunk: a sure two. Stops as the ball leaves the hand.
