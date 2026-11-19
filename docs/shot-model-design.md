@@ -65,12 +65,14 @@ Three buttons, and each means one thing.
 
 | Order | Condition at the jump | Read as | Release line |
 | --- | --- | --- | --- |
-| 1 | Within 4 ft of the rim, any motion | A finish | The top of the jump |
-| 2 | Driving, within 7 ft (9 ft out of gather steps) | A finish | The top of the jump |
+| 1 | Within 4 ft of the rim, any motion | A finish | None |
+| 2 | Driving, within 7 ft (12 ft out of gather steps) | A finish | None |
 | 3 | Driving, 7–14 ft | A floater | The quick line, on the way up |
 | 4 | Anything else | A shot from range | The top of the jump |
 
-The read does two things. The AI goes by it: a shot blocker goes up for a finish on a timer and stays down for a floater. And it settles which release line the jump has. Going up early on a drive is a floater; keeping the drive going and going up late is a finish; slowing down first is a set shot.
+The read does two things. The AI goes by it: a shot blocker goes up for a finish on a timer and stays down for a floater. And it settles what is asked of the release, as the feet leave, with nothing about it moving after that. Going up early on a drive is a floater; keeping the drive going and going up late is a finish; slowing down first is a set shot.
+
+**A finish asks nothing of the release.** No line and no aim, wherever the ball is let go: the cursor is the ball the whole way (see At the rim). It used to be a finish only by distance, so a jump that started 9 ft out and flew to the rim had a line that slid and faded on the way in, and paid for where the cursor was until it got there. Gather steps count out to 12 ft because a euro uses up most of the drive: one gathered at 14 ft goes up from about 9.6 ft.
 
 Two lines on every jump, with the nearer one counting, was tried and taken out before anyone played it. A set shot let go 90 ms early came out as a late quick shot and went long, so early no longer meant short, and the meter carried a line that was seldom wanted.
 
@@ -130,13 +132,13 @@ Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop 
 
 **How high.** A jump from a standstill reaches 85% of one taken at 7 ft/s or more. Standing reach is 8.3 ft, and a full jump adds 2.3 ft.
 
-**The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's line moves to show where that is, so the line is always the release that puts the depth right.
+**The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The line is placed where that is while the legs load, and stays there once the feet leave, however far the jump then carries. So the line is always the release that puts the depth right, and it never moves in the air.
 
 ```latex
 \text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{line shift setting} \times v_{along}}{0.09\ \text{in/ms}}
 ```
 
-That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. Near the rim the line does not move, because it does not count.
+That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. A finish has no line.
 
 **What it costs.** Speed in the air, in any direction, adds scatter to a jumper: 0.4 in per ft/s, so 2.0 in for a fadeaway from a standstill (the "Scatter in the air" slider). A clean look needs less than 3 ft/s both at the jump and in the air. That is all it costs: the ball is not pushed off line.
 
@@ -172,7 +174,7 @@ The curve was originally linear out to 6.5 ft and penalized 4 ft "open" looks at
 
 There is one shot, and two things decide what it is.
 
-**How far out.** A shot is part finish and part shot from range, by distance from the rim: all finish inside 4 ft, none beyond 8 ft, and a straight-line mix in between.
+**How far out.** A jump that starts as a finish is all finish, wherever the ball is let go. Any other shot is part finish and part shot from range by distance from the rim: all finish inside 4 ft, none beyond 8 ft, and a straight-line mix in between, which is what a set shot from 6 ft is.
 
 | | At the rim | From range |
 | --- | --- | --- |
@@ -218,6 +220,7 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 | Speed | 0.35 × max(0, speed at the jump − 11.4 ft/s) |
 | Where the ball is held | 0.8 × abs(s) + 2.2 × max(0, −s × sideways momentum), where s is how far to your left or right of the line to the rim the ball is, −1 to 1 at arm's length, and sideways momentum is clamp(sideways speed / 6). Plus 0.6 per ft of euro step |
 | Hang | 0.9 per 100 ms |
+| Let go far out | 0.8 per ft beyond 4 ft, for a jump that started as a finish: it is a heave. Open, at a sprint: 79% from 4 ft, 65% from 5, 52% from 6, 43% from 7, 26% from 10. Without it a finish from 10 ft, which asks for no timing and no aim, went in as often as a floater |
 | A bump | 2.0, for a body met on the way up |
 
 **The defender is a body and an arm.**
@@ -226,6 +229,8 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 - **Shot blockers' jumps.** The AI's defenders within 7 ft go up at reaction × 0.5 + 130 ms into a jump they read as a finish (255 ms at the default), and a jump lasts 500 ms, so they are at their highest just before the top of yours. Letting go on the way up beats them to it; hanging until they are coming down beats them the other way.
 - **The body.** A shooter in the air goes where their momentum takes them. Into a defender who was set (moving slower than 1.5 ft/s, feet down) and at least 4 ft from the rim, at more than 2 ft/s, it is a charge: the other side's ball. Into anyone else it is a bump, which adds 2 in of scatter. A defender who runs into a shooter, or whose hand comes onto them, has fouled, as before (see Fouls, under The game); a hand the shooter flew into has not.
 - A fouled finish gets 1.15× its placement, hang and speed scatter. One that goes in is an and-one; one that misses is two free throws.
+
+**Euros.** Open, going up out of the second step and leaning at the rim: gathered at 10 ft, the jump starts 5.7 ft out and the ball is let go 3 ft out at the top, 78%. Gathered at 12 ft, 68%. Gathered at 14 ft the jump starts 9.6 ft out and only gets to 6.7 ft, 47%.
 
 **What the AI gives up.** On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
 
@@ -548,7 +553,8 @@ Coordinates stay in feet, with x and y on the court as in the prototype and z up
 | Object | Value |
 | --- | --- |
 | Rim | Center (25, 5.25, 10.0) ft. Inner radius 9 in (0.75 ft). Tube radius 0.31 in (5/8 in diameter) |
-| Backboard | Front face at y = 4.0 ft (rim center 15 in from it). 6 ft wide (x 22–28) by 3.5 ft tall (z 9.5–13.0) |
+| Backboard | Front face at y = 4.0 ft (rim center 15 in from it), back face 0.12 ft behind it. 6 ft wide (x 22–28) by 3.5 ft tall (z 9.5–13.0), so its bottom edge is above head height and the floor under it is open |
+| The floor | A player's center can be anywhere on the half court up to 0.6 ft from its lines: x 0.6–49.4, y 0.6–46.4. That includes the baseline and the floor under the backboard. Nobody's center gets closer than 1.0 ft to the rim's |
 | Ball | Radius 4.7 in (0.39 ft). Mass 22 oz |
 | Gravity | 32.17 ft/s² |
 | Rim bounce | Restitution 0.6, friction 0.3 (starting values) |
@@ -591,7 +597,7 @@ The whole flight is simulated instantly at release and then replayed for the ani
 
 - **Integration:** exact free flight under gravity between contacts, in steps of 1 ms, 0.5 ms near the rim, and 10 ms where there is nothing to hit.
 - **Rim contact:** find the closest point on the rim's ring to the ball's center. Contact when they're closer than ball radius plus tube radius. The contact normal points from that ring point to the ball's center. Push the ball out, reverse its velocity along the normal times the rim restitution, and reduce the sideways part by friction.
-- **Backboard contact:** a plane at the board's front face, bounded by its width and height. Same response with the board's values. Edge hits are ignored at first.
+- **Backboard contact:** a slab with two faces, bounded by its width and height. A ball is on whichever side of the board's middle its center is on, and that face pushes it out its own way, so a ball thrown at the rim from behind the board comes off the back of the glass ("Off the back of the backboard"). Same response with the board's values on both faces. Steps stay small within a foot of the board, so a hard throw cannot pass through. Edge hits are ignored at first.
 - **Resting contact:** a ball that has all but stopped bouncing on the rim or the glass (touching it at under 0.5 ft/s) is resting on it, and a ball at rest on a slope rolls. Nothing bounces, the velocity that is left runs along the surface, and gravity carries the ball off whichever way the surface tilts. Without this, friction held a ball on the curved top of the rim as it would hold a block: about 1 shot in 150 came to rest up there, three quarters of them balanced on the ring and the rest wedged against the glass, and stayed for the whole 8 s of the flight. Now one set down on the ring is off it in 0.7 s and a wedged one in under 2 s, and none stays. The calibrated make rates moved by 1 point or less.
 - **Stopped:** if a ball does stop dead off the floor for half a second, the flight ends there, and the game whistles it dead a moment later.
 - **Floor:** the flight runs on through two floor bounces, so we know where the rebound goes.
@@ -679,7 +685,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.

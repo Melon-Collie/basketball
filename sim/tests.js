@@ -91,6 +91,24 @@ test("From 45°, banking beats shooting at the rim; straight on, it doesn't", ()
   return `12 ft with small errors: 45° bank ${Math.round(wb*100)}% vs direct ${Math.round(wd*100)}%; straight on bank ${Math.round(fb*100)}% vs direct ${Math.round(fd*100)}%`;
 });
 
+test("The backboard has a back: a ball thrown at the rim from behind it comes off the back of the glass", () => {
+  // from under the baseline side of the board, at the rim: the board is in the way
+  const from = { x: RIM.x, y: PHYS.BOARD.y - 2.5, z: 9.0 };
+  const r = shot(from, RIM, { elev: 60 });
+  const hit = r.contacts[0];
+  assert(!r.made && hit && hit.type === "board" && hit.back && r.label === "Off the back of the backboard", `straight at it from behind: ${r.label}`);
+  assert(r.path.every(q => q.y < PHYS.BOARD.y - PHYS.BOARD.thick - PHYS.BALL_R + 0.02 || q.z < PHYS.BOARD.z0 || q.z > PHYS.BOARD.z1 || q.x < PHYS.BOARD.x0 || q.x > PHYS.BOARD.x1), "the ball got through the glass");
+  // faster and flatter, to be sure it cannot tunnel through
+  const hard = simulateShot({ pos: from, vel: { x: 0, y: 38, z: 9 } }, { quick: true });
+  assert(hard.contacts[0] && hard.contacts[0].back && hard.path[hard.path.length - 1].y < PHYS.BOARD.y, "a hard throw at the back of the board went through it");
+  // from the corner on the baseline the board is not in the way, and the front face is as it was
+  const corner = shot({ x: RIM.x + 20, y: 1.5, z: 9.0 }, RIM);
+  assert(corner.made, `from the baseline corner: ${corner.label}`);
+  const bank = shot(spot(8, 45), { x: RIM.x + 1.2, y: PHYS.BOARD.y + PHYS.BALL_R, z: 11.2 });
+  assert(bank.contacts[0] && bank.contacts[0].type === "board" && !bank.contacts[0].back, "a bank from the front should hit the front face");
+  return `from behind: ${r.label}; from the baseline corner: ${corner.label}`;
+});
+
 // 4. In-and-outs exist
 test("Small sideways errors produce some rim contacts that fall out", () => {
   const from = spot(20), r = rng(11), counts = {};

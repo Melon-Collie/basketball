@@ -5,7 +5,7 @@
 const PHYS = {
   G: 32.17,
   RIM: { x: 25, y: 5.25, z: 10.0, r: 0.75, tube: 0.026 },   // 18 in inner diameter, 5/8 in tube
-  BOARD: { y: 4.0, x0: 22, x1: 28, z0: 9.5, z1: 13.0 },     // front face 15 in behind rim center
+  BOARD: { y: 4.0, x0: 22, x1: 28, z0: 9.5, z1: 13.0, thick: 0.12 },   // front face 15 in behind rim center; the back face is `thick` behind that
   BALL_R: 0.39,                                             // 4.7 in
   E_RIM: 0.6, MU_RIM: 0.3,                                  // starting values, to tune
   E_BOARD: 0.75, MU_BOARD: 0.2,
@@ -73,11 +73,14 @@ function rimContact(c) {
   return { p, n: v3.mul(d, 1/(dist || 1e-9)), depth: reach - dist };
 }
 
+// The backboard has two faces. Which one a ball is on is the side of the board's middle its center is on, and each
+// face pushes out its own way, so a ball thrown at the back of the board comes off the back.
 function boardContact(c) {
   const B = PHYS.BOARD;
-  if (c.y - PHYS.BALL_R >= B.y || c.y < B.y - 0.5) return null;          // in front of the face, or long gone behind it
   if (c.x < B.x0 || c.x > B.x1 || c.z < B.z0 || c.z > B.z1) return null;  // edges ignored for now
-  return { n: { x: 0, y: 1, z: 0 }, depth: B.y + PHYS.BALL_R - c.y };
+  if (c.y >= B.y - B.thick/2) return c.y - PHYS.BALL_R >= B.y ? null : { n: { x: 0, y: 1, z: 0 }, depth: B.y + PHYS.BALL_R - c.y };
+  const back = B.y - B.thick;
+  return c.y + PHYS.BALL_R <= back ? null : { n: { x: 0, y: -1, z: 0 }, depth: c.y + PHYS.BALL_R - back, back: true };
 }
 
 // Where the ball at c touches a defender's arm at time t, if it does. A hand is { at: t => {x, y, z, from}, r }: the
@@ -120,7 +123,8 @@ function simulateShot(launch, opts = {}) {
   while (t < (opts.tMax ?? PHYS.T_MAX)) {
     const hR = Math.hypot(c.x - R.x, c.y - R.y);
     const nearRim = hR < 2 && Math.abs(c.z - R.z) < 1.5;
-    const far = hR > 3.2 && c.z > 1.5;                       // nothing to hit out here: take big steps
+    const B = PHYS.BOARD, byBoard = Math.abs(c.y - B.y) < 1 && c.x > B.x0 - 0.5 && c.x < B.x1 + 0.5;
+    const far = hR > 3.2 && c.z > 1.5 && !byBoard;           // nothing to hit out here: take big steps
     const dt = nearRim ? PHYS.DT_NEAR : far ? PHYS.DT_FAR : PHYS.DT;
     const prevZ = c.z;
     c = { x: c.x + vel.x*dt, y: c.y + vel.y*dt, z: c.z + vel.z*dt - 0.5*PHYS.G*dt*dt };   // exact free flight
@@ -139,12 +143,12 @@ function simulateShot(launch, opts = {}) {
       else last.after = v3.len(vel);
     }
     const bc = boardContact(c);
-    if (bc && vel.y < 0) {
+    if (bc && vel.y*bc.n.y < 0) {                             // moving into the face it is on
       const before = v3.len(vel);
       c = v3.add(c, v3.mul(bc.n, bc.depth));
       const leaning = touches(vel, bc.n), lastB = contacts[contacts.length - 1];
       vel = leaning ? roll(vel, bc.n, dt) : bounce(vel, bc.n, PHYS.E_BOARD, PHYS.MU_BOARD);
-      if (!leaning) contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel) });   // leaning on the glass is not a bounce
+      if (!leaning) contacts.push({ type: "board", t, x: c.x, y: PHYS.BOARD.y, z: c.z, before, after: v3.len(vel), back: !!bc.back });   // leaning on the glass is not a bounce
     }
     // arms: a touch on the way down over the rim is goaltending (counts as a make). Any other touch is a collision
     // with something soft that may be moving: the ball loses nearly all the speed it had into the arm and keeps the
@@ -207,7 +211,7 @@ function labelFor(launch, contacts, made, madeAt) {
   const hits = contacts.filter(k => k.type !== "floor");
   if (!hits.length) return "Airball";
   const first = hits[0];
-  if (first.type === "board") return "Off the glass";
+  if (first.type === "board") return first.back ? "Off the back of the backboard" : "Off the glass";
   // which part of the rim: along the shot's horizontal direction
   const ux = R.x - launch.pos.x, uy = R.y - launch.pos.y, ul = Math.hypot(ux, uy) || 1;
   const along = ((first.x - R.x)*ux + (first.y - R.y)*uy)/ul/R.r;
