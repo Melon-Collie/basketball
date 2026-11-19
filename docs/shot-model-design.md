@@ -18,7 +18,7 @@ Design principles:
 1. **Input sets the aim (bias); a universal noise floor and the situation set the scatter (variance).** The make-rate ceiling comes from the situation, never from execution.
 2. **Contests change the dice, not the button press.** A contest adds scatter and bias. It never tightens a timing window.
 3. **Timing must be learnable.** A jump has one release line. Which one follows from a choice the player made (going up off a drive from floater range, or not), it moves only with what they chose to carry into the air, by the same rule every time, and the meter shows where it is. Early is always short of it and late is always long.
-4. **Every drift axis needs a control.** Lateral error is corrected with the cursor. Depth error can only be corrected through timing, so speed along the shot line moves the release line, and the meter shows where it has moved to. It is never left as a bias with no way to correct it.
+4. **A shooter makes up for their own motion.** Nobody has to aim against where they are going. Speed along the shot line moves the release line, and the meter shows where it has moved to; speed across it does nothing to the ball. What moving costs is touch.
 5. **Decisions over dexterity.** Skill expression lives mainly in creating good shots: separation, finish choice, reading the defender.
 6. **Expected value keeps the game basketball-shaped.** Points per shot by shot type is the primary tuning metric. If percentages are inflated for fun, inflate them proportionally.
 7. **Feedback separates input from outcome.** Release quality is shown immediately (as in MLB The Show's perfect/perfect), so a miss after a perfect release reads as variance, not robbery.
@@ -82,16 +82,16 @@ Two lines on every jump, with the nearer one counting, was tried and taken out b
 
 ## Jump shots
 
-This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth, the cursor sets lateral aim, and carried momentum drifts the ball. Distance, movement and contest set the scatter.
+This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth and the cursor sets lateral aim. Distance, movement and contest set the scatter.
 
 **Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after Space, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
 
-**Aim (lateral).** Aim error is the signed angle between the shooter→cursor and shooter→rim lines, measured on the floor plane. Lateral bias = distance × tan(angle), so long shots need finer aim. Aim assist (default 40%) scales the whole lateral bias, including uncorrected drift.
+**Aim (lateral).** Aim error is the signed angle between the shooter→cursor and shooter→rim lines, measured on the floor plane. Lateral bias = distance × tan(angle), so long shots need finer aim. Aim assist (default 40%) scales it down.
 
-**Drift.** The ball inherits 10.6% of the body's sideways speed at release: at 24 ft that is 1.6 in of lateral push per ft/s, and 1.25 at 15 ft. Players aim against it. Speed along the shot line does not push the ball long or short; it moves the release line instead (see The jump).
+**Momentum.** What the body is doing in the air does not push the ball. Speed along the shot line moves the release line (see The jump). Speed across it used to push the ball sideways, 1.6 in per ft/s at 24 ft, and had to be aimed against; that is gone, because steering against your own motion was a chore with nothing to read it from. A moving shot pays in scatter.
 
 **Scatter (lateral, inches).**
 
@@ -133,12 +133,12 @@ Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop 
 **The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's line moves to show where that is, so the line is always the release that puts the depth right.
 
 ```latex
-\text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{drift strength} \times v_{along}}{0.09\ \text{in/ms}}
+\text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{line shift setting} \times v_{along}}{0.09\ \text{in/ms}}
 ```
 
 That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. Near the rim the line does not move, because it does not count.
 
-**What it costs.** Speed in the air adds scatter to a jumper, 0.4 in per ft/s, so 2.0 in for a fadeaway from a standstill (the "Scatter in the air" slider). A clean look needs less than 3 ft/s both at the jump and in the air. Sideways speed pushes the ball sideways, so the cursor has to make up for it.
+**What it costs.** Speed in the air, in any direction, adds scatter to a jumper: 0.4 in per ft/s, so 2.0 in for a fadeaway from a standstill (the "Scatter in the air" slider). A clean look needs less than 3 ft/s both at the jump and in the air. That is all it costs: the ball is not pushed off line.
 
 **What a fade is.** Only a name: a jumper taken going away from the rim at 2 ft/s or more is a fadeaway, or a side fade if it is going sideways as well. Nothing is committed and nothing is canned.
 
@@ -186,7 +186,7 @@ There is one shot, and two things decide what it is.
 
 **Which line.** From range, a jump with the top line is a set shot. One with the quick line (off a drive from 7 to 14 ft) is pushed: off 190 ms sooner, with more arc and less touch.
 
-**In the mix,** each part is weighted: aim error, timing error, the contest, and what the body's sideways speed does to the ball are all multiplied by the from-range share, and the scatter is the weighted sum of the variances. So at 6 ft, aim and timing count half.
+**In the mix,** each part is weighted: aim error, timing error and the contest are all multiplied by the from-range share, and the scatter is the weighted sum of the variances. So at 6 ft, aim and timing count half.
 
 **Names come afterwards.** A dunk, a layup, a scoop, a hanging layup, a reverse, a bank, a floater, a jump shot, a pull-up, a runner and a fadeaway are what the last-shot panel calls what you did. Stats count a ball let go inside 6 ft as at the rim and one on the quick line beyond that as a floater.
 
@@ -237,7 +237,6 @@ The quick line is the early release: let go on the way up, 330 ms after Space, 1
 - **Touch:** a floor of 4.6 in × (1 − bonus × q) against 3.93, movement 0.08 × ft/s against 0.14 and with no cost for speed in the air: it is built for moving. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration).
 - **Arc:** 60° against 48°, aimed 2 in past the rim's center.
 - **Lean:** you keep moving. Leaning into it carries you toward a defender who is giving ground, and into their hand; leaning against your momentum stops you short of them, which is the pull-up floater. Against the on-ball defender on a straight drive from 12 ft, that is the difference between about 18% and about 52%.
-- **Aim:** sideways speed in the air pushes the ball 0.6× as far as it does on the top line.
 - **Contest:** without the closing-speed factor, and with prox = clamp((4 − d) / 2.5, 0, 1)^1.5, so the arc clears anyone more than \~4 ft away. Contest scatter 5.0 × c, plus up to 6° of extra arc.
 
 **Rim protector's read.** On each drive, the first time the ball handler is inside 17 ft and driving, the rim protector decides once:
@@ -986,7 +985,7 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | PERFECT\_MS | 12 ms | Jumper perfect window (±) |
 | DEP\_RATIO | 1.16 / 1.45 / 1.2 | Depth scatter ÷ lateral: jumper / floater / layup (in `sim/noise.js`) |
 | AIR\_LAND | 0.25 s | Recovery after coming down |
-| DRIFT\_LAT / DRIFT\_DEP | 1.6 / 1.0 in per ft/s | Drift bias from carried momentum |
+| DRIFT\_DEP | 1.0 in per ft/s | What the release makes up for speed along the shot line: it sets how far the release line moves |
 | CONTEST\_SIG | 6.0 in | Jumper contest share in the live scatter breakdown. Outcomes use the calibrated CONTEST\_IN below |
 | ENTRY / PAST | 60° / 2 in | A finish's angle down into the rim; how far past the rim's center finishes and quick releases are aimed (in `sim/launch.js`) |
 | BODY\_R / ARM\_HIT / REACH\_V | 0.75 ft / 0.3 ft / 4 ft/s | Reach-in: a hand this close to the handler's center or off arm, moving into them this fast |
@@ -1030,7 +1029,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | REL\_FWD | 0.7 ft | Release point in front of the body |
 | CONTEST\_ARC | 6° | Extra arc at full contest |
 | K\_SPEED | 0.000158 per ms | Launch speed change per ms of timing error, fitted at 24 ft |
-| F\_LAT / F\_DEP | 0.106 / 0.066 | Share of body velocity the ball inherits, sideways / along the shot, fitted at 24 ft |
+| F\_LAT / F\_DEP | 0.106 / 0.066 | Share of body velocity a ball would inherit, sideways / along the shot, fitted at 24 ft. The launch model can still do this; the game no longer asks it to |
 | FLOOR\_IN / FLOATER\_FLOOR\_IN / LAYUP\_FLOOR\_IN | 3.93 / 4.6 / 2.48 in | Universal noise floors: jumper / floater / layup |
 | MULT | 1.23 / 1.50 / 1.74 | Calibrated noise multipliers: jumper / floater / layup |
 | CONTEST\_IN | 6.19 in | Jumper contest scatter at full contest (calibrated) |
@@ -1042,7 +1041,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 | Touches | Restitution 0.2, friction 0.3; a block changes the ball's velocity by 40% of its speed or more | A hand on the ball: block or tip |
 | Rebounds | Caught within 1.6 ft, at 8 ft standing plus up to 2.2 ft of jump; 0.35 s before whoever touched a shot can catch it | Loose balls |
 
-**Tuning sliders and defaults:** timing assist ±15 ms, perfect release bonus 30%, scatter in the air 2.0 in at 5 ft/s, aim assist 40%, drift strength 1.0×, layup speed limit 11.4 ft/s, on-ball defender and rim protector on, rim protector steps up 50% (when the handler is level with their defender), guarding distance 4.5 ft, the AI's read of you 260 ms, AI top speed 13 ft/s, AI reaches after 1.8 s and again after 3 s, AI sees a shot after 250 ms, defender's contest reach 1.0×. None is a rating: each is the mechanic in its own units, the same for every player.
+**Tuning sliders and defaults:** timing assist ±15 ms, perfect release bonus 30%, scatter in the air 2.0 in at 5 ft/s, aim assist 40%, release line shift 1.0×, layup speed limit 11.4 ft/s, on-ball defender and rim protector on, rim protector steps up 50% (when the handler is level with their defender), guarding distance 4.5 ft, the AI's read of you 260 ms, AI top speed 13 ft/s, AI reaches after 1.8 s and again after 3 s, AI sees a shot after 250 ms, defender's contest reach 1.0×. None is a rating: each is the mechanic in its own units, the same for every player.
 
 **Display:** the shot meter sits beside the player, or beside the cursor if the player ticks "Shot meter follows the cursor". Beside the cursor, the meter's release line is level with the cursor, so the bar reaches the cursor's height at the moment to let go, and aim and timing can be read in one place. It moves to the cursor's left where there is no room on the right. The choice is the player's own: it is remembered by their browser, is not one of the host's settings online, and applies only to their own shots.
 

@@ -137,6 +137,24 @@ gtest("A jump has one release line: the top of it, or, off a drive from floater 
   return `off a drive from 12 ft the line is at ${stop.shot.line} ms braking, ${none.shot.line} with no lean, ${lean.shot.line} leaning in; standing there it is at ${set.shot.line}`;
 });
 
+gtest("Moving sideways in the air does not push the ball: with the cursor on the rim it goes at the rim, and what moving costs is touch", () => {
+  // 15 ft out with no scatter: straight up, and leaning hard to the right, both let go on the line with the cursor on the rim
+  const from = keys => {
+    const g = fresh(49, { defenders: false }); Object.assign(g.P, { x: RIM.x, y: RIM.y + 15 }); run(g, 0.2);
+    g.forced.push(...Array(400).fill(1));
+    GM.step(g, { ...AIM, ...keys, jump: true }); run(g, 0.3, { ...AIM, ...keys });
+    const sideways = Math.abs(g.P.vx);
+    run(g, g.shot.line/1000 - 0.3 - 2*GM.TICK, AIM); GM.step(g, { ...AIM, shot: true });
+    return { last: g.last, sideways, at: g.lastPhys.path.find(q => q.z <= 10.05 && q.t > 0.3) };
+  };
+  const still = from({}), side = from({ r: true });
+  check(side.sideways > 4.9 && side.last.carried > 1.5, `leaning right: ${side.sideways.toFixed(1)} ft/s sideways, ${side.last.carried.toFixed(1)} ft from takeoff`);
+  check(still.last.out.sub === "Swish" && side.last.out.sub === "Swish", `straight up: ${still.last.out.sub}; moving sideways: ${side.last.out.sub}`);
+  check(Math.abs(side.last.aim.theta) < 1e-9 && Math.hypot(side.at.x - RIM.x, side.at.y - RIM.y) < 0.15, `it should come down on the rim's center: ${Math.hypot(side.at.x - RIM.x, side.at.y - RIM.y).toFixed(2)} ft off`);
+  check(side.last.sig.lat > still.last.sig.lat + 0.5 && side.last.airIn > 1.9, `the cost is scatter: σ ${side.last.sig.lat.toFixed(1)} in against ${still.last.sig.lat.toFixed(1)}`);
+  return `at ${side.sideways.toFixed(1)} ft/s sideways the ball still comes down ${(12*Math.hypot(side.at.x - RIM.x, side.at.y - RIM.y)).toFixed(1)} in from the rim's center; σ ${side.last.sig.lat.toFixed(1)} in against ${still.last.sig.lat.toFixed(1)} standing`;
+});
+
 gtest("Coming down with the ball is travelling", () => {
   const g = fresh(47); run(g, 0.5);
   GM.step(g, { ...AIM, jump: true }); run(g, 1);

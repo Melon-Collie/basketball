@@ -42,7 +42,7 @@ const C = {
   KT: 0.09,                      // in of depth bias per ms of post-assist timing error
   PSPEED: 15, PACC: 70,
   DSPEED: 13, DACC: 50, CLOSE_SPEED: 15.5, CLOSE_ACC: 60,
-  DRIFT_LAT: 1.6, DRIFT_DEP: 1.0,
+  DRIFT_DEP: 1.0,                // in the release has to make up, per ft/s of speed along the shot line: what moves the release line
   CONTEST_SIG: 6.0,
   PERFECT_MS: 12,
   // dribbling
@@ -94,7 +94,7 @@ function create(opts = {}) {
     forced: [],                                              // values the next random rolls will take, for tests
     prev: [{ shot: false, gather: false, jump: false }, { shot: false, gather: false, jump: false }],   // each side's buttons as of the last tick, to see presses and releases
     // Settings, the same for every player. None of them is a rating: each is the thing itself, in its own units.
-    //   tAssist ms, bonus %, aAssist %, drift x       the shot: free timing error, what a perfect release tightens, aim help, how much momentum carries
+    //   tAssist ms, bonus %, aAssist %, drift x       the shot: free timing error, what a perfect release tightens, aim help, how far momentum moves the release line
     //   fadeIn in                                      scatter that moving at 5 ft/s in the air adds to a jumper (a fadeaway's speed)
     //   layupSpeed ft/s                                the speed a layup can be taken at under control
     //   readMs ms, aiSpeed ft/s                        the AI on the ball: how old its picture of the handler is, and its top speed
@@ -159,11 +159,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ---------- Physics shots (milestone 4) ----------
 // Jumpers, floaters and layups are launched and simulated against a real rim and backboard.
-// carried momentum split along the shot, each part scaled (aim assist on the sideways part, as before)
-function liftBody(f, vx, vy, latK = 1, depK = 1) {
-  const bl = vx*f.r.x + vy*f.r.y, ba = vx*f.u.x + vy*f.u.y;
-  return { vx: (f.r.x*bl*latK + f.u.x*ba*depK)*params.drift, vy: (f.r.y*bl*latK + f.u.y*ba*depK)*params.drift };
-}
+// What the body is doing in the air does not push the ball anywhere. A shooter makes up for their own motion: toward
+// or away from the rim by when they let go, which moves the release line (lineFor), and sideways without being asked.
+// Moving is paid for in scatter and in the line moving, not in an error to steer against.
 function physNoise(inp, sc, z) { NZX.NOISE.BONUS = params.bonus/100; return NZX.sampleNoise(inp, sc, z || [gauss(), gauss()]); }
 function physRates(inp, sc, n, zs) {
   let m = 0, b = 0;
@@ -281,10 +279,6 @@ function aimOf(p, f) {
   const theta = Math.atan2(cross, dot);
   return { theta, lat: f.dist*12*Math.tan(clamp(theta, -0.6, 0.6)) };
 }
-function driftOf(vx, vy, f) {
-  const vPerp = vx*f.r.x + vy*f.r.y, vAlong = vx*f.u.x + vy*f.u.y;
-  return { vPerp, vAlong, speed: Math.hypot(vx, vy), lat: C.DRIFT_LAT*params.drift*vPerp, dep: C.DRIFT_DEP*params.drift*vAlong };
-}
 
 // ---------- What a jump is taken for ----------
 // A jump is read as it starts: a shot from range, a floater or a finish. The AI goes by it: a shot blocker goes up
@@ -370,14 +364,14 @@ const cleanLook = (fade, moveSpeed) => SIT.cleanLook(P, defenders(), fade, moveS
 //                   sooner, looser, with more arc. Any other jump has the top line, and the shot is set.
 // o: { ball (airBall), av (velocity in the air), v0 and vp0 (speed at the jump, and the part of it across the shot
 //      line), quick, euro, bump, foul }, and, for forecasts: t null means on the line; hangMs; perfect means with no
-//      aim error and nothing carried.
+//      aim error.
 function shotAt(t, o) {
   const f = frame(P), near = nearOf(f.dist), far = 1 - near, quick = !!o.quick, line = lineFor(quick, o.av.x, o.av.y, f);
   const e = t === null ? 0 : t - line;
   const q = clamp(1 - Math.max(0, Math.abs(e) - (quick ? C.FL_PERFECT : C.PERFECT_MS))/40, 0, 1);
   const eEff = Math.sign(e)*Math.max(0, Math.abs(e) - params.tAssist);
   const form = { jumper: quick ? 0 : far, floater: quick ? far : 0, layup: near };
-  const air = Math.hypot(o.av.x, o.av.y), aim = aimOf(P, f), dr = driftOf(o.av.x, o.av.y, f), assistK = 1 - params.aAssist/100;
+  const air = Math.hypot(o.av.x, o.av.y), aim = aimOf(P, f), along = o.av.x*f.u.x + o.av.y*f.u.y, assistK = 1 - params.aAssist/100;
   const con = quick ? floaterContest() : jumperContest(), c = con.c*far;   // at the rim a defender is a body and an arm, nothing else
   const clean = cleanLook(false, Math.max(o.v0, air))*form.jumper;
   const hangMs = t === null ? (o.hangMs || 0) : Math.max(0, t - C.IDEAL);            // past the top of the jump is a hang: it costs control
@@ -385,15 +379,14 @@ function shotAt(t, o) {
   const from = { pos: { x: o.ball.x, y: o.ball.y, z: o.ball.z }, form };
   const glass = glassAimFor(from), hs = handSpecs();
   const base = { ...from, player: { x: P.x, y: P.y }, contest: c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
-  const inp = o.perfect ? base : { ...base, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK*far, timingMs: eEff*far,
-                                   body: liftBody(f, o.av.x, o.av.y, (form.jumper + 0.6*form.floater)*assistK, 0) };
+  const inp = o.perfect ? base : { ...base, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK*far, timingMs: eEff*far };
   const sc = { form, dist: f.dist, q, move: o.v0, contest: c, clean, fadeIn: airScatter(air), bump: o.bump ? C.BUMP_IN : 0,
                extra: Math.hypot(fin.parts[1], fin.parts[2])*(o.foul ? 1.15 : 1) };
   // the same scatter by what it comes from, for the readout's bar: touch, placement and hang, movement, the defense
   const own = Math.sqrt((form.jumper*C.BAR_JUMPER**2 + form.floater*C.BAR_FLOATER**2)*(1 - params.bonus/100*q)**2 + near*fin.parts[0]**2);
   const moved = Math.sqrt(form.jumper*(0.0196*o.v0*o.v0 + airScatter(air)**2) + form.floater*0.0064*o.v0*o.v0 + near*fin.parts[2]**2);
   const parts = [own, Math.sqrt(near)*fin.parts[1], moved, Math.hypot((form.jumper*C.CONTEST_SIG + form.floater*C.FL_CONTEST_SIG)*c, sc.bump)];
-  return { inp, sc, hs, f, near, far, quick, e, eEff, q, line, form, air, aim, dr, assistK, con: { ...con, c }, clean, hangMs, glass,
+  return { inp, sc, hs, f, near, far, quick, e, eEff, q, line, form, air, along, aim, assistK, con: { ...con, c }, clean, hangMs, glass,
            sig: { ...NZX.scatterIn(sc), parts, limit: fin.limit } };
 }
 // What to call it, afterwards. A name for what was done, and nothing more.
@@ -405,7 +398,7 @@ function nameOf(s, dunk, upMs) {
   }
   if (s.quick) return "Floater";
   const fade = fadeOf(P.vx, P.vy, s.f);
-  return fade ? FADE_NAME[fade] : s.dr.vAlong > 4 ? "Runner" : shot.gatherSpeed > 6 ? "Pull-up jumper" : "Jump shot";
+  return fade ? FADE_NAME[fade] : s.along > 4 ? "Runner" : shot.gatherSpeed > 6 ? "Pull-up jumper" : "Jump shot";
 }
 
 // ---------- Contact ----------
@@ -531,7 +524,7 @@ function letGo() {
     if (ft) recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, kind === "layup", kind === "floater");
     fl.value = three ? 3 : 2;
     g.last = { ...common, kind, name: nameOf(s, false, shot.t), out, foul, odds, three, e: s.e, eEff: s.eEff, q: s.q, quick: s.quick, near: s.near,
-               aim: s.aim, dr: s.dr, con: s.con, sig: s.sig, glass: !!s.glass, assistK: s.assistK, fade: s.far > 0.5 && !s.quick && fadeOf(P.vx, P.vy, f),
+               aim: s.aim, con: s.con, sig: s.sig, glass: !!s.glass, assistK: s.assistK, fade: s.far > 0.5 && !s.quick && fadeOf(P.vx, P.vy, f),
                air: s.air, airIn: airScatter(s.air), hangMs: s.hangMs, line: s.line, shift: s.line - (s.quick ? C.FL_IDEAL : C.IDEAL),
                rimMode: params.rimOn ? R.mode : "off" };
   }
