@@ -44,8 +44,10 @@ const C = {
   BODY_R: 0.75, ARM_HIT: 0.3,       // a hand within this of the handler's center is on their body; within this of their off arm, on the arm
   REACH_V: 4,                       // ft/s: a hand that got there faster than this reached in. A hand that was already there did not
   HAND_OFF: 0.95,                   // the AI keeps its hand at least this far from the handler's center
-  HAND_V: 14, REACH_T: 0.25, REACH_CD: 2,     // the AI's reach for the ball: hand speed, how long it stays out, and the wait before another
-  LEFT_OPEN: [0.12, 1.2],           // s the AI must have seen the ball left open before it reaches: under its nose, and at the end of its reach
+  HAND_V: 14, REACH_T: 0.25,        // the AI's reach for the ball: hand speed, and how long it stays out
+  OPEN_NEAR: 0.1,                   // a ball under the AI's nose needs to have been left open for only this share of the time one at the end of its reach does
+  PULLUP_RESPECT: 0.75,             // how far the AI takes a standing handler in range for a shooter, 0 to 1. The same for everyone
+  BAR_JUMPER: 3.15 + 15*0.052, BAR_FLOATER: 3.5 + 20*0.055,   // in: the shooter's own share of the scatter, as the readout's bar draws it
   CONTACT_R: 1.9, FOUL_V: 3.5,      // a defender this close to a shooter and still coming at them this fast has run into them
   ARM_FOUL_R: 0.6,                  // a raised hand within this of a shooter's center is on their arms, not the ball (which leaves 0.7 ft out)
   GLASS_DEPTH: 0.4, GLASS_SIDE: 1.1,  // aiming at the glass: the cursor within this of the backboard's line, and at least this far to the side of the rim's center
@@ -79,7 +81,14 @@ function create(opts = {}) {
     seed: (opts.seed ?? 1) | 0,                              // the game's random stream
     forced: [],                                              // values the next random rolls will take, for tests
     prev: [{ shot: false, gather: false }, { shot: false, gather: false }],   // each side's buttons as of the last tick, to see presses and releases
-    params: { rating: 80, fadeR: 70, handle: 80, dQuick: 70, dSteal: 60, tAssist: 15, bonus: 30, aAssist: 40, drift: 1, finish: 80, floater: 75, dunk: 75, stepUp: 50,
+    // Settings, the same for every player. None of them is a rating: each is the thing itself, in its own units.
+    //   tAssist ms, bonus %, aAssist %, drift x       the shot: free timing error, what a perfect release tightens, aim help, how much momentum carries
+    //   fadeIn in                                      scatter a straight fade adds (a sideways one, a quarter more)
+    //   layupSpeed ft/s                                the speed a layup can be taken at under control
+    //   readMs ms, aiSpeed ft/s                        the AI on the ball: how old its picture of the handler is, and its top speed
+    //   reachWait s, reachEvery s                      the AI's reach: how long the ball must have been left open at the end of its reach, and the wait before another
+    //   stepUp %, sag ft, react ms, length x           the AI's help, its cushion, how late it sees a shot; and the on-ball defender's contest reach
+    params: { tAssist: 15, bonus: 30, aAssist: 40, drift: 1, fadeIn: 2, layupSpeed: 11.4, readMs: 260, aiSpeed: 13, reachWait: 1.8, reachEvery: 3, stepUp: 50,
               defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 },
     P: { x: 25, y: 26, vx: 0, vy: 0, h: 0, jumpT: -1, land: 0 },   // the ball handler. h, jumpT, land: a jump for a loose ball, as for a defender
     D: makeDef(25, 20),                                      // on-ball defender
@@ -264,7 +273,7 @@ function driftOf(vx, vy, f) {
 }
 
 // ---------- Context: what does a click do right now? ----------
-const shotContext = shift => SIT.shotContext(P, hold, shift, params.dunk);
+const shotContext = shift => SIT.shotContext(P, hold, shift);
 
 // ---------- Jumpers ----------
 function inputDir() {
@@ -284,7 +293,7 @@ function fadeIntent(f) {
 }
 // The later release offsets the depth part of the fade exactly; the sideways part is left for the cursor.
 const fadeShiftFor = along => Math.round(C.DRIFT_DEP*params.drift*C.FADE_SPEED*along/C.KT);
-const fadeSigmaFor = type => (0.5 + (95 - params.fadeR)*0.06)*(type === "back" ? 1 : 1.25);
+const fadeSigmaFor = type => params.fadeIn*(type === "back" ? 1 : 1.25);
 const FADE_NAME = { back: "Fadeaway", left: "Side fade left", right: "Side fade right" };
 function commitFade(fi) {
   const along = shot.bvx*fi.x + shot.bvy*fi.y;   // momentum already heading the fade's way folds into it
@@ -297,7 +306,7 @@ const jumperContest = () => SIT.jumperContest(P, defenders());
 function releaseQ(e) { return clamp(1 - Math.max(0, Math.abs(e) - C.PERFECT_MS)/40, 0, 1); }
 // Component sizes for the breakdown bar in the live readout. The scatter a shot is resolved with comes from the noise model.
 function jumperParts(distFt, moveSpeed, c, q, fs = 0) {
-  const r = (3.15 + (95 - params.rating)*0.052)*(1 - params.bonus/100*q);
+  const r = C.BAR_JUMPER*(1 - params.bonus/100*q);
   return [r, 0.10*distFt, Math.hypot(0.14*moveSpeed, fs), C.CONTEST_SIG*c];
 }
 const cleanLook = (fade, moveSpeed) => SIT.cleanLook(P, defenders(), fade, moveSpeed);
@@ -315,7 +324,7 @@ function bankOf(x, y) {
 const rimContest = side => SIT.rimContest(P, defenders(), side);
 function finishSigma(gatherSpeed, vPerpG, side, hangMs, c) {
   const euro = shot.state === "shooting" ? (shot.euro || 0) : hold.state === "steps" ? hold.euro : 0;
-  return SIT.finishScatter({ speed: gatherSpeed, vPerp: vPerpG, side, hangMs, euro, contest: c, finishing: params.finish });
+  return SIT.finishScatter({ speed: gatherSpeed, vPerp: vPerpG, side, hangMs, euro, contest: c, limit: params.layupSpeed });
 }
 // A shooting foul is contact, worked out at the release from where the defenders and their arms are:
 //   "Ran into the shooter"   a defender right on them and still coming
@@ -366,7 +375,7 @@ function dunkShot(f, hs) {
 const floaterContest = () => SIT.floaterContest(P, defenders());
 function floaterQ(e) { return clamp(1 - Math.max(0, Math.abs(e) - C.FL_PERFECT)/40, 0, 1); }
 function floaterParts(distFt, moveSpeed, c, q) {                           // for the breakdown bar, like jumperParts
-  const r = (3.5 + (95 - params.floater)*0.055)*(1 - params.bonus/100*q);   // touch is the cost
+  const r = C.BAR_FLOATER*(1 - params.bonus/100*q);                          // touch is the cost
   return [r, 0.10*distFt, 0.08*moveSpeed, C.FL_CONTEST_SIG*c];             // built for moving, so movement costs little
 }
 function floaterBias(e, f, vx, vy) {
@@ -506,12 +515,11 @@ function defHand() {
   const tx = P.x - D.x, ty = P.y - D.y, tl = Math.hypot(tx, ty) || 1, reach = Math.min(0.85 + 0.75*D.hand, Math.max(0.3, tl - C.HAND_OFF));
   return { x: D.x + tx/tl*reach, y: D.y + ty/tl*reach };
 }
-const stealFactor = () => clamp(1 + (params.dSteal - params.handle)/60, 0.3, 2);
 const tightness = () => drib.hold;   // 1 = ball pulled in tight; follows the cursor continuously
 // What a defender reads as a pull-up: a shooter in range, slowing down, ball held up and tight.
 function pullUpThreat() {
   const f = frame(P), sp = Math.hypot(P.vx, P.vy);
-  const respect = clamp((params.rating - 50)/40, 0, 1);
+  const respect = C.PULLUP_RESPECT;
   const range = f.dist <= 27 ? 1 : clamp(1 - (f.dist - 27)/5, 0, 1);
   const slow = 1 - clamp(sp/C.DRIB_SPEED, 0, 1);
   return respect*range*slow*(0.35 + 0.65*tightness());
@@ -736,7 +744,7 @@ function perceived(lag) {
   return seen[0];
 }
 // reaction lag: quicker defenders read sooner, better handlers are harder to read
-const defLag = () => clamp(0.32 - (params.dQuick - 40)*0.0025 + (params.handle - 70)*0.0015, 0.12, 0.4);
+const defLag = () => clamp(params.readMs/1000, 0.12, 0.4);
 
 function stepToward(def, tx, ty, maxS, acc, dt) {
   const dx = tx - def.x, dy = ty - def.y, dd = Math.hypot(dx, dy);
@@ -873,7 +881,7 @@ function update(dt) {
       D.shade += (shadeT - D.shade)*Math.min(1, dt*8);
       D.threat = s0.dead ? 0.8 : s0.threat;
       tx = ex + pf.u.x*cushion + pf.r.x*D.shade; ty = ey + pf.u.y*cushion + pf.r.y*D.shade;
-      maxS = C.DSPEED + (params.dQuick - 70)*0.04; acc = C.DACC + (params.dQuick - 70)*0.4;
+      maxS = params.aiSpeed; acc = C.DACC + (params.aiSpeed - C.DSPEED)*10;      // a quicker defender also gets going sooner
     }
     if (D.jumpT < 0) stepToward(D, tx, ty, maxS, acc, dt);
     moveDef(D, dt);
@@ -975,7 +983,7 @@ function aiHand(d, dt, reaches) {
   if (d.reachCd > 0) d.reachCd -= dt;
   if (reaches && d.reach) {                                            // going for it: the hand is out at the spot for a moment, then comes back
     d.reach.t += dt;
-    if (d.reach.t >= C.REACH_T) { d.reach = null; d.reachCd = C.REACH_CD/stealFactor(); }
+    if (d.reach.t >= C.REACH_T) { d.reach = null; d.reachCd = params.reachEvery; }
     else { const rx = d.reach.x - d.x, ry = d.reach.y - d.y, rl = Math.hypot(rx, ry) || 1, r = Math.min(rl, 1.6); gx = d.x + rx/rl*r; gy = d.y + ry/rl*r; }
   } else if (reaches && !(d.reachCd > 0) && d.jumpT < 0 && shot.state === "idle" && ballFree() && graceOver()) {
     // It acts on what it saw a reaction time ago: a ball within reach, with neither an arm nor the handler's body
@@ -989,7 +997,7 @@ function aiHand(d, dt, reaches) {
       open = Math.hypot(d.hx + ax*t - was.x, d.hy + ay*t - was.y) >= C.BODY_R + 0.1;
     }
     d.openT = open ? (d.openT || 0) + dt : 0;
-    if (open && d.openT >= (C.LEFT_OPEN[0] + (C.LEFT_OPEN[1] - C.LEFT_OPEN[0])*clamp((far - 1)/1.15, 0, 1))/stealFactor())
+    if (open && d.openT >= params.reachWait*(C.OPEN_NEAR + (1 - C.OPEN_NEAR)*clamp((far - 1)/1.15, 0, 1)))
       { d.reach = { t: 0, x: was.bx + (P.x - was.x), y: was.by + (P.y - was.y) }; d.openT = 0; }
   } else d.openT = 0;
   // the hand travels; it doesn't jump
