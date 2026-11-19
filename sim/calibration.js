@@ -2,7 +2,7 @@
 const CALIBRATION = {
  "MULT": {
   "jumper": 1.23238525390625,
-  "floater": 1.49967041015625,
+  "floater": 1.4984252929687498,
   "layup": 1.74371337890625
  },
  "DIST_IN": 0,

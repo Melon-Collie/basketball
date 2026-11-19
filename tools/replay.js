@@ -61,16 +61,16 @@ async function session(file) {
   // 3. on-ball defender off so the lane is open: drive and go up early for a floater
   await page.locator('#defOn').uncheck(); await at(0.5, 0.3); await step(5);
   for (const frames of [26, 30]) { await retreat(); await page.keyboard.down('KeyW'); await until(/Floater/); await snap('floater ready'); await shoot(frames); await page.keyboard.up('KeyW'); await step(220); await snap(`after floater ${frames}`); }
-  // 4. keep driving and go up late: layups let go on the way up and on the way down, to either side.
+  // 4. keep driving and go up late: finishes let go on the way up and on the way down, with the cursor to either side.
   //    The rim protector is told to stay home from here on, so a step-up can't stop the drive short of the rim.
   await page.locator('#stepUp').fill('0');
-  for (const [frames, fx] of [[20, 0.5], [44, 0.42], [23, 0.58]]) { await retreat(); await at(fx, 0.3); await page.keyboard.down('KeyW'); await until(/Layup/); await snap('layup ready'); await shoot(frames); await page.keyboard.up('KeyW'); await step(220); await snap(`after layup ${frames}`); }
-  // 5. the same drive let go at the top, by the rim: dunks against the rim protector
-  for (let i = 0; i < 3; i++) { await retreat(); await at(0.5, 0.3); await page.keyboard.down('KeyW'); await until(/Layup/); await snap('dunk ready'); await shoot(31); await page.keyboard.up('KeyW'); await step(220); await snap(`after dunk ${i}`); }
+  for (const [frames, fx] of [[20, 0.5], [44, 0.42], [23, 0.58]]) { await retreat(); await at(fx, 0.3); await page.keyboard.down('KeyW'); await until(/finish/); await snap('layup ready'); await shoot(frames); await page.keyboard.up('KeyW'); await step(220); await snap(`after layup ${frames}`); }
+  // 5. the same drive with the cursor on the rim, let go at the top: dunk attempts against the rim protector
+  for (let i = 0; i < 3; i++) { await retreat(); await at(0.5, 0.3); await page.keyboard.down('KeyW'); await until(/finish/); await snap('dunk ready'); await aimAtRim(); await shoot(31); await page.keyboard.up('KeyW'); await step(220); await snap(`after dunk ${i}`); }
   // 6. rim protector off too: clean dunks
   await page.locator('#rimOn').uncheck();
   for (let i = 0; i < 3; i++) {
-    await retreat(); await at(0.5, 0.3); await page.keyboard.down('KeyW'); await until(/Layup/);
+    await retreat(); await at(0.5, 0.3); await page.keyboard.down('KeyW'); await until(/finish/); await aimAtRim();
     await shoot(31); await page.keyboard.up('KeyW');
     await step(12); await snap(`dunk in flight ${i}`); await step(40); await snap(`dunk bounce ${i}`); await step(170); await snap(`after open dunk ${i}`);
   }

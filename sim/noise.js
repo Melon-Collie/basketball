@@ -19,9 +19,23 @@ const NOISE = {
                                                // a hard clank off the rim's edge, never clean past it. Airballs come from mistakes.
 };
 
-// Today's components, in inches: { lat, dep }
+// Scatter at the rim, in inches: { lat, dep }.
+// There are three ways a ball is let go, and each scatters in its own way:
+//   jumper    set, at the top of the jump: the tightest from range, and it pays for moving
+//   floater   pushed up early in the jump: looser, but built for moving
+//   layup     at the rim: tight, and what it pays for is speed, awkward angles and hanging
+// A shot is one of them (s.kind), or, as the game plays it, a mix (s.form: a weight for each, adding to 1) that
+// follows from how far out it was let go and when. Mixed, the variances add by weight.
+const FORMS = ["jumper", "floater", "layup"];
 function scatterIn(s) {
-  const q = s.q ?? 1, kind = s.kind || "jumper";
+  if (!s.form) return scatterOne(s.kind || "jumper", s);
+  let lat = 0, dep = 0;
+  for (const k of FORMS) { const w = s.form[k] || 0; if (w > 0) { const o = scatterOne(k, s); lat += w*o.lat*o.lat; dep += w*o.dep*o.dep; } }
+  return { lat: Math.sqrt(lat), dep: Math.sqrt(dep) };
+}
+// s.bump: inches added to any of them by a body met on the way up.
+function scatterOne(kind, s) {
+  const q = s.q ?? 1;
   let lat;
   if (kind === "floater") {
     const r = NOISE.FLOATER_FLOOR_IN*(1 - NOISE.BONUS*q);
@@ -32,21 +46,23 @@ function scatterIn(s) {
     const r = NOISE.FLOOR_IN*(1 - NOISE.BONUS*q);
     lat = Math.hypot(r, NOISE.DIST_IN*s.dist, Math.hypot(NOISE.MOVE_IN*(s.move || 0), s.fadeIn || 0), NOISE.CONTEST_IN*(s.contest || 0));
   }
-  lat *= NOISE.MULT[kind]*(1 - NOISE.PREMIUM*(s.clean || 0)*q);
+  lat = Math.hypot(lat, s.bump || 0)*NOISE.MULT[kind]*(1 - NOISE.PREMIUM*(s.clean || 0)*q);
   return { lat, dep: lat*NOISE.DEP_RATIO[kind] };
 }
 
 // Local sensitivities of a launch: inches at the rim per radian of direction and per unit of speed fraction
+// null if the ball cannot get there from where it is: a launch that has no path has nothing to be sensitive to.
 function sensitivity(inp) {
-  const base = LLn.rimPlaneOffset(LLn.buildLaunch(inp), inp.player);
-  const a = LLn.rimPlaneOffset(LLn.buildLaunch({ ...inp, noise: { dv: 0, de: 0, da: 0.1 } }), inp.player);
-  const v = LLn.rimPlaneOffset(LLn.buildLaunch({ ...inp, noise: { dv: 0.002, de: 0, da: 0 } }), inp.player);
+  const at = noise => { const L = LLn.buildLaunch(noise ? { ...inp, noise } : inp); return L && LLn.rimPlaneOffset(L, inp.player); };
+  const base = at(null), a = at({ dv: 0, de: 0, da: 0.1 }), v = at({ dv: 0.002, de: 0, da: 0 });
+  if (!base || !a || !v) return null;
   return { latPerRad: (a.lat - base.lat)/(0.1*Math.PI/180), depPerFrac: (v.dep - base.dep)/0.002 };
 }
 
 // Draw one shot's launch noise. z = two standard normals (lateral, depth); clean perfect shots get capped.
 function sampleNoise(inp, sc, z) {
   const sens = sensitivity(inp);
+  if (!sens || !sens.latPerRad || !sens.depPerFrac) return { dv: 0, de: 0, da: 0 };
   const shape = (sc.clean || 0)*(sc.q ?? 1);
   let zl = z[0], zd = z[1];
   if (shape > 0.05) { const zr = Math.hypot(zl, zd), cap = NOISE.CAP/shape; if (zr > cap) { zl *= cap/zr; zd *= cap/zr; } }
@@ -63,9 +79,9 @@ function gaussN(r) { const a = Math.max(1e-9, r()), b = r(); return Math.sqrt(-2
 const NEAR_MISS_IN = 11;
 function makeRate(situ, n = 3000, seed = 1) {
   const R = PLn.PHYS.RIM, r = rngN(seed), player = situ.player || { x: R.x, y: R.y + situ.dist };
-  const base = { kind: situ.kind || "jumper", player, contest: situ.contest || 0, timingMs: situ.timingMs || 0, relZ: situ.relZ };
-  const sc = { kind: base.kind, dist: situ.dist, q: situ.q ?? 1, move: situ.move || 0, contest: situ.contest || 0,
-               clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0 };
+  const base = { kind: situ.kind || "jumper", form: situ.form, pos: situ.pos, player, contest: situ.contest || 0, timingMs: situ.timingMs || 0, relZ: situ.relZ };
+  const sc = { kind: base.kind, form: situ.form, dist: situ.dist, q: situ.q ?? 1, move: situ.move || 0, contest: situ.contest || 0,
+               clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0, bump: situ.bump || 0 };
   let made = 0, near = 0, misses = 0, air = 0, blocks = 0; const labels = {};
   for (let i = 0; i < n; i++) {
     const noise = sampleNoise(base, sc, [gaussN(r), gaussN(r)]);
@@ -82,5 +98,5 @@ function makeRate(situ, n = 3000, seed = 1) {
   return { rate: made/n, blocks: blocks/n, nearOfMisses: misses ? near/misses : 1, airballs: air, labels };
 }
 
-if (typeof module !== "undefined") module.exports = { NOISE, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };
-else window.NoiseLib = { NOISE, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };
+if (typeof module !== "undefined") module.exports = { NOISE, FORMS, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };
+else window.NoiseLib = { NOISE, FORMS, scatterIn, sensitivity, sampleNoise, makeRate, rngN, gaussN };

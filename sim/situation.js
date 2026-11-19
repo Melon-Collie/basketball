@@ -1,4 +1,5 @@
-// The shot situation: what a click would produce, how contested the shot is, and where the defenders' hands are.
+// The shot situation: what a defender takes a jump for, how contested a shot from range is, and where the defenders'
+// hands are. At the rim there is no contest to work out: a defender there is a body and an arm, and the game has both.
 // Pure functions of explicit state, so the rules can be tested and measured without the game loop.
 // Units: feet, seconds (ms where noted). x/y on the court, as in physics.js.
 //
@@ -24,7 +25,6 @@ const SITU = {
   ARM: 2.6,                        // shoulder to hand. Standing reach is the arm straight up, so the shoulder is this far below it
   ARM_FOR: 0.6,                    // s after the release that an arm is in the shot. Past that nobody knows where the defender will be
   // finishing
-  RIM_CONTEST_SIG: 3.5,
   FINISH_FLOOR: 1.8 + 15*0.045,    // in: the part of a layup's scatter nothing takes away, as shown in the readout
 };
 const clampS = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -88,23 +88,6 @@ function floaterContestOne(p, f, def) {
 }
 function floaterContest(p, defs) { const f = frame(p); return combine(defs.map(d => floaterContestOne(p, f, d))); }
 
-// side: -1 = finishing on the left side of the rim, +1 = right.
-function rimContestOne(p, f, def, side) {
-  const rx = p.x + f.u.x*1.2, ry = p.y + f.u.y*1.2;              // where the ball goes up
-  const d = Math.hypot(def.x - rx, def.y - ry);
-  const tx = def.x - p.x, ty = def.y - p.y, dl = Math.hypot(tx, ty) || 0.001;
-  const cos = (tx*f.u.x + ty*f.u.y)/dl;
-  const prox = clampS((5.5 - d)/4, 0, 1);
-  const inline = 0.35 + 0.65*clampS(cos, 0, 1);                    // chasing from behind is weaker
-  const speed = Math.hypot(def.vx, def.vy);
-  const set = 1 - 0.35*clampS(speed/12, 0, 1);                      // planted beats arriving late
-  const reach = def.land > 0 ? 0.3 : 0.45 + 0.55*def.h;           // standing vs in the air vs just landed
-  const lat = tx*f.r.x + ty*f.r.y, soft = lat/(Math.abs(lat) + 0.6);
-  const sideM = 1 - 0.4*Math.max(0, -side*soft) + 0.2*Math.max(0, side*soft); // shield vs into them
-  return { c: clampS(prox*inline*set*reach*sideM*def.len*1.15, 0, 1), cos, d, speed, lat };
-}
-function rimContest(p, defs, side) { const f = frame(p); return combine(defs.map(d => rimContestOne(p, f, d, side))); }
-
 // A clean look: nobody within ~8 ft, feet set, not a fade. Ramps in from 5 ft and from 3 ft/s.
 function cleanLook(p, defs, fade, moveSpeed) {
   if (fade) return 0;
@@ -114,18 +97,18 @@ function cleanLook(p, defs, fade, moveSpeed) {
 }
 
 // ---------- Finishing scatter ----------
-// The landing-point components (inches at the rim) for a layup. The physics takes the angle, hang and speed parts
-// as extra scatter; lat and dep are only shown in the live readout. limit is the speed, in ft/s, that a layup can
-// be taken at under control; every foot per second over it costs.
+// What a ball let go at the rim pays for, in inches at the rim: [the floor nothing takes away, where the ball was
+// held and how long it was hung on to, speed]. side: -1 to 1, how far to the shooter's left or right of their line
+// to the rim the ball was held. limit is the speed, in ft/s, that a finish can be taken at under control; every foot
+// per second over it costs.
 function finishScatter(s) {
   const r = SITU.FINISH_FLOOR, limit = s.limit;
   const sp = 0.35*Math.max(0, s.speed - limit);
   const vp = clampS(s.vPerp/6, -1, 1);
-  const turn = 2.2*Math.max(0, -s.side*vp) + 0.8*Math.abs(s.side) + 0.6*(s.euro || 0);   // cutting back, awkward angles, euro footwork
+  const turn = 2.2*Math.max(0, -s.side*vp) + 0.8*Math.abs(s.side) + 0.6*(s.euro || 0);   // the ball held across your momentum, held out wide, euro footwork
   const hang = 0.9*(s.hangMs || 0)/100;
-  const ct = SITU.RIM_CONTEST_SIG*(s.contest || 0);
-  const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang + ct*ct);
-  return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang), sp, ct], limit };
+  const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang);
+  return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang), sp], limit };
 }
 
 // ---------- Hands ----------
@@ -163,6 +146,6 @@ function handPath({ r, hx, hy, vx, vy, z0, jumpStart, sx, sy, sz }) {
 const handPaths = (p, defs, shotT, own) => handSpecs(p, defs, shotT, own).map(handPath);
 
 const SIT_EXPORTS = { SITU, frame, isThree, shotContext, combine, jumperContestOne, jumperContest, floaterContestOne, floaterContest,
-                       rimContestOne, rimContest, cleanLook, finishScatter, handSpecs, handPath, handPaths };
+                       cleanLook, finishScatter, handSpecs, handPath, handPaths };
 if (typeof module !== "undefined") module.exports = SIT_EXPORTS;
 else window.SituationLib = SIT_EXPORTS;

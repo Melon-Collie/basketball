@@ -136,11 +136,12 @@ dd small{color:var(--muted)}
       <div class="court-box"><canvas id="court" tabindex="0" aria-label="Half court. Move with W A S D, aim with the mouse, press Space to jump and click to shoot."></canvas></div>
       <p class="help"><strong>The game:</strong> two sides take turns with the ball against the same defense, first to 21. You have 14 seconds to get a shot off. A miss is a live ball: run to it before a defender does and you keep the possession. A foul on a shot sends you to the line. Untick Game rules under Tuning for free shooting.<br>
       <strong>Triple threat:</strong> every possession, and every rebound you catch, starts with the ball in your hands and your dribble still to come. From there you can go up and shoot, pump fake, jab or pivot with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> (they move your free foot, not you), or press <kbd>Shift</kbd> to put the ball on the floor and go. Once you pick it up again the dribble is gone.<br>
-      <strong>Shooting:</strong> <kbd>Space</kbd> jumps and a left click lets the ball go. Every shot is the same jump: your legs load for a moment, then you are in the air for about 0.7 s. The meter’s line is where to let go: for a jump shot, the top of the jump. Come down still holding the ball and it is travelling. You carry half the speed you arrived with into the air, plus up to 5 ft/s the way you hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> as you take off, and nothing steers you after that. So hold away from the rim for a fadeaway, toward it for a runner, or against your own momentum to stop. Moving toward or away from the rim moves the release line (earlier going in, later fading), and the meter shows where it is; moving sideways pushes the ball sideways, so aim against it. A click with your feet on the floor is a pump fake: the ball goes up, you stay down, your dribble is dead, and a defender who bit may be in the air. To bank a shot, have the cursor on the backboard, clear of the rim, when you jump: the marker turns green where a bank can go in from your spot. A clean look (nobody within about 8 ft, feet set, no lean) with a perfect release goes in about 60% of the time, and its misses rim out instead of clanging.<br>
-      <strong>Finishes:</strong> drive at the rim and jump inside about 7 ft; lean into it to get there. The cursor picks which side of the rim you finish on; finish away from the defender to shield the ball. When you let go is up to you: on the way up beats a shot blocker to it, but the ball leaves lower, and too low from right under the rim hits the front of it; the top is the cleanest; on the way down waits a blocker out, at the cost of control. Let go with your hand above the rim and the rim within reach and it is a dunk. That takes a running jump, and being near the top of it.<br>
+      <strong>Shooting:</strong> <kbd>Space</kbd> jumps and a left click lets the ball go. Every shot is the same jump: your legs load for a moment, then you are in the air for about 0.7 s. Come down still holding the ball and it is travelling. You carry half the speed you arrived with into the air, plus up to 5 ft/s the way you hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> as you take off, and nothing steers you after that. So hold away from the rim for a fadeaway, toward it for a runner, or against your own momentum to stop. A click with your feet on the floor is a pump fake: the ball goes up, you stay down, your dribble is dead, and a defender who bit may be in the air.<br>
+      <strong>The two lines:</strong> away from the rim, the meter has two lines, and the ball has to be let go on one of them. The top of the jump is the set shot: the tightest. The quick line, on the way up, gets the ball off before a shot blocker is there, with more arc and less touch: off a drive that is a floater. Moving toward or away from the rim moves both lines (earlier going in, later fading), and the meter shows where they are. Moving sideways pushes the ball sideways, so aim against it. To bank a shot, have the cursor on the backboard, clear of the rim, when you jump: the marker turns green where a bank can go in.<br>
+      <strong>At the rim:</strong> inside about 4 ft your hand finds the rim, so the lines fade out and the cursor is free: in the air it is the ball. Close to your body, it puts the ball there on a straight arm, to either side of you, behind you, or straight up, and the further out you hold it the lower it is. Out at the rim or beyond, the ball is up in a shooting form. Nothing protects it but where it is: a defender is a body and an arm, and the ball has to get past the arm. Let go on the way up to beat a shot blocker to it, at the top, or on the way down to wait them out, at the cost of control. Get the ball over the rim, near the top of a running jump right at the basket, and it is a dunk. Flying into a defender who was set is a charge; into one who was not, a bump that costs the shot.<br>
       <strong>Dribbling:</strong> the ball bounces toward your cursor. Keep it on the side away from the defender; the farther out the cursor, the longer and more exposed the dribble. Switch sides for a crossover. Slow down with the cursor pulled in tight and the ball hangs up like a pull-up; a defender who respects your shot steps up, and that’s the moment to explode past. Nothing is a button: the defender just reacts to what they saw a moment ago.<br>
       <strong>Gather:</strong> press <kbd>Shift</kbd> to pick up your dribble. On the move you get two gather steps: each foot follows WASD until it plants (a ghost circle shows where it will land), so you can steer it mid-step. Changing direction on the second step is a euro; letting go of WASD on the second step is a jump stop. Jump whenever you want to go up. Gathered while stopped, your dribble is dead: the cursor holds the ball and turns your body around the pivot foot, and WASD moves your free foot. The first foot you move is the one on the ball’s side. You can’t dribble again until you shoot.<br>
-      <strong>Floaters:</strong> jump while driving from about 7 to 14 ft. It’s let go on the way up, well before the top, with a lenient release and an arc that clears a rim protector who stays home: quick enough to beat a shot blocker, at the cost of touch. Keep driving instead and you get a layup.</p>
+      <strong>In between,</strong> from about 4 to 8 ft, a shot is part one and part the other: aim and timing matter less the closer you are.</p>
       <div class="stats" aria-live="polite">
         <div class="stat"><div class="v" id="sFG">0/0<small>–</small></div><div class="k">Field goals</div></div>
         <div class="stat"><div class="v" id="s3">0/0<small>–</small></div><div class="k">Threes</div></div>
@@ -194,7 +195,7 @@ dd small{color:var(--muted)}
       <section>
         <h2>Current look</h2>
         <dl>
-          <dt>A click now gives</dt><dd id="lKind">–</dd>
+          <dt>A jump from here</dt><dd id="lKind">–</dd>
           <dt>Distance</dt><dd id="lDist">–</dd>
           <dt>Contest right now</dt><dd id="lCon">–</dd>
           <dt>Rim protector</dt><dd id="lRim">–</dd>
@@ -204,10 +205,10 @@ dd small{color:var(--muted)}
         </dl>
         <div class="bar" id="lBar"><span></span><span></span><span></span><span></span></div>
         <div class="legend">
-          <span><i style="background:var(--seg1)"></i><b id="lg1">Shooter</b></span>
-          <span><i style="background:var(--seg2)"></i><b id="lg2">Distance</b></span>
+          <span><i style="background:var(--seg1)"></i><b id="lg1">Touch</b></span>
+          <span><i style="background:var(--seg2)"></i><b id="lg2">Placement and hang</b></span>
           <span><i style="background:var(--seg3)"></i><b id="lg3">Movement</b></span>
-          <span><i style="background:var(--seg4)"></i><b id="lg4">Contest</b></span>
+          <span><i style="background:var(--seg4)"></i><b id="lg4">Defense</b></span>
         </div>
         <div class="odds">
           <div><div class="v" id="lCeil">–</div><div class="k" id="lCeilK">Ceiling, perfect input</div></div>
@@ -500,22 +501,14 @@ function draw() {
   const kind = live ? live.cx.kind : "jumper";
   const ax = G.mouse.x - P.x, ay = G.mouse.y - P.y, al = Math.hypot(ax, ay);   // the ball handler's cursor, whoever that is
 
-  if (shot.state !== "flight") {
-    if (shot.state === "shooting" && (kind === "jumper" || kind === "floater") && al > 0.5) {   // aim guide only while in the air with the ball
-      const mx = P.x + ax/al*f.dist, my = P.y + ay/al*f.dist, [msx, msy] = S(mx, my);
-      ctx.save(); ctx.strokeStyle = T.courtline; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1, dpr*1.2);
-      ctx.setLineDash([ppf*0.5, ppf*0.5]); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(msx, msy); ctx.stroke(); ctx.setLineDash([]);
-      ctx.globalAlpha = 0.95; ctx.lineWidth = Math.max(1.5, dpr*1.6);
-      const s = ppf*0.45;
-      ctx.beginPath(); ctx.moveTo(msx - s, msy); ctx.lineTo(msx + s, msy); ctx.moveTo(msx, msy - s); ctx.lineTo(msx, msy + s); ctx.stroke();
-      ctx.restore();
-    } else if ((kind === "layup" || kind === "dunk") && live) {
-      // finish side indicator on the rim
-      const s = live.side, ang0 = Math.atan2(-f.u.y, -f.u.x);       // angle from rim toward the player
-      const centerAng = ang0 - s*Math.PI/2*0.9;                       // shooter's right is clockwise from them
-      ctx.save(); ctx.strokeStyle = T.courtline; ctx.lineWidth = ppf*0.32; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.arc(hx, hy, 1.15*ppf, centerAng - 0.7, centerAng + 0.7); ctx.stroke(); ctx.restore();
-    }
+  if (shot.state === "shooting" && live && live.near < 0.75 && al > 0.5) {   // aim guide: only in the air with the ball, and only where aim counts
+    const mx = P.x + ax/al*f.dist, my = P.y + ay/al*f.dist, [msx, msy] = S(mx, my);
+    ctx.save(); ctx.strokeStyle = T.courtline; ctx.globalAlpha = 0.55*(1 - live.near); ctx.lineWidth = Math.max(1, dpr*1.2);
+    ctx.setLineDash([ppf*0.5, ppf*0.5]); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(msx, msy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 0.95*(1 - live.near); ctx.lineWidth = Math.max(1.5, dpr*1.6);
+    const s = ppf*0.45;
+    ctx.beginPath(); ctx.moveTo(msx - s, msy); ctx.lineTo(msx + s, msy); ctx.moveTo(msx, msy - s); ctx.lineTo(msx, msy + s); ctx.stroke();
+    ctx.restore();
   }
 
   if (live && live.con.c > 0.02) {
@@ -544,7 +537,11 @@ function draw() {
   } else if (shot.state === "idle" && hold.state !== "none") tag(hold.state === "steps" ? "GATHER" : hold.live ? "TRIPLE THREAT" : "DEAD BALL", px, py + ppf*3.6, hold.live ? "#2A4C70" : "#5B5F66");   // lower, clear of the feet
 
   if (shot.state === "shooting") {
-    drawBall(P.x + f.u.x*0.7, P.y + f.u.y*0.7, 2 + Math.min(shot.t, C.LOAD)/C.LOAD + 2*ph, 1);   // up over the head as the legs load, then up with the jump
+    // in the air the ball is in the hand, and the hand is where the cursor has it: an arm from the body out to it
+    const b = GM.airBall(G), [bx, by] = S(b.x, b.y), up = (b.z - 5.5)*Math.min(1, shot.t/C.LOAD);
+    ctx.save(); ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(px, py - ph*ppf*1.1); ctx.lineTo(bx, by - up*ppf*0.45); ctx.stroke(); ctx.restore();
+    drawBall(b.x, b.y, up, 1);
   }
   if (shot.state === "idle" && ballFree()) { const b = hold.state === "none" ? dribbleBallPos() : heldBallPos(); drawBall(b.x, b.y, b.h, 1); }
   nudge = null;                                          // a ball out of the hands is nobody's
@@ -599,34 +596,38 @@ function draw() {
     mx = cx + gap + mw + ppf*0.3 <= court.width ? cx + gap : cx - gap - mw;
     mtop = clamp(cy - mh*line, ppf*0.3, Math.max(ppf*0.3, court.height - mh - ppf*0.3));
   };
-  // One meter, because it is one jump whatever the shot. It fills from Space until the feet come down; the line is
-  // where to let go. The pale strip at the bottom is the legs loading, when there is nothing to let go yet.
+  // One meter, because it is one jump whatever the shot. It fills from Space until the feet come down. Away from the
+  // rim it has two lines, the quick one and the top of the jump, and the ball has to go on one of them; near the rim
+  // they fade out, and what is left is the top of the jump and, past it, the hang. The pale strip at the bottom is the
+  // legs loading, when there is nothing to let go yet.
   const up = shot.state === "shooting", flash = G.meterFlash;
-  const mKind = up ? shot.kind : flash ? flash.kind : null, timed = mKind === "jumper" || mKind === "floater";
-  const MT = { ideal: up ? shot.line : flash ? flash.line : C.IDEAL, max: C.LOAD + 2*C.RISE, perf: mKind === "floater" ? C.FL_PERFECT : C.PERFECT_MS };
-  const showT = up ? shot.t : flash ? MT.ideal + flash.e : null;
-  if (showT !== null) {
-    place(1 - MT.ideal/MT.max);
+  if (up || flash) {
+    const lines = up ? shot.lines : flash.lines, near = up ? (live ? live.near : 0) : flash.near, far = 1 - near;
+    const max = C.LOAD + 2*C.RISE, showT = up ? shot.t : flash.at;
+    place(1 - lines.top/max);
     const alpha = up ? 1 : Math.min(1, flash.t/0.3);
-    const yOf = t => mtop + mh*(1 - clamp(t, 0, MT.max)/MT.max);
+    const yOf = t => mtop + mh*(1 - clamp(t, 0, max)/max);
     ctx.save(); ctx.globalAlpha = alpha;
     ctx.fillStyle = "rgba(20,32,43,.75)"; ctx.fillRect(mx, mtop, mw, mh);
     ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = alpha*0.16; ctx.fillRect(mx, yOf(C.LOAD), mw, mtop + mh - yOf(C.LOAD));
-    const dz = params.tAssist + MT.perf;
-    if (timed) {
-      ctx.fillStyle = T.make; ctx.globalAlpha = alpha*0.35; ctx.fillRect(mx, yOf(MT.ideal + dz), mw, yOf(MT.ideal - dz) - yOf(MT.ideal + dz));
-      ctx.globalAlpha = alpha; ctx.fillRect(mx, yOf(MT.ideal + MT.perf), mw, yOf(MT.ideal - MT.perf) - yOf(MT.ideal + MT.perf));
+    for (const [at, perf] of [[lines.quick, C.FL_PERFECT], [lines.top, C.PERFECT_MS]]) {
+      const dz = params.tAssist + perf;
+      ctx.fillStyle = T.make; ctx.globalAlpha = alpha*0.35*far; ctx.fillRect(mx, yOf(at + dz), mw, yOf(at - dz) - yOf(at + dz));
+      ctx.globalAlpha = alpha*far; ctx.fillRect(mx, yOf(at + perf), mw, yOf(at - perf) - yOf(at + perf));
     }
+    const white = near >= 0.5 ? Math.min(showT, C.IDEAL) : showT;
     ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = alpha*0.85;
-    ctx.fillRect(mx + mw*0.2, yOf(Math.min(showT, timed ? MT.max : MT.ideal)), mw*0.6, mtop + mh - yOf(Math.min(showT, timed ? MT.max : MT.ideal)));
-    // a finish held past the top is a hang: the red part is the control it is costing
-    if (!timed && showT > MT.ideal) { ctx.fillStyle = T.miss; ctx.globalAlpha = alpha; ctx.fillRect(mx + mw*0.2, yOf(showT), mw*0.6, yOf(MT.ideal) - yOf(showT)); }
+    ctx.fillRect(mx + mw*0.2, yOf(white), mw*0.6, mtop + mh - yOf(white));
+    // at the rim, past the top is a hang: the red part is the control it is costing
+    if (near >= 0.5 && showT > C.IDEAL) { ctx.fillStyle = T.miss; ctx.globalAlpha = alpha; ctx.fillRect(mx + mw*0.2, yOf(showT), mw*0.6, yOf(C.IDEAL) - yOf(showT)); }
     if (!up) {
-      ctx.globalAlpha = alpha; ctx.fillStyle = !timed ? "#FFFFFF" : Math.abs(flash.e) <= dz ? T.make : T.miss;
+      const on = Math.abs(flash.e) <= params.tAssist + (flash.quick ? C.FL_PERFECT : C.PERFECT_MS);
+      ctx.globalAlpha = alpha; ctx.fillStyle = far < 0.5 ? "#FFFFFF" : on ? T.make : T.miss;
       ctx.fillRect(mx - ppf*0.25, yOf(showT) - ppf*0.1, mw + ppf*0.5, ppf*0.2);
     }
-    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = Math.max(1, dpr); ctx.globalAlpha = alpha;
-    ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(MT.ideal)); ctx.lineTo(mx + mw + ppf*0.2, yOf(MT.ideal)); ctx.stroke();
+    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = Math.max(1, dpr);
+    ctx.globalAlpha = alpha*Math.max(far, 0.0); ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(lines.quick)); ctx.lineTo(mx + mw + ppf*0.2, yOf(lines.quick)); ctx.stroke();
+    ctx.globalAlpha = alpha; ctx.beginPath(); ctx.moveTo(mx - ppf*0.2, yOf(lines.top)); ctx.lineTo(mx + mw + ppf*0.2, yOf(lines.top)); ctx.stroke();
     ctx.restore();
   }
   nudge = null;
@@ -676,13 +677,12 @@ const $ = id => document.getElementById(id);
 const pct = p => `${Math.round(p*100)}%`;
 const side = (v, pos, neg) => `${Math.abs(v).toFixed(1)} in ${v >= 0 ? pos : neg}`;
 const conWord = c => c < 0.05 ? "Open" : c < 0.3 ? "Light" : c < 0.6 ? "Moderate" : "Heavy";
-function sideWord(s, con) {
-  if (Math.abs(s) < 0.25) return "Middle of the rim";
-  const base = `${s < 0 ? "Left" : "Right"} side`;
-  if (con.c < 0.05) return base;
-  const soft = con.lat/(Math.abs(con.lat) + 0.6), rel = s*soft;
-  return rel < -0.2 ? `${base}, away from the defender` : rel > 0.2 ? `${base}, into the defender` : base;
+// where the ball was held, in words
+function ballWord(b) {
+  const how = b.placed < 0.5 ? "up in a shooting form" : b.out < 0.6 ? "straight up" : `${b.out.toFixed(1)} ft out${Math.abs(b.side) > 0.3 ? ` to your ${b.side > 0 ? "right" : "left"}` : ""}`;
+  return `${b.z.toFixed(1)} ft up, ${how}`;
 }
+const signed = ms => `${ms > 0 ? "+" : "−"}${Math.abs(ms)} ms`;
 function renderLive() {
   const L = live, k = L.cx.kind;
   if (hold.state === "steps") $("lHandle").textContent = `Gather step ${hold.step} of 2${hold.euro > 0.8 ? ", euro" : hold.jumpStop ? ", jump stop" : ""}`;
@@ -700,73 +700,45 @@ function renderLive() {
   }
   $("lMove").textContent = drib.lastMove ? `Last move: ${drib.lastMove}` : "";
   const bankTxt = L.cx.glass ? (L.cx.glass.works ? "Bank shot off the glass" : "Bank shot: that spot won’t bank in from here") : null;
-  const line = L.cx.shift ? `release line ${L.cx.shift > 0 ? "+" : "−"}${Math.abs(L.cx.shift)} ms` : "";
-  $("lKind").textContent = bankTxt && (k === "jumper" || k === "floater") ? bankTxt
-    : k === "jumper" ? (L.cx.fade ? `${FADE_NAME[L.cx.fade]} (${line}${L.cx.fade !== "back" ? ", aim against the drift" : ""})` : L.cx.air > 1.5 ? `Jump shot on the move${line ? ` (${line})` : ""}` : "Jump shot (lean away as you jump to fade)")
-    : k === "floater" ? `Floater${line ? ` (${line})` : ""}, or keep driving for a layup` : k === "dunk" ? "Dunk: let go now" : "Layup (let go high and close to dunk)";
+  const line = L.near < 0.9 && L.cx.shift ? `, line ${signed(L.cx.shift)}` : "";
+  $("lKind").textContent = k === "dunk" ? "Dunk: let go now" : bankTxt ? bankTxt
+    : k === "layup" ? "A finish: the cursor is the ball"
+    : k === "floater" ? `Floater, on the quick line${line}`
+    : L.cx.fade ? `${FADE_NAME[L.cx.fade]}${line}${L.cx.fade !== "back" ? ", aim against the drift" : ""}` : L.cx.air > 1.5 ? `Jump shot on the move${line}` : "Jump shot (lean away as you jump to fade)";
   $("lRim").textContent = !params.rimOn ? "Off" : R.mode === "up" ? "Stepping up" : R.mode === "home" ? "Staying home" : "Waiting for a drive";
-  $("lDist").textContent = `${L.f.dist.toFixed(1)} ft${k === "jumper" ? `, ${L.three ? "three" : "two"}` : ""}`;
-  $("lCon").textContent = `${conWord(L.con.c)} (${pct(L.con.c)})${k === "layup" || k === "dunk" ? ", at the rim" : ""}${k === "jumper" && L.cx.clean > 0.5 ? ", clean look" : ""}`;
-  $("lSig").textContent = k === "dunk" ? "Almost none, it’s a dunk" : `σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth`;
-  const labels = k === "jumper" ? ["Shooter", "Distance", "Movement", "Contest"] : k === "floater" ? ["Touch", "Distance", "Movement", "Contest"] : ["Finisher", "Finish angle and hang", "Speed", "Contest"];
-  labels.forEach((t, i) => { $("lg" + (i + 1)).textContent = t; });
+  $("lDist").textContent = `${L.f.dist.toFixed(1)} ft${L.near < 0.5 ? `, ${L.three ? "three" : "two"}` : ""}`;
+  $("lCon").textContent = L.near >= 1 ? "At the rim: only their arms and bodies" : `${conWord(L.con.c)} (${pct(L.con.c)})${L.cx.clean > 0.5 ? ", clean look" : ""}`;
+  $("lSig").textContent = k === "dunk" ? "None, it’s a dunk" : `σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth`;
+  ["Touch", "Placement and hang", "Movement", "Defense"].forEach((t, i) => { $("lg" + (i + 1)).textContent = t; });
   const v = L.sig.parts.map(x => x*x), tot = v.reduce((a, b) => a + b, 0) || 1;
   const spans = $("lBar").children;
   ["--seg1","--seg2","--seg3","--seg4"].forEach((c, i) => { spans[i].style.width = `${v[i]/tot*100}%`; spans[i].style.background = `var(${c})`; });
-  $("lCeil").textContent = pct(L.v1); $("lAim").textContent = pct(L.v2);
-  const timedShot = k === "jumper" || k === "floater";
-  $("lCeilK").textContent = timedShot ? "Ceiling, perfect input" : "Make chance, finishing now";
-  $("lAimK").textContent = timedShot ? "With your aim and momentum" : "Block chance";
+  const far = L.near < 0.5 && k !== "dunk";
+  $("lCeil").textContent = pct(far ? L.v1 : L.v2); $("lAim").textContent = pct(far ? L.v2 : L.block);
+  $("lCeilK").textContent = far ? "Ceiling, perfect input" : "Make chance, as held";
+  $("lAimK").textContent = far ? "With your aim and momentum" : "Block chance";
 }
 function renderLast() {
-  const L = panelGame().last, o = L.out, odds = GM.lastOdds(panelGame());
+  const L = panelGame().last, o = L.out, odds = GM.lastOdds(panelGame()), far = 1 - L.near, dunk = L.kind === "dunk";
   const head = `<div class="result"><span class="big" style="color:var(${o.make ? "--make" : "--miss"})">${o.big}</span><span class="sub">${o.sub}</span></div>`;
-  if (L.kind === "jumper") {
-    const rel = Math.abs(L.e) <= C.PERFECT_MS ? "Perfect" : Math.abs(L.e) <= C.PERFECT_MS + params.tAssist ? "Good" : L.e < 0 ? "Early" : "Late";
-    const msTxt = `${Math.abs(Math.round(L.e))} ms ${L.e < 0 ? "early" : "late"}`;
-    const tDep = C.KT*L.eEff, aimDeg = L.aim.theta*180/Math.PI;
-    $("last").innerHTML = `${head}
-      <dl>
-        <dt>Shot</dt><dd>${L.fade ? FADE_NAME[L.fade] : "Jumper"}, ${L.dist.toFixed(1)} ft ${L.three ? "three" : "two"}</dd>
-        ${L.air > 0.5 ? `<dt>In the air</dt><dd>${L.air.toFixed(1)} ft/s, ${L.carried.toFixed(1)} ft from takeoff<br><small>+${L.airIn.toFixed(1)} in scatter, release line ${L.shift > 0 ? "+" : "−"}${Math.abs(L.shift)} ms</small></dd>` : ""}
-        <dt>Release</dt><dd>${rel}, ${msTxt}<br><small>${Math.abs(tDep) < 0.05 ? "no depth error" : side(tDep, "long", "short")}${L.q > 0 && params.bonus > 0 ? `, shooter scatter −${Math.round(params.bonus*L.q)}%` : ""}</small></dd>
-        <dt>Aim</dt><dd>${Math.abs(aimDeg).toFixed(1)}° ${aimDeg >= 0 ? "right" : "left"}<br><small>${side(L.aim.lat*L.assistK, "right", "left")} after assist</small></dd>
-        <dt>Drift</dt><dd>${side(L.dr.lat*L.assistK, "right", "left")} after assist<br><small>${L.gather.toFixed(1)} ft/s at the jump</small></dd>
-        <dt>Contest</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
-        <dt>Scatter</dt><dd>σ ${L.sig.lat.toFixed(1)} in</dd>
-        <dt>Make chance</dt><dd><strong>${pct(odds.make)}</strong></dd>
-      </dl>`;
-    return;
+  const rows = [["Shot", `${L.name}, ${L.dist.toFixed(1)} ft${far >= 0.5 ? ` ${L.three ? "three" : "two"}` : ""}${L.glass ? ", off the glass" : ""}`]];
+  rows.push(["Ball", ballWord(L.ball)]);
+  if (!dunk) {
+    // away from the rim the release is judged against a line; at the rim only against the top of the jump
+    if (far >= 0.5) {
+      const perf = L.quick ? C.FL_PERFECT : C.PERFECT_MS, rel = Math.abs(L.e) <= perf ? "Perfect" : Math.abs(L.e) <= perf + params.tAssist ? "Good" : L.e < 0 ? "Early" : "Late";
+      const dep = C.KT*L.eEff*far*(L.dist/24);
+      rows.push(["Let go", `${rel}, ${Math.abs(Math.round(L.e))} ms ${L.e < 0 ? "early" : "late"} on the ${L.quick ? "quick" : "top"} line<br><small>${Math.abs(dep) < 0.05 ? "no depth error" : `about ${side(dep, "long", "short")}`}${L.q > 0 && params.bonus > 0 ? `, own scatter −${Math.round(params.bonus*L.q)}%` : ""}</small>`]);
+    } else rows.push(["Let go", L.hangMs < 10 ? (L.upMs > C.IDEAL - 30 ? "At the top of the jump" : `${Math.round(C.IDEAL - L.upMs)} ms before the top`) : `${Math.round(L.hangMs)} ms past the top<br><small>+${(0.9*L.hangMs/100).toFixed(1)} in scatter</small>`]);
+    if (far > 0.2 && !L.glass) { const deg = L.aim.theta*180/Math.PI; rows.push(["Aim", `${Math.abs(deg).toFixed(1)}° ${deg >= 0 ? "right" : "left"}<br><small>${side(L.aim.lat*L.assistK*far, "right", "left")} after assist</small>`]); }
+    if (L.air > 0.5) rows.push(["In the air", `${L.air.toFixed(1)} ft/s, ${L.carried.toFixed(1)} ft from takeoff<br><small>${far > 0.2 ? `pushed ${side(L.dr.lat*L.assistK*far*(L.quick ? 0.6 : 1), "right", "left")}${L.shift ? `, line ${signed(L.shift)}` : ""}` : `${L.speed.toFixed(1)} ft/s at the jump, under control up to ${L.sig.limit.toFixed(1)}`}</small>`]);
+    if (far > 0) rows.push(["Contest", `${conWord(L.con.c)} (${pct(L.con.c)})`]);
   }
-  if (L.kind === "floater") {
-    const rel = Math.abs(L.e) <= C.FL_PERFECT ? "Perfect" : Math.abs(L.e) <= C.FL_PERFECT + params.tAssist ? "Good" : L.e < 0 ? "Early" : "Late";
-    const tDep = C.FL_KT*L.b.eEff, aimDeg = L.b.aim.theta*180/Math.PI;
-    const rimTxt = { up: "Stepped up", home: "Stayed home", off: "Off" }[L.rimMode] || "Not involved";
-    $("last").innerHTML = `${head}
-      <dl>
-        <dt>Shot</dt><dd>Floater, ${L.dist.toFixed(1)} ft</dd>
-        <dt>Release</dt><dd>${rel}, ${Math.abs(Math.round(L.e))} ms ${L.e < 0 ? "early" : "late"}<br><small>${Math.abs(tDep) < 0.05 ? "no depth error" : side(tDep, "long", "short")}</small></dd>
-        <dt>Aim</dt><dd>${Math.abs(aimDeg).toFixed(1)}° ${aimDeg >= 0 ? "right" : "left"}<br><small>${side(L.b.aim.lat*L.b.assistK, "right", "left")} after assist</small></dd>
-        <dt>Momentum</dt><dd>${L.b.dr.speed.toFixed(1)} ft/s in the air<br><small>release line ${L.shift > 0 ? "+" : "−"}${Math.abs(L.shift)} ms</small></dd>
-        <dt>Contest</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
-        <dt>Rim protector</dt><dd>${rimTxt}</dd>
-        <dt>Scatter</dt><dd>σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth</dd>
-        <dt>Make chance</dt><dd><strong>${pct(odds.make)}</strong></dd>
-      </dl>`;
-    return;
-  }
-  const dunk = L.kind === "dunk";
-  $("last").innerHTML = `${head}
-    <dl>
-      <dt>Shot</dt><dd>${dunk ? "Dunk" : `Layup${L.bank > 1 ? ", bank angle" : ""}`}${L.note ? `<br><small>${L.note}</small>` : ""}</dd>
-      <dt>Finish</dt><dd>${sideWord(L.side, L.con)}</dd>
-      ${dunk ? "" : `<dt>Let go</dt><dd>${L.hangMs < 10 ? (L.upMs > C.IDEAL - 30 ? "At the top" : `${Math.round(C.IDEAL - L.upMs)} ms before the top`) : `${Math.round(L.hangMs)} ms past the top<br><small>+${(0.9*L.hangMs/100).toFixed(1)} in scatter</small>`}</dd>
-      <dt>Approach</dt><dd>${L.speed.toFixed(1)} ft/s<br><small>under control up to ${L.sig.limit.toFixed(1)}</small></dd>`}
-      <dt>Contest at rim</dt><dd>${conWord(L.con.c)} (${pct(L.con.c)})</dd>
-      <dt>Block chance</dt><dd>${pct(odds.block)}</dd>
-      <dt>Contact</dt><dd>${L.foul ? `Foul: ${L.foul.toLowerCase()}` : "None"}</dd>
-      <dt>Make chance</dt><dd><strong>${pct(odds.make)}</strong></dd>
-    </dl>`;
+  rows.push(["Contact", L.foul ? `Foul: ${L.foul.toLowerCase()}` : L.bump ? "A bump on the way up" : "None"]);
+  if (!dunk) rows.push(["Scatter", `σ ${L.sig.lat.toFixed(1)} in lateral, ${L.sig.dep.toFixed(1)} in depth`]);
+  if (L.near >= 0.5) rows.push(["Block chance", pct(odds.block)]);
+  rows.push(["Make chance", `<strong>${pct(odds.make)}</strong>`]);
+  $("last").innerHTML = `${head}<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
 }
 function renderStats() {
   const stats = panelGame().stats, f = (m, a) => `${m}/${a}<small>${a ? pct(m/a) : "–"}</small>`;

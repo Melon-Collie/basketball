@@ -17,7 +17,7 @@ Design principles:
 
 1. **Input sets the aim (bias); a universal noise floor and the situation set the scatter (variance).** The make-rate ceiling comes from the situation, never from execution.
 2. **Contests change the dice, not the button press.** A contest adds scatter and bias. It never tightens a timing window.
-3. **Timing must be learnable.** Release timing can differ between shot types, but only when it follows from a choice the player made, is the same every time for that choice, and is shown on the meter.
+3. **Timing must be learnable.** There are two release lines, the same for every shot from anywhere. They move only with what the player chose to carry into the air, by the same rule every time, and the meter shows where they are.
 4. **Every drift axis needs a control.** Lateral error is corrected with the cursor. Depth error can only be corrected through timing, so speed along the shot line moves the release line, and the meter shows where it has moved to. It is never left as a bias with no way to correct it.
 5. **Decisions over dexterity.** Skill expression lives mainly in creating good shots: separation, finish choice, reading the defender.
 6. **Expected value keeps the game basketball-shaped.** Points per shot by shot type is the primary tuning metric. If percentages are inflated for fun, inflate them proportionally.
@@ -49,43 +49,40 @@ This is the original resolver: a 2D landing point at the rim, sampled from a Gau
 
 A key property: when scatter is small (open, good shooter), input error matters a lot. When a contest dominates the scatter, input barely matters. So skill counts most on good shots, and nobody can time through a hand in the face.
 
-## Input scheme and shot context
+## Input scheme
 
-Three buttons, and each means one thing. Where you are and how you are moving when you leave the floor decide what kind of shot the jump is.
+Three buttons, and each means one thing.
 
-- **WASD** moves. **Cursor** aims, or picks the finish side near the rim.
+- **WASD** moves. **Cursor** aims from range, and in the air at the rim it is the ball.
 - **Space** jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too.
 - **Left mouse** lets the ball go, the moment it is pressed, if you are in the air. With your feet on the floor it is a pump fake.
 - **Shift** gathers the ball, or puts a ball that has not been dribbled yet on the floor.
 - **WASD as you take off** is a lean: it decides what you carry into the air (see The jump). Inputs are read relative to the floor, not the shot line.
 
-"Driving" means velocity toward the rim of at least 4 ft/s. Rules are checked in this order:
+**No kind of shot is chosen, by the player or for them.** There used to be a table here: a click was a jumper, a floater, a layup or a dunk according to distance and speed at the moment it was pressed, and each was resolved by its own rules. Now there is one shot, and what it is follows from where the ball was let go and when (see One shot).
 
-| Order | Condition at the jump | Shot |
+**What a defender takes a jump for** is the one place that table survives, as the AI's read of a jump as it starts. "Driving" means velocity toward the rim of at least 4 ft/s:
+
+| Order | Condition at the jump | The AI reads it as |
 | --- | --- | --- |
-| 1 | Within 4 ft of the rim, any motion | Layup |
-| 2 | Driving, within 7 ft | Layup |
-| 3 | Driving, 7–14 ft | Floater |
-| 4 | Anything else | Jumper |
+| 1 | Within 4 ft of the rim, any motion | A finish |
+| 2 | Driving, within 7 ft (9 ft out of gather steps) | A finish |
+| 3 | Driving, 7–14 ft | A floater |
+| 4 | Anything else | A shot from range |
 
-Going up early on a drive gives a floater; keeping the drive going and going up late gives a layup. A tag under the player always shows what a jump would be.
-
-**A dunk is not in the table.** It is not chosen. Any shot let go with the hand at least 10.3 ft up and the rim's center within 4.2 ft of the body is a dunk (see Finishing).
-
-**The kinds are on their way out.** One jump for every shot is the first of three steps. The second makes a finish something done with the cursor in the air, against real arms only. The third retires the table above, so that a jumper, a floater and a layup differ only in where the jump started, how fast it was going and when the ball was let go.
+A shot blocker goes up for a finish on a timer and stays down for a floater. Nothing the shooter does depends on the read.
 
 **Also:**
 
 - **The camera follows the ball handler,** so cursor positions are stable relative to the body (see Dribbling). It holds still while you are in the air with the ball.
-- **The aim line and crosshair** only show while you are in the air with the ball.
-- **A cursor parked on your own body** (within 0.5 ft) reads as a badly missed aim, not a perfect one. This closed an exploit where pulling up off a hang dribble skipped aiming.
-- **Context while gathered:** out of gather steps, the jump always counts as driving and layups reach 9 ft. From a dead dribble, it's a set shot unless you're within 4 ft or your free foot is reaching toward the rim within 8 ft (a step-through finish).
+- **The aim line and crosshair** only show while you are in the air with the ball, and fade out near the rim, where aim does not count.
+- **A cursor parked on your own body** (within 0.5 ft) reads as a badly missed aim from range. At the rim it is the ball held straight up.
 
 ## Jump shots
 
-Timing sets depth, the cursor sets lateral aim, and carried momentum drifts the ball. Ratings, distance, movement and contest set the scatter.
+This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth, the cursor sets lateral aim, and carried momentum drifts the ball. Distance, movement and contest set the scatter.
 
-**Timing (depth).** The ideal release is the top of the jump, 520 ms after Space, moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long. Early or late also means lower: the ball leaves up to 2 ft lower at the bottom of the jump than at the top, which is what an arm gets to.
+**Timing (depth).** The ball has to be let go on one of two lines: the top of the jump, 520 ms after Space, or the quick line, 330 ms after it (see The quick line). Both are moved by whatever you are carrying along the shot line (see The jump). Error is measured to the nearer line. There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
@@ -129,15 +126,15 @@ Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop 
 | Sprinting, toward the rim | 11.75 ft/s: a runner, or the last stride of a layup |
 | Sprinting, against your momentum | 1.75 ft/s: a hard stop |
 
-**How high.** A jump from a standstill reaches 85% of one taken at 7 ft/s or more. The hand is at 8.3 ft standing and 2.3 ft higher at the top of a full jump.
+**How high.** A jump from a standstill reaches 85% of one taken at 7 ft/s or more. Standing reach is 8.3 ft, and a full jump adds 2.3 ft.
 
-**The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's line moves to show where that is, so the line is always the release that puts the depth right.
+**The release lines.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The meter's lines move to show where that is, so a line is always the release that puts the depth right.
 
 ```latex
 \text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{drift strength} \times v_{along}}{0.09\ \text{in/ms}}
 ```
 
-That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. A floater's line moves half as far. A layup has no timed release.
+That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim. The quick line moves half as far. Near the rim neither moves, because neither counts.
 
 **What it costs.** Speed in the air adds scatter to a jumper, 0.4 in per ft/s, so 2.0 in for a fadeaway from a standstill (the "Scatter in the air" slider). A clean look needs less than 3 ft/s both at the jump and in the air. Sideways speed pushes the ball sideways, so the cursor has to make up for it.
 
@@ -149,7 +146,7 @@ That is +56 ms for a standing fadeaway and −75 ms at 6.75 ft/s toward the rim.
 
 ## Jumper contests
 
-A contest (0–1) is computed at the moment of release. It adds scatter and raises the arc; the timing window never changes.
+A contest (0–1) is computed at the moment of release, for a shot from range. It adds scatter and raises the arc; the timing window never changes. It is weighted by how much of the shot is from range, so it fades out between 8 and 4 ft and is nothing at the rim, where a defender is a body and an arm (see At the rim).
 
 ```latex
 c = \text{prox} \times \text{inline} \times \text{hand} \times (0.85 + 0.35 \cdot \text{closing}) \times \text{length}
@@ -169,57 +166,84 @@ c = \text{prox} \times \text{inline} \times \text{hand} \times (0.85 + 0.35 \cdo
 
 The curve was originally linear out to 6.5 ft and penalized 4 ft "open" looks at 50–60%. It was made steep to match NBA tracking, where open (4–6 ft) and wide-open threes differ by only a few points. The contest is still devastating within 2–3 ft.
 
-## Finishing: layups and dunks
+## One shot
 
-Near the rim, the cursor picks the finish side, when you let go is a timing duel with the shot blocker, and the contest acts mainly through blocks and fouls.
+There is one shot, and two things decide what it is.
 
-**Motion.** A finish is a jump like any other: you go where your momentum and your lean take you, and nothing steers you toward the rim. Nobody can get closer than 2.6 ft to the rim's center.
+**How far out.** A shot is part finish and part shot from range, by distance from the rim: all finish inside 4 ft, none beyond 8 ft, and a straight-line mix in between.
 
-**Finish side.** s ∈ \[−1, 1\] comes from the cursor's lateral offset at rim distance, divided by 1.2 ft. Finishing away from the defender shields the ball; finishing into them makes it worse.
+| | At the rim | From range |
+| --- | --- | --- |
+| The cursor | Is the ball (see At the rim) | Aims |
+| When to let go | Whenever: only a hang costs | On a line |
+| The defender | A body and an arm | A contest as well |
+| Touch (scatter floor) | 2.48 in | 3.93 in set, 4.6 in quick |
+| What it pays for | Speed over 11.4 ft/s, where the ball is held, hang | Speed at the jump and in the air |
+| Arc | Whatever brings the ball down into the rim at 60° | 48° set, 60° quick |
+| Aimed | 2 in past the rim's center | At the rim's center (2 in past, quick) |
 
-**When to let go.** Any time the feet are off the floor. On the way up the ball leaves lower: quicker than a shot blocker, and easier for a hand to reach. Past the top is a hang, at +0.9 in of scatter per 100 ms, for up to 350 ms before the feet come down.
+**When.** From range, the nearer of the two lines is the shot. On the top line it is set. On the quick line it is pushed: off 190 ms sooner, with more arc and less touch.
 
-**Layup scatter (lateral, inches).** Depth scatter = 1.2 × lateral. The total is multiplied by 1.74 (calibration) and converted into launch noise. A layup is aimed 2 in past the rim's center, and goes up at whatever angle brings it down into the rim at 60° (see Launch model). The finish side changes the contest and the scatter, not the target.
+**In the mix,** each part is weighted: aim error, timing error, the contest, and what the body's sideways speed does to the ball are all multiplied by the from-range share, and the scatter is the weighted sum of the variances. So at 6 ft, aim and timing count half.
+
+**Names come afterwards.** A dunk, a layup, a scoop, a hanging layup, a reverse, a bank, a floater, a push shot, a jump shot, a pull-up, a runner and a fadeaway are what the last-shot panel calls what you did. Stats count a ball let go inside 6 ft as at the rim and one on the quick line beyond that as a floater.
+
+## At the rim
+
+Near the rim the hand finds the rim, so the cursor is free, and it is the ball. Nothing protects the ball but where it is.
+
+**The hand.** In the air the ball is in the hand, and the cursor is the hand.
+
+| Cursor | The ball |
+| --- | --- |
+| Within 2.2 ft of your body | Is where the cursor is, on a straight arm 2.6 ft long from the shoulder. So it is highest straight up (8.3 ft plus the jump) and lower the further out it is held: 0.5 ft lower at 1.5 ft out, 1.2 ft lower at 2.2 ft |
+| 3.2 ft or more away | Is up in a shooting form: 0.7 ft toward the cursor, 7.65 ft up plus the jump, which is 9.6 ft at the top of a standing jump |
+| In between | Moves smoothly from one to the other |
+
+So with the cursor on the rim from a few feet out you shoot a normal layup, and bringing the cursor in toward your body takes the ball wherever you put it: out to either side, behind you, or straight up.
+
+**Out from under the rim.** A ball let go right under the rim has nowhere to go but up into it, so the hand keeps a low ball out: at least 2.0 ft from the rim's center at 9 ft up or lower, easing to 1.35 ft at 10 ft. Once the ball is high enough to go over the rim, it can.
+
+**Dunks.** A ball let go at least 10.15 ft up and within 0.9 ft of the rim's center is a dunk. That takes the body within about 1.3 ft of the rim (nobody's center gets closer than 1.0 ft), a running jump, and being within about 100 ms of the top of it. A dunk has no scatter. The ball is carried from the hand to just above the rim and put through, and it goes down unless a defender's arm is in the way of that carry.
+
+**When to let go.** Any time the feet are off the floor. On the way up the ball is lower: quicker than a shot blocker, and easier for a hand to reach. Past the top is a hang, at +0.9 in of scatter per 100 ms, for up to 350 ms before the feet come down.
+
+**Scatter (lateral, inches),** for the finish share of a shot. Depth scatter = 1.2 × lateral, and the total is multiplied by 1.74 (calibration).
 
 | Component | Formula |
 | --- | --- |
-| Universal floor | 2.48. The old finisher term at 80, now the same for everyone |
-| Speed | 0.35 × max(0, speed at the jump − control limit); the limit is 11.4 ft/s, the same for everyone |
-| Angle | 2.2 × max(0, −s × lateral momentum) + 0.8 × abs(s), where lateral momentum is clamp(sideways speed / 6). Plus 0.6 per ft of euro step |
+| Floor | 2.48 |
+| Speed | 0.35 × max(0, speed at the jump − 11.4 ft/s) |
+| Where the ball is held | 0.8 × abs(s) + 2.2 × max(0, −s × sideways momentum), where s is how far to your left or right of the line to the rim the ball is, −1 to 1 at arm's length, and sideways momentum is clamp(sideways speed / 6). Plus 0.6 per ft of euro step |
 | Hang | 0.9 per 100 ms |
-| Contest | 3.5 × rim contest |
+| A bump | 2.0, for a body met on the way up |
 
-**Rim contest** = prox × inline × set × reach × side × length × 1.15, measured from the point 1.2 ft toward the rim where the ball goes up.
+**The defender is a body and an arm.**
 
-- prox = clamp((5.5 − d) / 4, 0, 1). inline = 0.35 + 0.65 × max(0, cos), so chase-down blocks are weaker.
-- set = 1 − 0.35 × clamp(defender speed / 12): planted beats arriving late.
-- reach = 0.45 standing, up to 1.0 at the peak of a jump, 0.3 for 0.45 s after landing.
-- side = 1 − 0.4 × shielding, or 1 + 0.2 × finishing into them.
+- **The arm** is the one in Full physics: a block is a collision between it and the ball's flight, which starts at the hand. Hold the ball where the arm is and it is blocked; hold it away and it gets off, at a cost in touch. The AI's hand goes to a ball in the air as far as its arm reaches, at 14 ft/s, and stays 0.95 ft off the shooter's body.
+- **Shot blockers' jumps.** The AI's defenders within 7 ft go up at reaction × 0.5 + 130 ms into a jump they read as a finish (255 ms at the default), and a jump lasts 500 ms, so they are at their highest just before the top of yours. Letting go on the way up beats them to it; hanging until they are coming down beats them the other way.
+- **The body.** A shooter in the air goes where their momentum takes them. Into a defender who was set (moving slower than 1.5 ft/s, feet down) and at least 4 ft from the rim, at more than 2 ft/s, it is a charge: the other side's ball. Into anyone else it is a bump, which adds 2 in of scatter. A defender who runs into a shooter, or whose hand comes onto them, has fouled, as before (see Fouls, under The game); a hand the shooter flew into has not.
+- A fouled finish gets 1.15× its placement, hang and speed scatter. One that goes in is an and-one; one that misses is two free throws.
 
-**Shot blockers' jumps.** The AI's defenders within 7 ft go up at reaction × 0.5 + 130 ms into a finish (255 ms at the default), and a jump lasts 500 ms, so they are at their highest just before the top of yours. Letting go on the way up beats them to it; hanging until they are coming down beats them the other way, at a control cost.
+**What the AI gives up.** On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
 
-**Outcomes.**
+## The quick line
 
-- Blocks are collisions with a defender's arm (see Full physics), for layups and dunks alike.
-- A foul is contact at the release (see Fouls, under The game). A fouled layup gets 1.15× its speed, angle and hang scatter. A fouled finish that goes in is an and-one; one that misses is two free throws.
-- **Dunks** are a finish let go high and close: the hand at least 10.3 ft up, the rim's center within 4.2 ft of the body. That takes a running jump (from a standstill the hand tops out at 10.26 ft) and being within about 125 ms of the top of it. A dunk has no scatter at all. The ball is carried from over the dunker's head to above the rim and put through it, and it goes down unless a defender's arm is in the way of that carry, in which case the arm takes it as it would any ball ("posterized" above 0.5 contest).
+The quick line is the early release: let go on the way up, 330 ms after Space, 160 ms after the feet leave and 190 ms before the top. Off a drive it is a floater. It is the same from anywhere: from 24 ft it is a push shot, off before a closeout, at about 34% against the set shot's 60% with nobody near.
 
-## Floaters
-
-The floater is the early release on a drive: let go on the way up, well before the top of the jump, with a lenient release and an arc that clears a rim protector who stays home. Touch is the cost.
-
-- **Timing:** its line is 330 ms after Space, 160 ms after the feet leave and 190 ms before the top, which is what gets it off before a shot blocker is up. Momentum toward the rim moves the line earlier, by half as much as a jumper's. Perfect window ±20 ms plus the timing assist. Timing error changes launch speed by the same 0.0158% per ms as a jumper: about 0.04 in of depth per ms at 10 ft. The perfect release bonus applies, with the same 40 ms fade.
-- **Motion:** the same jump as everything else, so you keep moving. Leaning into it carries you toward a defender who is giving ground, and into their hand; leaning against your momentum stops you short of them, which is the pull-up floater. Against the on-ball defender on a straight drive from 12 ft, that is the difference between about 18% and about 52%.
-- **Aim:** cursor aim like a jumper, with aim assist. Sideways speed in the air pushes the ball 0.6× as far as it does on a jumper.
-- **Contest:** jumper-style without the closing-speed factor, and with prox = clamp((4 − d) / 2.5, 0, 1)^1.5, so the arc clears anyone more than \~4 ft away. Contest scatter 5.0 × c, plus up to 6° of extra arc. Blocks are collisions with a defender's hand.
-- **Scatter (lateral):** a universal floor of 4.6 in × (1 − bonus × q) (the old touch term at 75), movement 0.08 × ft/s, contest. No distance term. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration) and converted into launch noise. A floater is aimed 2 in past the rim's center, which splits its misses evenly between short and long.
+- **Timing:** perfect window ±20 ms plus the timing assist, against ±12 on the top line. The perfect release bonus applies.
+- **Touch:** a floor of 4.6 in × (1 − bonus × q) against 3.93, movement 0.08 × ft/s against 0.14 and with no cost for speed in the air: it is built for moving. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration).
+- **Arc:** 60° against 48°, aimed 2 in past the rim's center.
+- **Lean:** you keep moving. Leaning into it carries you toward a defender who is giving ground, and into their hand; leaning against your momentum stops you short of them, which is the pull-up floater. Against the on-ball defender on a straight drive from 12 ft, that is the difference between about 18% and about 52%.
+- **Aim:** sideways speed in the air pushes the ball 0.6× as far as it does on the top line.
+- **Contest:** without the closing-speed factor, and with prox = clamp((4 − d) / 2.5, 0, 1)^1.5, so the arc clears anyone more than \~4 ft away. Contest scatter 5.0 × c, plus up to 6° of extra arc.
 
 **Rim protector's read.** On each drive, the first time the ball handler is inside 17 ft and driving, the rim protector decides once:
 
 - **Stay home** (concedes the floater): stays near the rim, blending from its home spot 3.25 ft in front of the rim toward the drive line.
 - **Step up** (concedes the lane): moves to a spot on the drive line at clamp(distance − 4.5, 6, 10) ft from the rim. Once the driver gets past that spot, it recovers at only 8 ft/s, which opens the layup.
 
-The chance of stepping up is a slider (default 50%). The decision resets after every shot. The rim protector's current choice is shown in the panel, but in the real game reading its position should be the skill.
+Whether it steps up is a rule on a slider (default 50: when the handler is level with their defender). The decision resets after every shot. The rim protector's current choice is shown in the panel, but in the real game reading its position should be the skill.
 
 ## Dribbling
 
@@ -357,7 +381,7 @@ NBA wide-open threes average about 1.15 points per shot (approximate, from memor
 
 **Held in reserve:** anti-streak smoothing (quietly raising the odds after a perfect clean miss). It works, but it's hidden manipulation; use it only if playtests show streaks are still the problem.
 
-The panel shows "clean look" on the contest line when the premium applies. Floaters don't get the premium yet.
+The panel shows "clean look" on the contest line when the premium applies. It is for the set shot only: a ball let go on the quick line, or at the rim, does not get it.
 
 ## Frames instead of ratings
 
@@ -490,7 +514,7 @@ All five milestones are done. Jumpers, floaters and layups in the prototype are 
 - **Launch mapping:** timing moves launch speed by 0.0158% per ms; the ball inherits 10.6% of the body's sideways velocity and 6.6% along the shot. Every input lands within 10% of the old model at 24 ft, and timing and drift errors shrink closer in.
 - **Release heights raised:** jumpers and layups 9.6 ft, floaters 8.7 ft, near the top of the shooter's jump. At 9 ft, contesting defenders blocked 4 of 10 tight jumpers.
 - **Noise:** the old inch-based components are converted into launch-speed and direction noise using each shot's own sensitivities. Jumpers and floaters no longer have a distance term: a short shot comes down more steeply, so the rim is effectively bigger, and the old term double-counted that.
-- **Calibration:** jumper noise 1.23× the old values, floaters 1.50×, layups 1.74×; contest scatter 6.19 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.6%, open layup at a sprint from 3 ft 79.6% (67.9% from 5 ft, 76.3% let go a foot lower).
+- **Calibration:** jumper noise 1.23× the old values, the quick line 1.50×, finishes 1.74×; contest scatter 6.19 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.6%, open layup at a sprint from 3 ft 79.6% (67.9% from 5 ft, 76.3% let go a foot lower).
 - **Live readouts:** 14 simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
 - **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. Blocks turned out to be all-or-nothing for a given defender position: see Calibration, where standing jumpers against the default on-ball defender go from never blocked to blocked on every jump with a small change in distance or timing.
 - **Bank shots:** the cursor on the backboard beside the rim targets the glass, and a marker turns green where a bank can go in from your spot. From about 45° the working band is narrow and right beside the rim; from 63–65° it's over a foot wide; straight on, none.
@@ -498,7 +522,7 @@ All five milestones are done. Jumpers, floaters and layups in the prototype are 
 
 **Airballs come from mistakes.** Heavy contests first airballed 15% of the time: their large spread sent the noise's outer tail clean past the rim. Now noise alone can carry a shot at most 12.5 in from the rim's center (a hard clank off the edge, never past it), plus 1.6 in at full contest, so a heavily altered shot airballs about 4% of the time. Bad timing, aim or drift are biases, not noise, so they can still airball any shot. A cap measured in spreads didn't work: it piles outliers onto its boundary, so airballs jump from about 17% to zero depending on whether that boundary falls inside the rim's reach. The calibration results above include this cap.
 
-Open items: how layups choose glass versus rim from the finish side is still open; dunks don't fly yet.
+Open items: dunks don't fly yet.
 
 **The resolver produces a launch instead of a landing point:**
 
@@ -537,11 +561,11 @@ The rim is modeled as a torus: a ring of radius 9 in made of a tube of radius 0.
 
 At release, the player's inputs and situation become a launch: release point, direction, angle and speed. Noise is then added in launch space.
 
-**Release point.** From the frame and shot type: 9.6 ft high for jumpers and layups and 8.7 ft for floaters, placed 0.7 ft in front of the body toward the rim. Placeholder values until frames define them.
+**Release point.** Where the hand is (see At the rim): 0.7 ft in front of the body and 9.6 ft up at the top of a standing jump, in a shooting form, or wherever the cursor has put the ball. Reach and jump are placeholder values until frames define them.
 
 **Target.** The rim center by default. With the cursor on the backboard, a point on the glass (see Bank shots).
 
-**Arc (launch angle).** 48° for jumpers and 60° for floaters. A layup is let go from anywhere between right under the rim and several feet out, low or high in the jump, so no one angle suits it: from close and low, a fixed one runs into the front of the rim. What stays the same is the angle it comes down into the rim at, 60°, and the launch angle is whatever gives that: tan(up) = tan(60°) + 2 × (rise needed) / (distance), capped at 82°. From 2.6 ft at the top of the jump that is about 65°. Floaters and layups are aimed 2 in past the rim's center: up close a ball that is a little long still drops and one that is a little short hits the front of the rim, so the middle of what goes in is behind the center. A contest raises the arc by up to 6° at full strength, as the shooter goes over the hand. Dunks have no flight: the ball is placed through the rim unless blocked.
+**Arc (launch angle).** 48° for a set shot and 60° on the quick line. A finish is let go from anywhere between right under the rim and several feet out, low or high in the jump, so no one angle suits it: from close and low, a fixed one runs into the front of the rim. What stays the same is the angle it comes down into the rim at, 60°, and the launch angle is whatever gives that: tan(up) = tan(60°) + 2 × (rise needed) / (distance), capped at 82°. Finishes and quick releases are aimed 2 in past the rim's center: up close a ball that is a little long still drops and one that is a little short hits the front of the rim, so the middle of what goes in is behind the center. Between 4 and 8 ft the arc and the aim point are mixed by how much of the shot is a finish. A contest raises the arc by up to 6° at full strength, as the shooter goes over the hand. Dunks have no flight: the ball is placed through the rim unless blocked.
 
 **Ideal speed.** The speed that carries the ball's center from the release point through the target at that angle, where d is the horizontal distance and Δz the height gain:
 
@@ -628,7 +652,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 **Modules:**
 
 - **Physics** (`sim/physics.js`): pure and deterministic. Steps the ball, resolves contacts, and simulates a whole shot from a launch into a path, a contact log and an outcome.
-- **Situation** (`sim/situation.js`): the rules that read the floor. What a click would produce, the jumper, floater and rim contests, clean looks, finishing scatter, and where the defenders' hands are during the flight.
+- **Situation** (`sim/situation.js`): the rules that read the floor. What a defender takes a jump for, the contests from range, clean looks, finishing scatter, and where the defenders' hands are during the flight.
 - **Launch** (`sim/launch.js`): turns inputs and situation into the ideal launch and the biases.
 - **Noise** (`sim/noise.js`): the scatter components, their conversion into launch noise, and simulated make rates.
 - **Game** (`sim/game.js`): everything that happens on the floor: movement, dribbling, gathers and pivots, the defenders' AI, shots and their release, and the rules of a game (score, shot clock, possessions, loose balls, free throws). A game is one plain object, advanced by `step(game, input)` in fixed ticks of 1/120 s. Its random stream is part of the object, so a seed and a list of inputs replay exactly, and a copy carries on identically. The live readout draws from a separate stream, so looking at the odds never changes the outcome.
@@ -654,7 +678,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a drive gives a floater or a layup by distance and a dunk when it is let go high and close, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, there are two release lines and the nearer is the shot, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
@@ -675,7 +699,6 @@ This is the point where the prototype becomes a real project. The physics is bui
 - Backspin softens rim bounces ("touch"): should it be universal or come from the frame?
 - Release heights and arcs per frame depend on the frames work, which comes after physics. Until then, placeholders.
 - How stiff is the rim, and do breakaway rims matter for dunks?
-- How exactly do layups choose glass versus rim from the finish side?
 - How tolerant should make detection be where the net catches the ball?
 
 ## The game: possessions and rules
@@ -809,7 +832,7 @@ The defenders exist to exercise the model, not as a design for game AI; in the r
 | --- | --- | --- |
 | Default position | Between ball and rim at the cushion from the perception model (guarding distance default 4.5 ft), shaded 0.8 ft toward the ball side they saw | Home 3.25 ft in front of the rim; inside 16 ft, blends 60% toward a point min(4.5, 0.45 × distance) ft out on the drive line |
 | Speed | 13 ft/s, accel 50 ft/s² | 11 ft/s (12 when contesting a finish), accel 40 ft/s² |
-| On a shot | Reacts to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closes out to 1.8 ft in front at 15.5 ft/s | Finishes: blends 75% toward a point min(3, 0.6 × distance) ft out. Stay-home / step-up read on drives (see Floaters) |
+| On a shot | Reacts to the shooting motion they saw, real or fake, after the shot reaction time (default 250 ms): closes out to 1.8 ft in front at 15.5 ft/s | Finishes: blends 75% toward a point min(3, 0.6 × distance) ft out. Stay-home / step-up read on drives (see The quick line) |
 | Hand | Up once they react. Before that, 0.8 × the pull-up threat, or 0.64 against a dead dribble | Rises for jumpers and floaters within 8 ft |
 | Jumps | Within 5 ft of a shot they saw: 50%. On finishes, at a scheduled moment if within 7 ft | Within 7 ft of a shot they saw: 60%. Same finish jumps |
 | Body | Holds ground while you dribble: you can't run through them. 1.7 ft minimum separation | 2.2 ft minimum separation; length fixed at 1.2 |
@@ -949,17 +972,21 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | --- | --- | --- |
 | LOAD / RISE / IDEAL | 170 / 350 / 520 ms | The jump with the ball: legs loading, time up (and down), and the top of it, where a jumper is let go |
 | KEEP / LEAN | 0.5 / 5 ft/s | Takeoff: share of the arriving speed carried into the air, and the most a lean adds |
-| REL\_DROP | 2.0 ft | How much lower the ball leaves at the bottom of the jump than at the top |
 | P\_STAND / P\_JUMP / STAND\_LIFT / RUN\_UP | 8.3 ft / 2.3 ft / 0.85 / 7 ft/s | The handler's reach standing, what a full jump adds, and how much of one a standing jump is |
-| DUNK\_Z / DUNK\_R | 10.3 / 4.2 ft | A dunk: the hand at least this high, the rim's center within this of the body |
+| REACH / FORM\_R / FORM\_OUT / FORM\_Z | 2.2 / 3.2 / 0.7 / 7.65 ft | The ball in the air: at the cursor within the first; in a shooting form beyond the second, this far toward the cursor and this high before the jump |
+| NEAR0 / NEAR1 | 4 / 8 ft | A shot is all finish inside the first and none beyond the second |
+| DUNK\_Z / DUNK\_BALL | 10.15 / 0.9 ft | A dunk: the ball at least this high, and within this of the rim's center |
+| UNDER\_LOW / UNDER\_HIGH | 2.0 / 1.35 ft | How far from the rim's center the hand keeps a ball 9 ft up or lower, and one 10 ft up |
+| KEEP\_OUT | 1.0 ft | Nobody's center gets closer to the rim's than this |
+| BUMP\_IN | 2 in | Scatter from a body met on the way up |
+| CHARGE\_V / CHARGE\_SET / RESTRICTED | 2 ft/s / 1.5 ft/s / 4 ft | A charge: this fast into a defender moving slower than this, at least this far from the rim |
 | KT | 0.09 in/ms | Jumper depth bias per ms of timing error |
 | PERFECT\_MS | 12 ms | Jumper perfect window (±) |
 | DEP\_RATIO | 1.16 / 1.45 / 1.2 | Depth scatter ÷ lateral: jumper / floater / layup (in `sim/noise.js`) |
 | AIR\_LAND | 0.25 s | Recovery after coming down |
 | DRIFT\_LAT / DRIFT\_DEP | 1.6 / 1.0 in per ft/s | Drift bias from carried momentum |
 | CONTEST\_SIG | 6.0 in | Jumper contest share in the live scatter breakdown. Outcomes use the calibrated CONTEST\_IN below |
-| ENTRY / PAST | 60° / 2 in | A layup's angle down into the rim; how far past the rim's center floaters and layups are aimed (in `sim/launch.js`) |
-| RIM\_CONTEST\_SIG | 3.5 in | Layup contest scatter |
+| ENTRY / PAST | 60° / 2 in | A finish's angle down into the rim; how far past the rim's center finishes and quick releases are aimed (in `sim/launch.js`) |
 | BODY\_R / ARM\_HIT / REACH\_V | 0.75 ft / 0.3 ft / 4 ft/s | Reach-in: a hand this close to the handler's center or off arm, moving into them this fast |
 | ARM\_FOUL\_R / CONTACT\_R / FOUL\_V | 0.6 ft / 1.9 ft / 3.5 ft/s | Shooting fouls: a raised hand this close to the shooter; a defender this close and coming this fast |
 | SET\_V / OVER\_V | 0.5 / 2 ft/s | Over the back: how slow counts as having the spot, and how fast into them is a foul |
@@ -967,7 +994,7 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | HAND\_V / REACH\_T / REACH\_CD / LEFT\_OPEN | 14 ft/s / 0.25 s / 2 s / 0.12–1.2 s | The AI's reach for the ball: hand speed, time out, wait before another, and how long the ball must have been left open |
 | LAYUP\_RANGE / FLOATER\_RANGE | 7 / 14 ft | Context cutoffs on a drive |
 | DRIVE\_SPEED | 4 ft/s | Minimum speed toward the rim to count as driving |
-| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | Floater timing: its release line after Space, and its perfect window |
+| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | The quick line after Space, and its perfect window |
 | FL\_KT | 0.07 in/ms | Depth estimate per ms in the floater's last-shot readout. Outcomes use K\_SPEED below |
 | FL\_CONTEST\_SIG | 5.0 in | Floater contest scatter |
 | PSPEED / PACC | 15 ft/s / 70 ft/s² | Ball handler movement |
@@ -996,8 +1023,8 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 
 | Constant | Value | Used for |
 | --- | --- | --- |
-| ELEV | 48° / 60° | Launch angle: jumper / floater. A layup's comes from ENTRY |
-| REL\_Z | 9.6 / 8.7 / 9.6 ft | Release height at the shot's own line: jumper / floater / layup |
+| ELEV | 48° / 60° | Launch angle: set / quick. A finish's comes from ENTRY |
+| REL\_Z | 9.6 / 9.2 / 9.6 ft | Release height when no hand position is given, as in calibration: set / quick / finish |
 | REL\_FWD | 0.7 ft | Release point in front of the body |
 | CONTEST\_ARC | 6° | Extra arc at full contest |
 | K\_SPEED | 0.000158 per ms | Launch speed change per ms of timing error, fitted at 24 ft |
@@ -1024,18 +1051,18 @@ Full physics is built, the game runs outside the page, and there is a first set 
 **Known gaps:**
 
 - **Every body is the same.** There are no ratings, and frames are decided but not built, so nothing yet makes one player different from another.
-- **A finish is still a formula once the ball is let go.** The jump is real, but the finish side is a number, the contest is a number, and the ball goes at the rim. Making the cursor the ball in the air, against real arms only, is the next step. A dunk's carry is a straight line at a fixed speed, not a simulated arm.
-- **A shooter who flies into a defender is not called for it.** They push the defender back, as a finish always has. With a jump that carries momentum this matters more; a charge is part of the next step.
-- **The shot kinds are still decided at the jump,** from where you are and how you are moving. They are due to go (see Input scheme and shot context).
+- **Nobody has played the reworked shot.** Every number in it (reach, the lines, the finish range, the charge, the bump) is a first value, checked by tests and by scripted drives, and waiting for hands.
+- **The ball cannot be taken out of a shooter's hand.** In the air it can only be met after it is let go, though a ball let go into a hand is met at once.
+- **The AI contests with the hand it has,** going to the ball as far as its arm reaches. It does not anticipate, and it does not choose between taking a charge and going for the block.
+- **Three ways of letting go are still mixed, not one.** Set, quick and finish each have their own touch and arc, weighted by distance and by which line the ball was let go on. It is continuous in distance and has a step between the lines.
+- **A dunk's carry is a straight line at a fixed speed,** not a simulated arm.
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
 - **Dribbling isn't final:** no between the legs, behind the back or spins yet.
 - **The triple threat is only reached by starting a possession or catching a rebound.** Catching a pass will be the third way, once there is passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
-- **Floaters don't get the clean-look premium yet.**
 - **How often a player blocks a tight jumper is not known yet.** The arm now has a length, a block has a window of about 170 ms, and its edges are tips (see Calibration). Whether that lands near the frames target of about 1 in 12 tight contests depends on how people time their jumps, which only play will show.
 - **A defender's jump after the release does nothing,** because a shot's flight is worked out at the release. For a jumper the ball is out of reach by then anyway; for a floater or a layup near the rim it may not be.
-- **A standing rim protector barely costs a layup** (see Calibration).
 - **The live scatter breakdown bar still uses the landing-point component sizes,** including a distance share the physics no longer has. The scatter figure beside it comes from the noise model.
 
 **Roadmap:**

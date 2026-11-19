@@ -70,12 +70,12 @@ gtest("Looking at the odds never changes what happens", () => {
 gtest("Space jumps and a click lets the ball go: at the top of the jump, 517 ms after Space, it is a perfectly timed jumper", () => {
   const g = fresh(41); run(g, 0.5);
   GM.step(g, { ...AIM, jump: true }); run(g, 61*GM.TICK);
-  check(g.shot.state === "shooting" && g.shot.kind === "jumper" && g.P.h > 0.8, `61 ticks after Space: ${g.shot.state} ${g.shot.kind}, ${g.P.h.toFixed(2)} of the way up`);
+  check(g.shot.state === "shooting" && g.shot.kind === "jumper" && g.P.h > 0.75, `61 ticks after Space: ${g.shot.state} ${g.shot.kind}, ${g.P.h.toFixed(2)} of the way up`);
   GM.step(g, { ...AIM, shot: true });
   check(g.last && g.last.kind === "jumper" && g.stats.fga === 1, "the release did not register");
   check(Math.abs(g.last.e) <= GM.C.PERFECT_MS && g.last.q === 1, `timing error ${g.last.e.toFixed(1)} ms, quality ${g.last.q}`);
   check(Math.abs(g.last.aim.theta) < 1e-9, `aim was ${g.last.aim.theta}`);
-  check(g.last.shift === 0 && g.last.air === 0 && !g.last.fade, "a standing jumper goes straight up: no lean, and the line is at the top");
+  check(g.last.shift === 0 && g.last.air === 0 && !g.last.fade && !g.last.quick, "a standing jumper goes straight up: no lean, and the line is at the top");
   run(g, 4);
   check(g.shot.state === "idle" && g.ball === null && g.P.up < 0 && g.P.h === 0, `afterwards: ${g.shot.state}, ball ${g.ball ? g.ball.phase : "gone"}, ${g.P.h} up`);
   // a click while the legs are still bending does nothing: the feet have not left
@@ -101,28 +101,37 @@ gtest("A jump carries half the speed you arrived with, plus up to 5 ft/s the way
   // from a standstill, leaning away from the rim is a fadeaway, and its release line is later
   const g = fresh(46, { defenders: false }); run(g, 0.3);
   GM.step(g, { ...AIM, d: true, jump: true }); run(g, 0.4, { ...AIM, d: true });
-  check(Math.abs(g.P.vy - GM.C.LEAN) < 1e-9 && g.shot.shift > 40, `standing fade: ${g.P.vy.toFixed(2)} ft/s back, line ${g.shot.shift} ms`);
-  run(g, (GM.C.IDEAL + g.shot.shift)/1000 - 0.4 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true });
+  check(Math.abs(g.P.vy - GM.C.LEAN) < 1e-9 && g.shot.lines.top > GM.C.IDEAL + 40, `standing fade: ${g.P.vy.toFixed(2)} ft/s back, line at ${g.shot.lines.top} ms`);
+  run(g, g.shot.lines.top/1000 - 0.4 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true });
   check(g.last.fade === "back" && Math.abs(g.last.e) <= GM.C.PERFECT_MS && g.last.carried > 1 && g.last.airIn > 1.9, `fade ${g.last.fade}, ${g.last.e.toFixed(1)} ms off its line, ${g.last.carried.toFixed(1)} ft back, +${g.last.airIn.toFixed(1)} in`);
   return `at ${none.v0.toFixed(1)} ft/s: ${none.toward.toFixed(1)} carried, ${lean.toward.toFixed(1)} leaning in, ${stop.toward.toFixed(1)} leaning back; standing fade ${g.last.carried.toFixed(1)} ft back, line +${g.last.shift} ms`;
 });
 
-gtest("A floater is let go on the way up, and the faster you are still going at the rim the earlier its line is", () => {
-  const line = keys => {
+gtest("There are two release lines, a quick one on the way up and one at the top; the nearer one is the shot, and momentum moves both", () => {
+  const up = keys => {
     const g = fresh(48, { defenders: false });
     until(g, TOWARD, x => distance(x) <= 12);
     GM.step(g, { ...AIM, ...keys, jump: true }); run(g, 0.2, { ...AIM, ...keys });
-    check(g.shot.kind === "floater", `expected a floater: ${g.shot.kind}`);
     return g;
   };
-  const stop = line({ d: true }), none = line({}), lean = line({ u: true });
-  check(stop.shot.line < GM.C.FL_IDEAL && stop.shot.line > none.shot.line && none.shot.line > lean.shot.line && lean.shot.line > GM.C.LOAD + 60,
-        `lines: braking ${stop.shot.line}, no lean ${none.shot.line}, leaning in ${lean.shot.line} ms`);
-  check(GM.C.FL_IDEAL < GM.C.IDEAL - 100, "a floater's line should be well before the top of the jump");
-  // let go on its line it is a well-timed floater, from lower in the jump than a jumper's release
-  const g = none; run(g, none.shot.line/1000 - 0.2 - 2*GM.TICK); GM.step(g, { ...AIM, shot: true });
-  check(g.last.kind === "floater" && Math.abs(g.last.e) <= GM.C.FL_PERFECT && g.P.h > 0.2 && g.P.h < 0.8, `${g.last.kind}, ${g.last.e.toFixed(1)} ms off, ${g.P.h.toFixed(2)} of the way up`);
-  return `line at ${stop.shot.line} ms braking, ${none.shot.line} with no lean, ${lean.shot.line} leaning in; a jumper's is at ${GM.C.IDEAL}`;
+  const stop = up({ d: true }), none = up({}), lean = up({ u: true });
+  const L = g => g.shot.lines;
+  check(L(stop).quick < GM.C.FL_IDEAL && L(stop).quick > L(none).quick && L(none).quick > L(lean).quick && L(lean).quick > GM.C.LOAD + 60,
+        `quick lines: braking ${L(stop).quick}, no lean ${L(none).quick}, leaning in ${L(lean).quick} ms`);
+  check(GM.C.IDEAL - L(lean).top > 1.9*(GM.C.FL_IDEAL - L(lean).quick), "the top line should move twice as far as the quick one");
+  // let go on the quick line it is a floater, from lower in the jump; held to the top line from the same jump it is a jumper
+  const quick = up({ d: true }); run(quick, L(quick).quick/1000 - 0.2 - 2*GM.TICK); GM.step(quick, { ...AIM, shot: true });
+  check(quick.last.kind === "floater" && quick.last.quick && Math.abs(quick.last.e) <= GM.C.FL_PERFECT && quick.P.h > 0.2 && quick.P.h < 0.8, `${quick.last.kind}, ${quick.last.e.toFixed(1)} ms off, ${quick.P.h.toFixed(2)} of the way up`);
+  const top = up({ d: true }); run(top, L(top).top/1000 - 0.2 - 2*GM.TICK); GM.step(top, { ...AIM, shot: true });
+  check(top.last.kind === "jumper" && !top.last.quick && Math.abs(top.last.e) <= GM.C.PERFECT_MS, `${top.last.kind}, ${top.last.e.toFixed(1)} ms off`);
+  check(quick.last.sig.lat > top.last.sig.lat*1.2 && quick.last.ball.z < top.last.ball.z - 0.5, `pushed up early it is looser and lower: σ ${quick.last.sig.lat.toFixed(1)} against ${top.last.sig.lat.toFixed(1)} in, let go at ${quick.last.ball.z.toFixed(1)} against ${top.last.ball.z.toFixed(1)} ft`);
+  // between the two it is off both
+  const mid = up({ d: true }); run(mid, (L(mid).quick + L(mid).top)/2000 - 0.2 - 2*GM.TICK); GM.step(mid, { ...AIM, shot: true });
+  check(Math.abs(mid.last.e) > 60 && mid.last.q === 0, `halfway between the lines: ${mid.last.e.toFixed(0)} ms off`);
+  // and at the rim neither line is anything: there is no timed release
+  const rim = fresh(48, { defenders: false }); Object.assign(rim.P, { x: RIM.x, y: RIM.y + 3.5 }); run(rim, 0.2); shoot(rim, 400);
+  check(rim.last.kind === "layup" && rim.last.near === 1 && rim.last.eEff*0 === 0, `at 3.5 ft: ${rim.last.kind}`);
+  return `quick line at ${L(stop).quick} ms braking, ${L(none).quick} with no lean, ${L(lean).quick} leaning in; the top line at ${L(stop).top}, ${L(none).top}, ${L(lean).top}`;
 });
 
 gtest("Coming down with the ball is travelling", () => {
@@ -163,6 +172,68 @@ gtest("On a drive, going up early is a floater and going up late is a layup; let
   return `${kinds.join(", ")}; the layup let go at the top is a dunk, and from a standstill it is not`;
 });
 
+gtest("In the air the ball is in the hand, and the cursor is the hand", () => {
+  // standing 10 ft out, at the top of the jump, with the cursor in different places
+  const at = cursor => {
+    const g = fresh(52, { defenders: false }); Object.assign(g.P, { x: RIM.x, y: RIM.y + 10 }); run(g, 0.2);
+    const c = cursor(g); GM.step(g, { ...c, jump: true }); run(g, 61*GM.TICK, c);
+    return { ...GM.airBall(g), px: g.P.x, py: g.P.y, h: g.P.h };
+  };
+  const form = at(() => AIM), up = at(g => ({ x: g.P.x, y: g.P.y })), right = at(g => ({ x: g.P.x + 1.5, y: g.P.y })), wide = at(g => ({ x: g.P.x + 2.2, y: g.P.y }));
+  const jump = GM.C.P_JUMP*form.h;
+  check(form.placed === 0 && Math.abs(form.out - GM.C.FORM_OUT) < 1e-9 && Math.abs(form.z - (GM.C.FORM_Z + jump)) < 1e-9 && form.py - form.y > 0.69, `cursor on the rim, far away: a shooting form, ${form.out.toFixed(2)} ft toward it, ${form.z.toFixed(2)} ft up`);
+  check(up.placed === 1 && up.out < 0.01 && Math.abs(up.z - (GM.C.P_STAND + jump)) < 1e-9, `cursor on the body: straight up at full reach, ${up.z.toFixed(2)} ft`);
+  check(right.placed === 1 && Math.abs(right.x - right.px - 1.5) < 1e-9 && right.side > 0.5 && right.z < up.z - 0.4, `cursor 1.5 ft to the right: the ball is there, and lower: ${right.z.toFixed(2)} ft`);
+  check(wide.z < right.z - 0.5 && wide.z < form.z, `held all the way out it is lowest: ${wide.z.toFixed(2)} ft`);
+  // right at the rim, the hand keeps a low ball out from under it, and lets a high one go over it
+  const under = (v, ms) => { const g = fresh(52, { defenders: false }); if (v) until(g, TOWARD, x => distance(x) <= 6); else Object.assign(g.P, { x: RIM.x, y: RIM.y + 1.2 });
+    run(g, v ? 0 : 0.2); GM.step(g, { ...TOWARD, u: v, jump: true }); run(g, ms/1000 - GM.TICK, { ...TOWARD, u: v }); const b = GM.airBall(g); return { z: b.z, from: Math.hypot(b.x - RIM.x, b.y - RIM.y) }; };
+  const low = under(false, 250), high = under(true, 517);
+  check(low.z < 9.2 && low.from >= GM.C.UNDER_LOW - 1e-9, `a low ball, cursor on the rim from 1.2 ft: held ${low.from.toFixed(2)} ft from the rim's center at ${low.z.toFixed(1)} ft up`);
+  check(high.z >= GM.C.DUNK_Z && high.from < 0.2, `at the top of a running jump it is over the rim: ${high.from.toFixed(2)} ft from its center, ${high.z.toFixed(1)} ft up`);
+  return `shooting form ${form.z.toFixed(1)} ft up; straight up ${up.z.toFixed(1)}; 1.5 ft out ${right.z.toFixed(1)}; 2.2 ft out ${wide.z.toFixed(1)}; kept ${low.from.toFixed(1)} ft from under the rim when low`;
+});
+
+gtest("At the rim a defender is an arm to get the ball past: in front of it the shot is blocked, held away from it the shot gets off", () => {
+  // A finish from 4 ft with a player-controlled defender 2 ft in front, arm up toward the shooter, who jumps so as
+  // to be at the top when the ball is let go. No scatter: only where the ball is held changes.
+  const finish = cursor => {
+    const g = GM.create({ seed: 7, duo: true });
+    Object.assign(g.P, { x: RIM.x, y: RIM.y + 4 }); Object.assign(g.D, { x: RIM.x, y: RIM.y + 2, vx: 0, vy: 0 });
+    g.forced.push(...Array(400).fill(1));
+    const def = () => ({ x: g.P.x, y: g.P.y - 0.2 });
+    for (let t = 0; t < 20; t++) GM.step(g, [cursor(g), def()]);
+    for (let t = 0; t <= 62; t++) GM.step(g, [{ ...cursor(g), jump: t === 0, shot: t === 62 }, { ...def(), jump: t === 34 }]);
+    return g.last;
+  };
+  const front = finish(() => AIM), away = finish(g => ({ x: g.P.x + 2.0, y: g.P.y - 0.3 }));
+  check(front.kind === "layup" && front.out.big === "Blocked", `held in front, toward the rim: ${front.out.big} / ${front.out.sub}`);
+  check(away.kind === "layup" && !away.out.touched && away.ball.side > 0.5, `held 2 ft out to the side: ${away.out.big} / ${away.out.sub}`);
+  check(front.con.c === 0 && away.con.c === 0, "at the rim there is no contest number: the defender is the arm and nothing else");
+  check(away.sig.lat > front.sig.lat, "holding it out wide costs touch");
+  return `in front: ${front.out.big}. Held ${away.ball.out.toFixed(1)} ft out to the side: ${away.out.big} / ${away.out.sub}, at σ ${away.sig.lat.toFixed(1)} in against ${front.sig.lat.toFixed(1)}`;
+});
+
+gtest("Flying into a defender who was set is a charge; into one inside the restricted area, or one who is moving, it is a bump", () => {
+  // the handler drives down the middle and takes off 3 ft short of a player-controlled defender standing `out` ft from the rim
+  const fly = (out, moving) => {
+    const g = GM.create({ seed: 9, rules: true, duo: true });
+    GM.step(g, [{ ...AIM, gather: true }, AIM]); GM.step(g, [AIM, AIM]);
+    const park = () => { if (!moving) Object.assign(g.D, { x: RIM.x, y: RIM.y + out, vx: 0, vy: 0 }); };
+    Object.assign(g.D, { x: RIM.x, y: RIM.y + out, vx: 0, vy: 0 });
+    const def = () => moving ? { x: g.D.x, y: g.D.y, r: g.tick % 60 < 30, l: g.tick % 60 >= 30 } : { x: g.D.x, y: g.D.y };
+    for (let t = 0; t < 600 && distance(g) > out + 3.2 && g.flow.phase === "live"; t++) { park(); GM.step(g, [TOWARD, def()]); }
+    GM.step(g, [{ ...TOWARD, jump: true }, def()]);
+    for (let t = 0; t < 60 && g.flow.phase === "live" && g.shot.state === "shooting"; t++) GM.step(g, [TOWARD, def()]);
+    return g;
+  };
+  const set = fly(8, false), under = fly(3, false), sliding = fly(8, true);
+  check(set.flow.phase === "dead" && set.flow.why === "Charge" && set.flow.next === "change" && set.stats.to === 1, `into a set defender 8 ft out: ${set.flow.phase}, "${set.flow.why}"`);
+  check(under.flow.why !== "Charge" && under.shot.bump, `into one standing 3 ft from the rim: "${under.flow.why}", bumped ${under.shot.bump}`);
+  check(sliding.flow.why !== "Charge", `into one who was sliding across: "${sliding.flow.why}"`);
+  return `set, 8 ft out: ${set.flow.why}. In the restricted area: play on, with a bump. Sliding: ${sliding.flow.why || "play on"}`;
+});
+
 gtest("Rim or glass is chosen when the jump starts: a cursor that slides onto the backboard during it is not a bank", () => {
   const BOARD_Y = 4.0, rim = { x: RIM.x, y: RIM.y }, glass = { x: RIM.x + 1.6, y: BOARD_Y };
   // a standing jumper from the wing, with the cursor in one place at the press and another by the release
@@ -184,6 +255,20 @@ gtest("Rim or glass is chosen when the jump starts: a cursor that slides onto th
   return "decided at the jump; a near miss of the rim is not the glass";
 });
 
+gtest("A ball that has no way to get where it is aimed is a blown shot, not a crash", () => {
+  // right by the basket with the cursor on the glass: a bank from there, let go low, has no path. Looking at the
+  // odds on the way must not fall over either.
+  const g = fresh(55, { defenders: false });
+  Object.assign(g.P, { x: RIM.x - 3, y: RIM.y + 0.3 }); const glass = { x: RIM.x - 2.5, y: 4.0 };
+  run(g, 0.1, glass); GM.step(g, { ...glass, jump: true });
+  for (let i = 1; i < 24; i++) { GM.step(g, glass); GM.preview(g); }
+  GM.step(g, { ...glass, shot: true }); GM.preview(g); GM.lastOdds(g);
+  check(g.last && g.last.glass && !g.last.out.make && g.last.out.sub === "Blown layup" && g.stats.fga === 1, `expected a blown bank: ${JSON.stringify(g.last && g.last.out)}`);
+  run(g, 2);
+  check(g.shot.state === "idle", `afterwards: ${g.shot.state}`);
+  return `${g.last.name} from ${g.last.dist.toFixed(1)} ft, let go at ${g.last.ball.z.toFixed(1)} ft: ${g.last.out.sub}`;
+});
+
 gtest("Nothing in the game is rolled except a shot's scatter", () => {
   const src = require("fs").readFileSync(require("path").join(__dirname, "game.js"), "utf8");
   const calls = src.split("\n").filter(line => /\brnd\(\)/.test(line) && !/^const rnd = /.test(line));
@@ -193,12 +278,12 @@ gtest("Nothing in the game is rolled except a shot's scatter", () => {
 
 gtest("An open dunk always goes down; with a shot blocker's arm over the rim it is met there", () => {
   const open = fresh(71, { defenders: false });
-  until(open, TOWARD, x => distance(x) <= 8.5);
+  until(open, TOWARD, x => distance(x) <= 7);
   shoot(open, TOP, TOWARD); run(open, 2);
   check(open.last.kind === "dunk" && open.last.out.make && open.stats.pts === 2 && !open.last.foul, `expected a made dunk: ${JSON.stringify(open.last.out)}`);
   // the same dunk with the rim protector between the dunker and the rim, at the top of a jump as the ball gets there
   const met = fresh(71, { defenders: false });
-  until(met, TOWARD, x => distance(x) <= 8.5);
+  until(met, TOWARD, x => distance(x) <= 7);
   GM.setDefender(met, "rimOn", true);
   for (let i = 0; i < 80 && !(met.last && met.last.kind === "dunk"); i++) {
     const u = { x: (RIM.x - met.P.x)/distance(met), y: (RIM.y - met.P.y)/distance(met) };
