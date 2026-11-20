@@ -51,11 +51,11 @@ A key property: when scatter is small (open, good shooter), input error matters 
 
 ## Input scheme
 
-Three buttons, and each means one thing.
+Two buttons and the movement keys.
 
 - **WASD** moves. **Cursor** aims from range, and in the air at the rim it is the ball.
-- **Space** jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too.
-- **Left mouse** lets the ball go, the moment it is pressed, if you are in the air. With your feet on the floor it is a pump fake.
+- **Left mouse, pressed**, jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too, so the shot and the contest are the same button.
+- **Left mouse, let go**, lets the ball go, the moment it comes up, if you are in the air. Let go while the legs are still loading, before the feet leave, and the jump is called off: a pump fake. So a shot is a hold and a fake is a tap.
 - **Shift** gathers the ball, or puts a ball that has not been dribbled yet on the floor.
 - **WASD as you take off** is a lean: it decides what you carry into the air (see The jump). Inputs are read relative to the floor, not the shot line.
 
@@ -86,7 +86,7 @@ Two lines on every jump, with the nearer one counting, was tried and taken out b
 
 This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth and the cursor sets lateral aim. Distance, movement and contest set the scatter.
 
-**Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after Space, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
+**Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after the press, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
@@ -114,7 +114,7 @@ Depth scatter = 1.16 × lateral. The total is multiplied by 1.23 (calibration) a
 
 Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop are what its one rule produces.
 
-**The timeline.** Space starts it. For 170 ms the legs load with the feet still down; a click then does nothing. Then 350 ms up and 350 ms down. The top is 520 ms after Space, and the feet are back on the floor at 870 ms.
+**The timeline.** Pressing the mouse button starts it, and letting it go lets the ball go. For 170 ms the legs load with the feet still down; letting go then calls the jump off, and that is a pump fake. Then 350 ms up and 350 ms down. The top is 520 ms after the press, and the feet are back on the floor at 870 ms.
 
 **What you carry into the air.** Decided while the legs load, and nothing changes it after that:
 
@@ -236,7 +236,7 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 
 ## The quick line
 
-The quick line is the early release: let go on the way up, 330 ms after Space, 160 ms after the feet leave and 190 ms before the top. A jump has it when it starts on a drive from 7 to 14 ft, and that shot is a floater.
+The quick line is the early release: let go on the way up, 330 ms after the press, 160 ms after the feet leave and 190 ms before the top. A jump has it when it starts on a drive from 7 to 14 ft, and that shot is a floater.
 
 - **Timing:** perfect window ±20 ms plus the timing assist, against ±12 on the top line. The perfect release bonus applies.
 - **Touch:** a floor of 4.6 in × (1 − bonus × q) against 3.93, movement 0.08 × ft/s against 0.14 and with no cost for speed in the air: it is built for moving. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration).
@@ -316,7 +316,7 @@ The gather button (Shift) is a state change, not a move: it turns a dribbled bal
 - Step length is speed × 0.2 s, between 1.2 and 3.0 ft. With nothing held, the first step continues your momentum.
 - **Euro:** sideways movement off the first step's line during the second step, tracked continuously. It costs 0.6 in of finishing scatter per foot.
 - **Jump stop:** nothing held on the second step plants both feet (0.8 ft) and kills the dribble.
-- **Going up:** click any time, off either step. Out of gather steps, layups count up to 9 ft (7 ft normally), floaters to 14 ft, jumpers beyond. If you haven't gone up within 0.3 s of planting the second step, you stop with a dead dribble.
+- **Going up:** press any time, off either step. Out of gather steps, layups count up to 9 ft (7 ft normally), floaters to 14 ft, jumpers beyond. If you haven't gone up within 0.3 s of planting the second step, you stop with a dead dribble.
 
 **Gathering while stopped** gives a dead dribble with feet planted.
 
@@ -347,10 +347,10 @@ Post moves are planned to use this same system from a back-to-the-basket stance:
 
 ## Pump fakes
 
-A pump fake is a click with your feet on the floor: the ball goes up and you stay down. A shot needs the jump first, so the fake and the shot are different inputs and neither can be the other by accident.
+A pump fake is a jump called off: press the mouse button to go up and let it go again while the legs are still loading, in the first 170 ms. The ball goes up and you stay down. Once the feet have left, letting go is a shot, however early, so a fake is a tap and a shot is a hold. The two share a button, as the real things share a motion: the start of a shot and a fake look the same to a defender because they are the same, until the feet leave.
 
 - **When:** any time you have the ball and are not in the air: off the dribble, during gather steps, from a dead dribble or a triple threat.
-- **After a fake, your dribble is dead,** because rising into a shot picks up the ball. If you were already pivoting, you keep the same pivot foot.
+- **After a fake, your dribble is dead,** because rising into a shot picks up the ball. Out of a triple threat you still have it to come. If you were already pivoting, you keep the same pivot foot, and the body is back where it went up from: a lean while the legs loaded does not move it.
 - **Defenders react to the motion they saw,** real or fake, one shot reaction time later. The AI leaves its feet for a shot it sees only from inside 3.2 ft, which is as far as a block reaches. Up close it has to respect the shot, so that is also where a fake gets it in the air. From further off it keeps its feet, closes out and gets a hand up. The jump lasts 0.5 s.
 - **The payoff window:** in the air, a defender drifts and can't close out. For 0.45 s after landing, they can only get about 30% of a hand up on a jumper or floater. Shooting into that window, or stepping through, is the reward; shooting while they're still in the air runs into the full contest.
 
@@ -685,7 +685,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: letting go 517 ms after the press is a perfect jumper, letting go before the feet leave is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
@@ -733,10 +733,10 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 **Rebounding.** Three things decide who gets a loose ball, and none of them is a roll.
 
 - **Getting there.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The ball is drawn with its height while it is loose, so you can see where and when it is coming down.
-- **Going up.** Space jumps for a loose ball, for the handler as well as a player on defense. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
+- **Going up.** The mouse button jumps for a loose ball, for the handler as well as a player on defense. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
 - **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
 
-**It is the same key.** Space is the jump for everyone, with the ball or without it. A free throw is the same jump and click as any jumper.
+**It is the same button.** Pressing the mouse button is the jump for everyone, with the ball or without it, so the shot and the contest are one motion. A free throw is the same press and release as any jumper.
 
 **Against the AI.** The defenders take a reaction time to register a miss before they go after it, and they go up for a ball that is about to come within a jump's reach.
 
@@ -774,7 +774,7 @@ Two people can now play each other: each plays their own side, and whoever doesn
 | WASD | Moves the defender: 14 ft/s, a little quicker than a dribbler's 13.5 |
 | Cursor | The hand. Pointed at the ball handler it is a hand up, which is what the contest formulas read, however far out it is. How far it is from the body is how far the arm reaches, between 0.85 ft (nearly straight up, and as high as it goes) and 1.6 ft (reaching out, and lower). On the defender's own body, the hand is down |
 | Cursor on the ball | Takes it, if the hand gets within 0.55 ft of a ball that is being dribbled or held and the handler's off arm is not in the way. Not during the first second after a check |
-| Space | Jumps, to block a shot or go up for a rebound. No steering in the air, and the usual recovery on landing |
+| Left mouse | Pressed, jumps, to block a shot or go up for a rebound. No steering in the air, and the usual recovery on landing. Letting it go does nothing |
 
 **The defender's hand.** Every defender has one hand, and what it meets decides what happens, for the AI and a player alike: the ball with nothing in the way is a steal, and the handler's body or off arm, if the hand was moving into them, is a reach-in foul. From in front, across the handler's body, the ball can't be reached without going through them; from the ball's side it can. A player's hand is where their cursor puts it. The AI's rests toward the handler, held off their body, and it reaches when it has seen the ball left open: within its reach, with neither the handler's arm nor their body in the way, for long enough. Under its nose that is 0.12 s; at the end of its reach, 1.2 s; both stretched for a better handler and shortened for a better thief. It reaches for where that ball would be now if the handler had done nothing since, a reaction time on. If they have moved it, the hand finds an arm, or nothing. **Blocks are the defender's timing and reach:** the jump is theirs to choose and the hand is where they put it (see Blocks, under Full physics, and the measurements under Calibration).
 
@@ -903,7 +903,7 @@ What this shows:
 - **A block needs the defender inside about 3.2 ft, and a jump that left the floor between about 320 and 150 ms before the release.** Before the arm had a length, the same jumper was blocked from anywhere inside 3.5 ft over a 350 ms span of timings, and a jump at the right moment from 4 ft still got there.
 - **Reaching out and reaching up are different tools.** Out gets a hand to shots from 3 to 3.4 ft that straight up cannot touch. Up is better inside 2.6 ft, where an arm reaching out ends up behind the ball.
 - **The edges are tips, not a cliff.** Around the block timings, and at the far end of the reach, the hand only grazes the ball.
-- **The timing is the contest.** A jumper takes 520 ms to its release and cannot be called off once Space is pressed. A defender who goes on the first movement is up in time, and is beaten by a pump fake. One who waits to see the feet leave, 170 ms in, and then reacts in 200 ms has a hand up about 30 ms before a perfect release: an early release beats them, at a small cost in distance.
+- **The timing is the contest.** A jumper takes 520 ms to its release, and can be called off only in the first 170 ms, while the legs load: that is the pump fake. A defender who goes on the first movement is up in time, and is beaten by the fake. One who waits to see the feet leave, 170 ms in, and then reacts in 200 ms has a hand up about 30 ms before a perfect release: an early release beats them, at a small cost in distance.
 - **A hand held up no longer blocks a floater.** Reaching toward the shooter now puts it below the ball. It takes a jump.
 - **A standing rim protector still barely costs a layup:** 71–78%, against 81% open. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
 - **Against the AI, a block is all-or-nothing for a given position,** because the AI's jump follows a rule. The variation comes from a player's timing and reach, and from whether the AI was brought in close.
@@ -1001,7 +1001,7 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | HAND\_V / REACH\_T / REACH\_CD / LEFT\_OPEN | 14 ft/s / 0.25 s / 2 s / 0.12–1.2 s | The AI's reach for the ball: hand speed, time out, wait before another, and how long the ball must have been left open |
 | LAYUP\_RANGE / FLOATER\_RANGE | 7 / 14 ft | Context cutoffs on a drive |
 | DRIVE\_SPEED | 4 ft/s | Minimum speed toward the rim to count as driving |
-| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | The quick line after Space, and its perfect window |
+| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | The quick line after the press, and its perfect window |
 | FL\_KT | 0.07 in/ms | Depth estimate per ms in the floater's last-shot readout. Outcomes use K\_SPEED below |
 | FL\_CONTEST\_SIG | 5.0 in | Floater contest scatter |
 | PSPEED / PACC | 15 ft/s / 70 ft/s² | Ball handler movement |

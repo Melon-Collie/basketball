@@ -133,10 +133,10 @@ dd small{color:var(--muted)}
         <button id="again" type="button" hidden>Play again</button>
         <button id="newGame" type="button">New game</button>
       </div>
-      <div class="court-box"><canvas id="court" tabindex="0" aria-label="Half court. Move with W A S D, aim with the mouse, press Space to jump and click to shoot."></canvas></div>
+      <div class="court-box"><canvas id="court" tabindex="0" aria-label="Half court. Move with W A S D, aim with the mouse, press the mouse button to jump and let it go to shoot."></canvas></div>
       <p class="help"><strong>The game:</strong> two sides take turns with the ball against the same defense, first to 21. You have 14 seconds to get a shot off. A miss is a live ball: run to it before a defender does and you keep the possession. A foul on a shot sends you to the line. Untick Game rules under Tuning for free shooting.<br>
       <strong>Triple threat:</strong> every possession, and every rebound you catch, starts with the ball in your hands and your dribble still to come. From there you can go up and shoot, pump fake, jab or pivot with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> (they move your free foot, not you), or press <kbd>Shift</kbd> to put the ball on the floor and go. Once you pick it up again the dribble is gone.<br>
-      <strong>Shooting:</strong> <kbd>Space</kbd> jumps and a left click lets the ball go. Every shot is the same jump: your legs load for a moment, then you are in the air for about 0.7 s. Come down still holding the ball and it is travelling. You carry half the speed you arrived with into the air, plus up to 5 ft/s the way you hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> as you take off, and nothing steers you after that. So hold away from the rim for a fadeaway, toward it for a runner, or against your own momentum to stop. A click with your feet on the floor is a pump fake: the ball goes up, you stay down, your dribble is dead, and a defender who bit may be in the air.<br>
+      <strong>Shooting:</strong> press the left mouse button to jump, and let it go to let the ball go. Every shot is the same jump: your legs load for a moment, then you are in the air for about 0.7 s. Come down still holding the ball and it is travelling. You carry half the speed you arrived with into the air, plus up to 5 ft/s the way you hold <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> as you take off, and nothing steers you after that. So hold away from the rim for a fadeaway, toward it for a runner, or against your own momentum to stop. Let go before your feet leave the floor (a quick tap) and it is a pump fake: the ball goes up, you stay down, your dribble is dead (out of a triple threat you keep it), and a defender who bit may be in the air.<br>
       <strong>The release line:</strong> away from the rim, the ball has to be let go on the meter’s line. For most jumps that is the top of the jump: the set shot. Jump while driving at the rim from about 7 to 14 ft and the line is on the way up instead: a floater, off before a shot blocker is there, with more arc and less touch. Moving toward or away from the rim moves the line (earlier going in, later fading), and the meter shows where it is. Moving any other way costs touch, not aim: you never have to aim against your own momentum. To bank a shot, have the cursor on the backboard, clear of the rim, when you jump: the marker turns green where a bank can go in.<br>
       <strong>Finishes:</strong> jump inside 4 ft, on a drive inside about 7 ft, or out of gather steps inside about 12 ft, and it is a finish. A finish has no release line and no aim, wherever you let go: your hand finds the rim, so the cursor is free, and in the air it is the ball. Close to your body, it puts the ball there on a straight arm, to either side of you, behind you, or straight up, and the further out you hold it the lower it is. Out at the rim or beyond, the ball is up in a shooting form. Nothing protects it but where it is: a defender is a body and an arm, and the ball has to get past the arm. Let go on the way up to beat a shot blocker to it, at the top, or on the way down to wait them out, at the cost of control. Let go close: from further out than 4 ft a finish is a heave, and worse for every foot. Get the ball over the rim, near the top of a running jump right at the basket, and it is a dunk. Flying into a defender who was set is a charge; into one who was not, a bump that costs the shot.<br>
       <strong>Dribbling:</strong> the ball bounces toward your cursor. Keep it on the side away from the defender; the farther out the cursor, the longer and more exposed the dribble. Switch sides for a crossover. Slow down with the cursor pulled in tight and the ball hangs up like a pull-up; a defender who respects your shot steps up, and that’s the moment to explode past. Nothing is a button: the defender just reacts to what they saw a moment ago.<br>
@@ -156,7 +156,7 @@ dd small{color:var(--muted)}
       </div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
-        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), <kbd>Space</kbd> to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. Reaching into the handler, getting a hand on a shooter’s arms or running into them is a foul. After a miss, <kbd>Space</kbd> jumps for the ball for both of you.</p>
+        <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), the mouse button to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. Reaching into the handler, getting a hand on a shooter’s arms or running into them is a foul. After a miss, the mouse button jumps for the ball for both of you.</p>
         <div id="netSetup">
           <div class="row"><button id="netHost" type="button">Host a game</button></div>
           <div id="netInvite" hidden>
@@ -386,8 +386,8 @@ function buildCourt() {
 // Events only record what is held. The loop turns that into one input per tick, so the game never sees an event.
 const mouse = { x: 25, y: 5.25 };                       // the cursor, in court coordinates
 const pointer = { fx: undefined, fy: undefined };       // where the cursor is on the canvas, as fractions of its size
-const held = { u: false, d: false, l: false, r: false, shot: false, gather: false, jump: false };
-const tapped = { shot: false, gather: false, jump: false };   // pressed since the last tick, even if already let go
+const held = { u: false, d: false, l: false, r: false, shot: false, gather: false };
+const tapped = { shot: false, gather: false };   // pressed since the last tick, even if already let go
 function setMouse(e) {
   const r = court.getBoundingClientRect();
   pointer.fx = (e.clientX - r.left)/r.width; pointer.fy = (e.clientY - r.top)/r.height;
@@ -400,8 +400,8 @@ function mouseToWorld() {
 }
 function tickInput() {
   const input = { u: held.u, d: held.d, l: held.l, r: held.r, x: mouse.x, y: mouse.y,
-                  shot: held.shot || tapped.shot, gather: held.gather || tapped.gather, jump: held.jump || tapped.jump };
-  tapped.shot = tapped.gather = tapped.jump = false;
+                  shot: held.shot || tapped.shot, gather: held.gather || tapped.gather };
+  tapped.shot = tapped.gather = false;
   return input;
 }
 court.addEventListener("pointermove", setMouse);
@@ -418,12 +418,10 @@ const KEYMAP = { KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyA: "l", 
 window.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" && e.target.type === "range" && e.code.startsWith("Arrow")) return;
   if (e.key === "Shift") { if (!e.repeat) held.gather = tapped.gather = true; return; }       // Shift: gather, or put the ball on the floor
-  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) held.jump = tapped.jump = true; return; }   // Space: jump
   if (KEYMAP[e.code]) { held[KEYMAP[e.code]] = true; e.preventDefault(); }
 });
 window.addEventListener("keyup", e => {
   if (e.key === "Shift") held.gather = false;
-  if (e.code === "Space") held.jump = false;
   if (KEYMAP[e.code]) held[KEYMAP[e.code]] = false;
 });
 window.addEventListener("blur", () => { for (const k of Object.keys(held)) held[k] = false; });
@@ -619,7 +617,7 @@ function draw() {
     mx = cx + gap + mw + ppf*0.3 <= court.width ? cx + gap : cx - gap - mw;
     mtop = clamp(cy - mh*line, ppf*0.3, Math.max(ppf*0.3, court.height - mh - ppf*0.3));
   };
-  // One meter, because it is one jump whatever the shot. It fills from Space until the feet come down. Away from the
+  // One meter, because it is one jump whatever the shot. It fills from the press until the feet come down. Away from the
   // rim it has the release line; near the rim that fades out, and what is left is the top of the jump and, past it,
   // the hang. The pale strip at the bottom is the legs loading, when there is nothing to let go yet.
   const up = shot.state === "shooting", flash = G.meterFlash;

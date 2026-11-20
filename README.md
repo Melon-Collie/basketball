@@ -114,20 +114,20 @@ Mouse and keyboard:
 
 - A possession starts in a **triple threat**: the ball in your hands, your dribble still to come. Go up and shoot, pump fake, or jab and pivot with **WASD**, which moves your free foot. **Shift** puts the ball on the floor.
 - Once you are dribbling, **WASD** moves you; the **cursor** aims and controls the ball hand. You can go anywhere on the half court, the baseline and under the basket included. The backboard is solid from behind too.
-- **Space** jumps, and **left mouse** lets the ball go. Every shot is the same jump: about half a second to the top, and then down again. Come down still holding the ball and it is travelling. The court holds still while you are in the air, so your cursor stays where you put it.
+- **Press the left mouse button** to jump and **let it go** to let the ball go. Every shot is the same jump: about half a second to the top, and then down again. Come down still holding the ball and it is travelling. The court holds still while you are in the air, so your cursor stays where you put it.
 - The jump carries half the speed you arrived with, plus up to 5 ft/s the way you hold **WASD** as you take off. Nothing steers it after that. Hold away from the rim for a fadeaway, toward it for a runner, against your own momentum to stop.
 - Away from the rim the ball has to be let go on the meter's **release line**, and the cursor aims. For most jumps the line is the top of the jump: the set shot. Jump while driving at the rim from about 7 to 14 ft and it is on the way up instead: a floater, off sooner, with more arc and less touch.
 - A jump inside 4 ft, on a drive inside about 7 ft, or out of gather steps inside about 12 ft is a **finish**: no release line and no aim, and **the cursor is the ball**. Close to your body it puts the ball there, to either side, behind you or straight up; out at the rim it is up in a shooting form. A defender there is a body and an arm, and the ball has to get past the arm. Let go on the way up to beat a shot blocker, or on the way down to wait them out, and let go close: from further out than 4 ft it gets worse with every foot. Get the ball over the rim near the top of a running jump and it is a dunk.
 - Flying into a defender who was set is a charge. Into one who was not, it is a bump, and the shot pays for it.
-- A **left click with your feet on the floor** is a pump fake.
+- **Let go before your feet leave the floor**, in the first 170 ms, and the jump is called off: a pump fake. A tap is a fake, a hold is a shot. Off a dribble the fake kills it; out of a triple threat you keep it.
 - To bank a shot, have the cursor on the backboard, clear of the rim, when you jump.
 - **Shift** gathers the ball again, and that is the end of your dribble.
 
-On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **Space** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
+On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **pressing the left mouse button** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
 
 Nothing but a shot's scatter is left to chance. Reaching into the handler, getting a hand on a shooter's arms, running into a shooter and jumping over a rebounder's back are fouls, called from what the bodies and hands actually did, and the AI is held to the same rules.
 
-After a miss the ball is live. **Space** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there.
+After a miss the ball is live. **Pressing the left mouse button** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there.
 
 The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.
 

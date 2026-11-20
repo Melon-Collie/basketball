@@ -21,9 +21,10 @@ if (NODE) Object.assign(NZX.NOISE, require("./calibration.js"));   // in the pag
 
 // ---------- Model constants (inches, feet, ms) ----------
 const C = {
-  // The jump with the ball, the same for every shot. Space starts it: LOAD ms with the feet still down while the legs
-  // bend, then RISE ms up and RISE ms down. The top of the jump, IDEAL ms after the press, is where a jumper is let
-  // go. A floater is let go on the way up, FL_IDEAL ms after it: that is what gets it off before a shot blocker is there.
+  // The jump with the ball, the same for every shot. Pressing the mouse button starts it: LOAD ms with the feet still
+  // down while the legs bend, then RISE ms up and RISE ms down. Letting the button go lets the ball go. The top of the
+  // jump, IDEAL ms after the press, is where a jumper is let go. A floater is let go on the way up, FL_IDEAL ms after
+  // it: that is what gets it off before a shot blocker is there. Let go before LOAD and the jump is a pump fake.
   LOAD: 170, RISE: 350, IDEAL: 520, FL_IDEAL: 330,
   KEEP: 0.5, LEAN: 5,            // takeoff: this share of the speed you arrived with is carried into the air, plus up to LEAN ft/s the way WASD is held
   P_STAND: 8.3, P_JUMP: 2.3,     // ft: the handler's standing reach, and how much a full jump adds (placeholders until frames)
@@ -95,7 +96,7 @@ function create(opts = {}) {
     defIn: { u: false, d: false, l: false, r: false, x: 25, y: 20 },   // that defender's keys and cursor this tick
     seed: (opts.seed ?? 1) | 0,                              // the game's random stream
     forced: [],                                              // values the next random rolls will take, for tests
-    prev: [{ shot: false, gather: false, jump: false }, { shot: false, gather: false, jump: false }],   // each side's buttons as of the last tick, to see presses and releases
+    prev: [{ shot: false, gather: false }, { shot: false, gather: false }],   // each side's buttons as of the last tick, to see presses and releases
     // Settings, the same for every player. None of them is a rating: each is the thing itself, in its own units.
     //   tAssist ms, bonus %, aAssist %, drift x       the shot: free timing error, what a perfect release tightens, aim help, how far momentum moves the release line
     //   fadeIn in                                      scatter that moving at 5 ft/s in the air adds to a jumper (a fadeaway's speed)
@@ -307,7 +308,7 @@ function airVelocity(vx, vy) {
   const d = inputDir();
   return { x: vx*C.KEEP + (d ? d.x*C.LEAN : 0), y: vy*C.KEEP + (d ? d.y*C.LEAN : 0) };
 }
-// The release line, ms after Space. A jump has one, and it stays where it is once the feet have left:
+// The release line, ms after the press. A jump has one, and it stays where it is once the feet have left:
 //   the top of the jump, for a set shot
 //   quick, on the way up, for a jump off a drive from floater range: what the AI also reads as a floater
 // Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away
@@ -326,7 +327,7 @@ function fadeOf(vx, vy, f) {
 // in of scatter from moving through the air at this speed
 const airScatter = speed => params.fadeIn*speed/C.LEAN;
 const FADE_NAME = { back: "Fadeaway", left: "Side fade left", right: "Side fade right" };
-// How far up the jump is, 0 to 1, t ms after Space.
+// How far up the jump is, 0 to 1, t ms after the press.
 const jumpCurve = t => { const a = t - C.LOAD; return a <= 0 || a >= 2*C.RISE ? 0 : 1 - ((a - C.RISE)/C.RISE)**2; };
 // How much of a full jump one taken at this speed is.
 const liftAt = v0 => C.STAND_LIFT + (1 - C.STAND_LIFT)*clamp(v0/C.RUN_UP, 0, 1);
@@ -459,7 +460,7 @@ function dunkShot(ball, hs) {
   return { L, res, toucher: arm ? (defenders()[arm.i] === D ? "D" : "R") : null };
 }
 
-// Space, with the ball: leave the floor. What comes of it is up to where the ball is and when it is let go.
+// The button pressed, with the ball: leave the floor. What comes of it is up to where the ball is and when it is let go.
 function takeOff() {
   if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree() || P.up >= 0 || P.jumpT >= 0 || P.land > 0) return;
   if (g.ball) g.ball = null;
@@ -468,7 +469,7 @@ function takeOff() {
   Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, gatherSpeed: v0, vPerpG: P.vx*f.r.x + P.vy*f.r.y,
     gx: P.x, gy: P.y, finish: cx.kind === "layup", quick: cx.kind === "floater",
     line: lineFor(cx.kind === "floater", P.vx*C.KEEP, P.vy*C.KEEP, f, nearOf(cx.kind === "layup", f.dist)),
-    avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: false });
+    avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: false, pivoted: hold.state === "pivot" });
   shot.glass = onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
   hold.state = "none";   // going up ends the gather
   Object.assign(P, { up: 0, v0x: P.vx, v0y: P.vy, lift: liftAt(v0) });
@@ -509,7 +510,7 @@ function travel() {
 }
 
 // ---------- Release ----------
-// A click in the air: the ball leaves the hand, from where the hand is, now.
+// The button let go in the air: the ball leaves the hand, from where the hand is, now.
 function letGo() {
   const fl = g.flow, ft = fl.on && fl.phase === "ft", f = frame(P), ball = airBall();
   const o = { ball, av: { x: P.vx, y: P.vy }, v0: shot.gatherSpeed, vp0: shot.vPerpG, finish: shot.finish, quick: shot.quick, line: shot.line, euro: shot.euro, bump: shot.bump };
@@ -723,10 +724,15 @@ function plantStep() {
     beginStep();
   } else if (hold.euro > 0.8) drib.lastMove = `Euro step: ${hold.euro.toFixed(1)} ft sideways`;
 }
-// A click with the feet on the floor: the ball goes up and the feet stay down. From a dribble that picks the ball up.
+// The button let go while the legs are still loading: the jump is called off. The ball went up and the feet stay
+// down, so it was a pump fake. From a dribble or gather steps that picks the ball up; from a pivot the pivot foot
+// is still the one it was, and the body is back where it went up from.
 function pumpFake() {
-  if (shot.state !== "idle" || shot.cooldown > 0 || !ballFree() || P.up >= 0 || P.jumpT >= 0) return;
-  if (hold.state !== "pivot") enterPivot();                            // rising into a shot picks up the dribble
+  if (shot.state !== "shooting" || P.up*1000 >= C.LOAD) return;
+  shot.state = "idle"; P.up = -1; P.h = 0;
+  D.jumpAt = null; R.jumpAt = null;
+  if (shot.pivoted) { hold.state = "pivot"; P.x = shot.gx; P.y = shot.gy; P.vx = 0; P.vy = 0; }
+  else enterPivot();                                                   // rising into a shot picks up the dribble
   hold.fakeT = 0.3; shot.cooldown = 0.15;
   drib.lastMove = "Pump fake";
   g.fx.push({ kind: "text", text: "Pump fake", t: 0, x: P.x, y: P.y });
@@ -1075,7 +1081,7 @@ function foulCall(why, next) {
 }
 
 // ---------- A player on defense ----------
-// WASD moves, the cursor is the hand, Space jumps. Pointing the cursor at the ball handler is a hand up, which is
+// WASD moves, the cursor is the hand, the mouse button jumps. Pointing the cursor at the ball handler is a hand up, which is
 // what a contest reads. How far the cursor is from the body is how far the arm reaches: close in it goes nearly
 // straight up, further away it reaches out, and lower. With the cursor on their own body the hand is down.
 function playerDefender(dt) {
@@ -1251,30 +1257,31 @@ function previewNow() {
 function preview() { viewing = true; try { return previewNow(); } finally { viewing = false; } }
 
 // ---------- Input ----------
-// A click in the air lets the ball go. While the legs are still loading there is nothing to let go.
-function shootNow() { if (shot.state === "shooting" && shot.t >= C.LOAD) letGo(); }
+// The button let go during a jump with the ball: in the air the ball goes; while the legs are still loading the jump
+// is called off, and that is a pump fake.
+function releaseNow() { if (shot.state !== "shooting") return; if (shot.t >= C.LOAD) letGo(); else pumpFake(); }
 // One tick. An input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
-// jump (Space is down), shot (the mouse button is down), gather (Shift is down). Presses are read off the change since
-// the last tick.
-//   jump     with the ball, leave the floor; without it, go up for a loose ball
-//   shot     in the air, let the ball go; on the floor, a pump fake
+// shot (the mouse button is down), gather (Shift is down). Presses and releases are read off the change since the
+// last tick.
+//   shot     pressed: with the ball, leave the floor; without it, go up for a loose ball.
+//            let go: in the air, let the ball go; before the feet have left, a pump fake
 //   gather   pick the dribble up, or put a ball that has not been dribbled yet on the floor
 // With one player, pass their input. With two, pass [side 0's input, side 1's input]: the side with the ball plays
-// offense and the other controls the on-ball defender, for whom Space is a jump as well.
+// offense and the other controls the on-ball defender, for whom the press is a jump as well.
 function step(input) {
   const fl = g.flow, live = !fl.on || fl.phase === "live", ft = fl.on && fl.phase === "ft";
   const two = Array.isArray(input), side = two ? fl.offense : 0, off = two ? input[side] : input;
   keys.u = live && !!off.u; keys.d = live && !!off.d; keys.l = live && !!off.l; keys.r = live && !!off.r;   // nobody moves at the line or on a dead ball
   mouse.x = off.x; mouse.y = off.y;
-  const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather, jump: !!off.jump };
+  const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather };
   if (live && now.gather && !was.gather) gather();
-  if (now.jump && !was.jump) { if (live && fl.on && !ballFree()) handlerJump(); else if (live || ft) takeOff(); }
-  if ((live || ft) && now.shot && !was.shot) { if (shot.state === "shooting") shootNow(); else pumpFake(); }
+  if (now.shot && !was.shot) { if (live && fl.on && !ballFree()) handlerJump(); else if (live || ft) takeOff(); }
+  if ((live || ft) && !now.shot && was.shot) releaseNow();
   g.prev[side] = now;
   if (two) {
-    const def = input[1 - side], dWas = g.prev[1 - side], dNow = { shot: !!def.shot, gather: !!def.gather, jump: !!def.jump };
+    const def = input[1 - side], dWas = g.prev[1 - side], dNow = { shot: !!def.shot, gather: !!def.gather };
     Object.assign(g.defIn, { u: live && !!def.u, d: live && !!def.d, l: live && !!def.l, r: live && !!def.r, x: def.x, y: def.y });
-    if (g.duo && live && dNow.jump && !dWas.jump) defenderJump();
+    if (g.duo && live && dNow.shot && !dWas.shot) defenderJump();
     g.prev[1 - side] = dNow;
   }
   g.tick++;
