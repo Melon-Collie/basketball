@@ -121,7 +121,8 @@ Mouse and keyboard:
 - Flying into a defender who was set is a charge. Into one who was not, it is a bump, and the shot pays for it.
 - **Let go before your feet leave the floor**, in the first 170 ms, and the jump is called off: a pump fake. A tap is a fake, a hold is a shot. Off a dribble the fake kills it; out of a triple threat you keep it.
 - To bank a shot, have the cursor on the backboard, clear of the rim, when you jump.
-- **Shift** gathers the ball again, and that is the end of your dribble.
+- **Shift** gathers the ball again, and that is the end of your dribble. On the move it gives you two gather steps, steered with **WASD**: step the second one sideways for a euro.
+- On the gather steps **the cursor holds the ball**: out to either side, tucked in, or anywhere between. It moves at hand speed, so swinging it across takes a moment, and never behind your back. Keep it away from the defender's hand: one that gets to it takes it, unless your body is in the way. The defenders read your steps a reaction time late, so a euro goes where they saw nothing coming.
 
 On defense, in an online game: **WASD** moves, the **cursor** is your hand (point it at the ball handler to contest, get it onto the ball to take it), and **pressing the left mouse button** jumps. Your arm is one length: with the cursor close to your body the hand goes straight up, as high as you can reach; further away it reaches out toward the ball, and lower.
 

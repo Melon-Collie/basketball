@@ -232,7 +232,7 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 
 **Euros.** Open, going up out of the second step and leaning at the rim: gathered at 10 ft, the jump starts 5.7 ft out and the ball is let go 3 ft out at the top, 78%. Gathered at 12 ft, 68%. Gathered at 14 ft the jump starts 9.6 ft out and only gets to 6.7 ft, 47%.
 
-**What the AI gives up.** On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
+**What the AI gives up.** (Measured before the rim protector read the handler late; see Rim protector's read.) On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
 
 ## The quick line
 
@@ -250,6 +250,8 @@ The quick line is the early release: let go on the way up, 330 ms after the pres
 - **Step up** (concedes the lane): moves to a spot on the drive line at clamp(distance − 4.5, 6, 10) ft from the rim. Once the driver gets past that spot, it recovers at only 8 ft/s, which opens the layup.
 
 Whether it steps up is a rule on a slider (default 50: when the handler is level with their defender). The decision resets after every shot. The rim protector's current choice is shown in the panel, but in the real game reading its position should be the skill.
+
+Like the on-ball defender, it goes by where it saw the handler a reaction time ago (260 ms by default), carried on the way they were going then. A straight drive it sees coming; a euro, or any change of direction, is a reaction time old before it moves for it. Its arm still goes for the ball where the ball is.
 
 ## Dribbling
 
@@ -314,7 +316,9 @@ The gather button (Shift) is a state change, not a move: it turns a dribbled bal
 
 - The ball-side foot steps first. Each foot's landing spot follows WASD until it plants, and a ghost circle shows where it will land, so you can steer it mid-step.
 - Step length is speed × 0.2 s, between 1.2 and 3.0 ft. With nothing held, the first step continues your momentum.
-- **Euro:** sideways movement off the first step's line during the second step, tracked continuously. It costs 0.6 in of finishing scatter per foot.
+- **The ball on the steps is where the cursor holds it.** The gather picks the dribble up from wherever it was, and from there the ball goes after the cursor, at most 1.8 ft out, 3.6 ft up. It moves in a straight line at 14 ft/s, a defender's hand speed, so a swing from one side to the other takes 0.26 s and comes across the chest. It never goes behind the back: when the straight way would, it goes by the front. Cursor on the body is the ball tucked in. The ball carries on into the jump from where it was, and in the air goes on after the cursor at the same speed, out to where the shooting form begins.
+- **On the steps a hand can take it.** A defender's hand that gets to the ball takes it, as on the dribble, unless the handler's body is in the way: a ball held on the far side from the defender, or behind the hip, is safe; one run into their hand is gone. The AI goes for it as it does for a dribble, once it has seen it left open.
+- **Euro:** sideways movement off the first step's line during the second step, tracked continuously. It costs 0.6 in of finishing scatter per foot. What it buys is not a rule: the defenders read the handler a reaction time late (see Rim protector's read), so the second step goes where they saw nothing coming, and the ball can be carried on the side away from them.
 - **Jump stop:** nothing held on the second step plants both feet (0.8 ft) and kills the dribble.
 - **Going up:** press any time, off either step. Out of gather steps, layups count up to 9 ft (7 ft normally), floaters to 14 ft, jumpers beyond. If you haven't gone up within 0.3 s of planting the second step, you stop with a dead dribble.
 
@@ -325,7 +329,7 @@ The gather button (Shift) is a state change, not a move: it turns a dribbled bal
 - **Free foot:** WASD extends it up to 2.6 ft in that direction; letting go returns it to stance, 1.4 ft beside the pivot.
 - **Travels are impossible by construction:** the pivot never lifts and there is never a third gather step.
 - **Shots:** a set shot by default. With the free foot reaching toward the rim (more than 1.2 ft) within 8 ft, it's a step-through finish. Holding the away-from-rim key as you shoot gives a step-back fade.
-- **Strips:** every 0.25 s, a ball held within 1.2 ft of the defender's hand can be stripped, up to 12%.
+- **Strips:** a defender's hand that gets to the ball takes it, unless the handler's body is between them and it.
 
 | Move | What produces it |
 | --- | --- |
@@ -685,7 +689,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: letting go 517 ms after the press is a perfect jumper, letting go before the feet leave is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: letting go 517 ms after the press is a perfect jumper, letting go before the feet leave is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, on the steps the ball goes after the cursor across the chest and never behind the back and a hand can take it only when the body is not in the way, the rim protector reads a euro a reaction time late, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.

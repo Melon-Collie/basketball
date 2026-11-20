@@ -34,6 +34,9 @@ const C = {
   // the cursor is, on a straight arm, so the further out it is held the lower it is. With the cursor FORM_R ft or
   // more away the ball is up in a shooting form instead: FORM_OUT ft toward the cursor, FORM_Z ft up before the jump.
   REACH: 2.2, FORM_R: 3.2, FORM_OUT: 0.7, FORM_Z: 7.65,
+  // The ball hand travels; it doesn't jump. On gather steps and in the air the ball goes after the cursor at BALL_V
+  // ft/s, never behind the back. On the steps it is held at most HOLD_R ft out, HOLD_Z ft up.
+  BALL_V: 14, HOLD_R: 1.8, HOLD_Z: 3.6,
   NEAR0: 4, NEAR1: 8,            // ft from the rim: inside the first a shot is all finish, and beyond the second it is none
   DUNK_Z: 10.15, DUNK_BALL: 0.9, // a dunk: the ball at least this high, and within this of the rim's center
   UNDER_LOW: 2.0, UNDER_HIGH: 1.35,   // ft from the rim's center the hand keeps a ball that is 9 ft up or lower, and one 10 ft up
@@ -112,6 +115,7 @@ function create(opts = {}) {
     D: makeDef(25, 20),                                      // on-ball defender
     R: makeDef(25, 9.5),                                     // rim protector
     mouse: { x: 25, y: 5.25 },                               // the cursor, in court coordinates
+    carry: null,                                             // the ball hand on gather steps and in the air: { x, y }, ft from the body's center
     keys: { u: false, d: false, l: false, r: false },        // movement keys held
     shot: { state: "idle", kind: "jumper", t: 0, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0, finish: false, quick: false, line: 520, avx: 0, avy: 0, bump: false },
     ball: null,                                              // the ball in flight, or null while it is in the handler's hands
@@ -341,7 +345,8 @@ const nearOf = (finish, dist) => finish ? 1 : 1 - clamp((dist - C.NEAR0)/(C.NEAR
 //   out      ft from the body's center      placed   1 when the cursor has it on a straight arm, 0 in a shooting form
 //   side     -1 to 1: how far to the shooter's left or right of their line to the rim it is held
 function airBall(h = P.h) {
-  const f = frame(P), cx = mouse.x - P.x, cy = mouse.y - P.y, cd = Math.hypot(cx, cy);
+  const f = frame(P), c = shot.state === "shooting" && g.carry ? carryOffset() : { x: mouse.x - P.x, y: mouse.y - P.y };
+  const cx = c.x, cy = c.y, cd = Math.hypot(cx, cy);
   const dir = cd > 0.05 ? { x: cx/cd, y: cy/cd } : f.u;
   const form = clamp((cd - C.REACH)/(C.FORM_R - C.REACH), 0, 1);
   const armOut = Math.min(cd, C.REACH), armZ = C.P_STAND - C.ARM + Math.sqrt(C.ARM*C.ARM - armOut*armOut);
@@ -356,6 +361,31 @@ function airBall(h = P.h) {
   }
   return { x, y, z, out, placed: 1 - form, side };
 }
+// ---------- The ball hand ----------
+// On gather steps and in the air the ball is in a hand that goes after the cursor, in a straight line at BALL_V, so a
+// swing from one side to the other takes time and comes across the chest. It does not go behind the back: when the
+// straight way would, it goes by the front instead. Front is the way the steps are going, and in the air the way to
+// the rim. On the steps the ball is held at most HOLD_R out; in the air, out to where the shooting form begins.
+const carryOffset = () => g.carry;
+function carryTarget(rmax) {
+  const cx = mouse.x - P.x, cy = mouse.y - P.y, cd = Math.hypot(cx, cy), k = cd > rmax ? rmax/cd : 1;
+  return { x: cx*k, y: cy*k };
+}
+// The hand starts where the ball is: a gather picks the dribble up from wherever it was.
+function startCarry(x, y) { const o = { x: x - P.x, y: y - P.y }, d = Math.hypot(o.x, o.y), k = d > C.HOLD_R ? C.HOLD_R/d : 1; g.carry = { x: o.x*k, y: o.y*k }; }
+function moveCarry(dt) {
+  const air = shot.state === "shooting", front = air ? frame(P).u : hold.stepDir, k = g.carry;
+  let t = carryTarget(air ? C.FORM_R : C.HOLD_R);
+  // where the straight way crosses the line straight back from the body, if it does: behind it, go by the front
+  const sideK = -k.x*front.y + k.y*front.x, sideT = -t.x*front.y + t.y*front.x;
+  if (sideK*sideT < 0) {
+    const u = sideK/(sideK - sideT), fx = k.x + (t.x - k.x)*u, fy = k.y + (t.y - k.y)*u;
+    if (fx*front.x + fy*front.y < 0) t = { x: front.x*C.BODY_R, y: front.y*C.BODY_R };
+  }
+  const mx = t.x - k.x, my = t.y - k.y, ml = Math.hypot(mx, my), go = C.BALL_V*dt;
+  if (ml <= go) { k.x = t.x; k.y = t.y; } else { k.x += mx/ml*go; k.y += my/ml*go; }
+}
+
 // High and close: the ball over the rim. Then it is not shot, it is put through.
 const canDunk = ball => shot.state === "shooting" && ball.z >= C.DUNK_Z && Math.hypot(ball.x - HOOP.x, ball.y - HOOP.y) <= C.DUNK_BALL
                         && !(g.flow.on && g.flow.phase === "ft");
@@ -471,6 +501,7 @@ function takeOff() {
     line: lineFor(cx.kind === "floater", P.vx*C.KEEP, P.vy*C.KEEP, f, nearOf(cx.kind === "layup", f.dist)),
     avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: false, pivoted: hold.state === "pivot" });
   shot.glass = onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
+  if (!g.carry) g.carry = carryTarget(C.FORM_R);                       // off the dribble or a pivot the hand is where the cursor is
   hold.state = "none";   // going up ends the gather
   Object.assign(P, { up: 0, v0x: P.vx, v0y: P.vy, lift: liftAt(v0) });
   D.jumpAt = null; R.jumpAt = null;
@@ -681,6 +712,7 @@ function gather() {
   // the ball-side foot steps first, then the other
   Object.assign(hold, { state: "steps", step: 0, t: 0, speed: sp, dir: { x: P.vx/sp, y: P.vy/sp }, euro: 0, jumpStop: false,
                         landedT: 0, firstFoot: drib.side, prints: [] });
+  const b = dribbleBallPos(); startCarry(b.x, b.y);
   drib.lastMove = "Gathered on the move";
   beginStep();
 }
@@ -779,7 +811,7 @@ function pivotMove(dt) {
   P.x = (hold.pivot.x + hold.free.x)/2; P.y = (hold.pivot.y + hold.free.y)/2;
 }
 function heldBallPos() {
-  if (hold.state === "steps") return { x: P.x + hold.dir.x*0.6, y: P.y + hold.dir.y*0.6, h: 3.5 };
+  if (hold.state === "steps" && g.carry) return { x: P.x + g.carry.x, y: P.y + g.carry.y, h: C.HOLD_Z };
   return { x: P.x + hold.face.x*0.9, y: P.y + hold.face.y*0.9, h: 3.2 + 6*Math.max(0, hold.fakeT) };
 }
 
@@ -795,8 +827,9 @@ function recordSeen() {
 function seenBall() {
   if (shot.state !== "idle" || !ballFree() || !graceOver()) return { bx: P.x, by: P.y, open: false };
   const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
-  // a ball tucked away on the move, or up over the head in a fake, is out of a hand's way
-  return { bx: b.x, by: b.y, open: hold.state !== "steps" && !(hold.fakeT > 0) && armBarFactor(b.x, b.y) === 1 };
+  // a ball up over the head in a fake is out of a hand's way. On gather steps it is wherever it is held: the hand
+  // that goes for it has to get round the body, which the reach itself checks
+  return { bx: b.x, by: b.y, open: !(hold.fakeT > 0) && armBarFactor(b.x, b.y) === 1 };
 }
 function perceived(lag) {
   for (let i = seen.length - 1; i >= 0; i--) if (seen[i].t <= g.simT - lag) return seen[i];
@@ -857,6 +890,7 @@ function update(dt) {
   if (keys.u) ay -= 1; if (keys.d) ay += 1; if (keys.l) ax -= 1; if (keys.r) ax += 1;
   const al = Math.hypot(ax, ay); if (al) { ax /= al; ay /= al; }
 
+  if (hold.state === "steps" || shot.state === "shooting") { if (g.carry) moveCarry(dt); } else g.carry = null;   // the ball hand
   if (P.up >= 0) { jumpMove(dt);                                      // in a jump with the ball, or coming down from one: no steering
   } else if (hold.state === "steps") { stepMove(dt);
   } else if (hold.state === "pivot") { pivotMove(dt);
@@ -932,11 +966,14 @@ function update(dt) {
     handOnHandler();
   }
   if (params.rimOn && !still) {
-    const hx = P.x - HOOP.x, hy = P.y - HOOP.y, dP = Math.hypot(hx, hy) || 0.001, nx = hx/dP, ny = hy/dP;
+    // like the on-ball defender, it goes where it saw the handler a reaction time ago, carried on the way they were
+    // going: a change of direction, a euro, is a moment old before it knows
+    const lagR = defLag(), sR = perceived(lagR) || P, ex = sR.x + sR.vx*lagR*0.8, ey = sR.y + sR.vy*lagR*0.8;
+    const hx = ex - HOOP.x, hy = ey - HOOP.y, dP = Math.hypot(hx, hy) || 0.001, nx = hx/dP, ny = hy/dP;
     const isFin = k => k === "layup" || k === "dunk";
     const finishing = (shooting && isFin(shot.kind)) || (shot.state === "flight" && g.last && isFin(g.last.kind));
     // once per drive the big decides: stay home (concede the floater) or step up (concede the lane)
-    const drivingIn = -(P.vx*nx + P.vy*ny) >= SIT.SITU.DRIVE_SPEED;
+    const drivingIn = -(sR.vx*nx + sR.vy*ny) >= SIT.SITU.DRIVE_SPEED;
     if (!R.mode && dP < 17 && drivingIn) {
       // Help when the on-ball defender is beaten. `beaten` is how far nearer the rim the handler is than their
       // defender; the slider moves the line, from never (0) through level (50) to always (100).
@@ -1053,12 +1090,19 @@ function aiHand(d, dt, reaches) {
   const hx = d.hx === undefined ? gx : d.hx, hy = d.hy === undefined ? gy : d.hy, mx = gx - hx, my = gy - hy, ml = Math.hypot(mx, my), go = C.HAND_V*dt;
   setHand(d, ml <= go ? gx : hx + mx/ml*go, ml <= go ? gy : hy + my/ml*go, dt);
 }
+// A held ball on the far side of the handler's body from the defender: the arm that would get to it has to go
+// through them first.
+function shielded(b) {
+  const ax = b.x - D.x, ay = b.y - D.y, t = clamp(((P.x - D.x)*ax + (P.y - D.y)*ay)/(ax*ax + ay*ay || 1), 0, 1);
+  return Math.hypot(D.x + ax*t - P.x, D.y + ay*t - P.y) < C.BODY_R && Math.hypot(ax, ay) > Math.hypot(P.x - D.x, P.y - D.y);
+}
 // What the on-ball defender's hand has met this tick.
 function handOnHandler() {
   if (D.foulT > 0) D.foulT -= TICK;
   if (shot.state !== "idle" || !ballFree() || !graceOver()) return;
   const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
-  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1) return turnover(hold.state === "none" ? "Picked clean" : "Stripped");
+  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1 && !(hold.state !== "none" && shielded(b)))
+    return turnover(hold.state === "none" ? "Picked clean" : "Stripped");
   // what else is there to hit: their body, or the arm they are holding out to guard the ball
   let hit = Math.hypot(D.hx - P.x, D.hy - P.y) < C.BODY_R ? { x: P.x, y: P.y } : null;
   const hp = hit ? null : handPositions();
@@ -1186,7 +1230,7 @@ function place(p, d, r) {
   Object.assign(shot, { state: "idle", kind: "jumper", t: 0, note: "", cooldown: 0.4, shift: 0 });
   Object.assign(hold, { state: "none", fakeT: 0, prints: [], live: false });
   Object.assign(drib, { phase: 0, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9, hold: 0, crossing: false });
-  g.ball = null; g.meterFlash = null; seen.length = 0;
+  g.ball = null; g.meterFlash = null; seen.length = 0; g.carry = null;
 }
 function checkBall() {
   place(RULES.CHECK, { x: RULES.CHECK.x, y: RULES.CHECK.y - params.sag }, { x: 25, y: 8.5 });

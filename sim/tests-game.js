@@ -375,6 +375,91 @@ gtest("An open dunk always goes down; with a shot blocker's arm over the rim it 
   return `open: ${open.last.out.big} / ${open.last.out.sub}; with an arm there: ${met.last.out.big} / ${met.last.out.sub}`;
 });
 
+gtest("On gather steps the cursor holds the ball: it goes after it at hand speed, across the chest and never behind the back, and on into the air", () => {
+  const drive = () => { const g = fresh(58, { defenders: false }); until(g, TOWARD, x => speed(x) >= 10); return g; };
+  // relative to the way the steps are going: forward, and to the right
+  const rel = g => { const b = GM.heldBallPos(g), d = g.hold.stepDir, ox = b.x - g.P.x, oy = b.y - g.P.y; return { fwd: ox*d.x + oy*d.y, side: -ox*d.y + oy*d.x }; };
+  const at = (g, dx, dy) => ({ x: g.P.x + dx, y: g.P.y + dy, u: true });   // going up the floor, so +x is to the right and +y behind
+  // held out to the right, then swung to the left: a straight line across the chest, at BALL_V
+  const g = drive(); GM.step(g, { ...at(g, 2, 0), gather: true });
+  for (let i = 0; i < 24; i++) GM.step(g, at(g, 2, 0));
+  const right = rel(g);
+  check(Math.abs(right.side - GM.C.HOLD_R) < 1e-9 && Math.abs(right.fwd) < 1e-9, `held right: ${right.side.toFixed(2)} ft to the side`);
+  for (let i = 0; i < ticks(0.1); i++) GM.step(g, at(g, -2, 0));
+  const mid = rel(g);
+  check(mid.side > 0.2 && mid.side < 0.6, `0.1 s into the swing it should still be on the way across: ${mid.side.toFixed(2)} ft`);
+  for (let i = 0; i < ticks(0.2); i++) GM.step(g, at(g, -2, 0));
+  check(Math.abs(rel(g).side + GM.C.HOLD_R) < 1e-9, `0.3 s in it should be all the way across: ${rel(g).side.toFixed(2)} ft`);
+  // from behind the right hip to behind the left: the straight way is behind the back, so it goes by the front
+  const h = drive(); GM.step(h, { ...at(h, 1.2, 1.2), gather: true });
+  for (let i = 0; i < 20; i++) GM.step(h, at(h, 1.2, 1.2));
+  let front = -9;
+  for (let i = 0; i < 30 && h.hold.state === "steps"; i++) { GM.step(h, at(h, -1.2, 1.2)); front = Math.max(front, rel(h).fwd); }
+  check(front > 0 && rel(h).side < -0.8, `going round: as far forward as ${front.toFixed(2)} ft, ending ${rel(h).side.toFixed(2)} ft to the side`);
+  // and up: the ball leaves the floor from where it was held
+  const k = drive(); GM.step(k, { ...at(k, 2, -0.3), gather: true });
+  for (let i = 0; i < 30; i++) GM.step(k, at(k, 2, -0.3));
+  const held = GM.heldBallPos(k), was = { x: held.x - k.P.x, y: held.y - k.P.y };
+  GM.step(k, { ...at(k, 2, -0.3), shot: true });
+  const up = GM.airBall(k), jump = Math.hypot(up.x - k.P.x - was.x, up.y - k.P.y - was.y);
+  check(k.shot.state === "shooting" && jump <= GM.C.BALL_V*GM.TICK + 1e-9, `the ball moved ${jump.toFixed(2)} ft against the body as the jump started`);
+  return `across the chest in ${(2*GM.C.HOLD_R/GM.C.BALL_V).toFixed(2)} s; from hip to hip by the front; into the air without a jump in the ball`;
+});
+
+gtest("On gather steps a ball held toward a defender can be taken, and one held away, behind the body, cannot", () => {
+  // a player on defense standing ahead and to the right of a drive, reaching for the ball the whole way past
+  const past = hold => {
+    const g = GM.create({ seed: 3, duo: true }), park = { x: 45, y: 40 };
+    for (let i = 0; i < 600 && speed(g) < 10; i++) { Object.assign(g.D, { x: park.x, y: park.y, vx: 0, vy: 0 }); GM.step(g, [TOWARD, park]); }
+    Object.assign(g.D, { x: g.P.x + 1.9, y: g.P.y - 2.2, vx: 0, vy: 0 });
+    GM.step(g, [{ ...hold(g), gather: true }, { x: g.D.x, y: g.D.y }]);
+    for (let i = 0; i < 50 && g.hold.state === "steps"; i++) { const b = GM.heldBallPos(g); GM.step(g, [hold(g), { x: b.x, y: b.y }]); }
+    return g.drib.lastMove;
+  };
+  const right = past(g => ({ x: g.P.x + 1.8, y: g.P.y - 0.4, u: true })), left = past(g => ({ x: g.P.x - 1.8, y: g.P.y - 0.4, u: true }));
+  check(right === "Stripped" && left !== "Stripped", `held toward them: "${right}"; held on the far side: "${left}"`);
+  // the AI on-ball defender, there as the steps start: run the ball into its hand and it is gone; on the hip it is not
+  const ai = hold => {
+    const g = fresh(1); GM.setDefender(g, "rimOn", false); GM.setDefender(g, "defOn", false);
+    run(g, 0.3); until(g, { ...AIM, x: g.P.x + 3, y: g.P.y, u: true }, x => speed(x) >= 12);
+    GM.setDefender(g, "defOn", true); Object.assign(g.D, { x: g.P.x + 0.6, y: g.P.y - 6 });
+    GM.step(g, { ...hold(g), gather: true });
+    for (let i = 0; i < 80 && g.hold.state === "steps" && !g.stats.to; i++) GM.step(g, hold(g));
+    return g.stats.to === 1;
+  };
+  const into = ai(g => ({ x: g.D.x, y: g.D.y, u: true })), side = ai(g => ({ x: g.P.x + 2, y: g.P.y, u: true })), hip = ai(g => ({ x: g.P.x - 1.2, y: g.P.y + 1.2, u: true }));
+  check(into && !side && !hip, `against the AI: into its hand ${into ? "taken" : "kept"}, out to the side ${side ? "taken" : "kept"}, on the far hip ${hip ? "taken" : "kept"}`);
+  return "held toward the hand it is taken; held away it is not, from a player or the AI";
+});
+
+gtest("The rim protector reads a change of direction a reaction time late: for that long, a euro either way looks the same to it", () => {
+  // staying home, where it keeps between the handler and the rim, so where the handler goes is what moves it
+  const drive = side => {
+    const g = fresh(5); GM.setDefender(g, "defOn", false); g.params.stepUp = 0;
+    until(g, TOWARD, x => distance(x) <= 13);
+    GM.step(g, { ...AIM, u: true, gather: true }); run(g, 0.2, TOWARD);
+    const path = [];
+    for (let i = 0; i < 60; i++) { GM.step(g, { ...AIM, u: true, l: side < 0, r: side > 0 }); path.push({ x: g.R.x, y: g.R.y }); }
+    return { g, path };
+  };
+  const right = drive(1), left = drive(-1), lag = right.g.params.readMs/1000;
+  const split = right.path.findIndex((p, i) => Math.hypot(p.x - left.path[i].x, p.y - left.path[i].y) > 1e-9);
+  check(right.g.hold.euro > 1 && left.g.hold.euro > 1 && right.g.R.mode === "home", `euros of ${right.g.hold.euro.toFixed(1)} and ${left.g.hold.euro.toFixed(1)} ft, the big ${right.g.R.mode}`);
+  check(split >= ticks(lag) - 2, `the rim protector told the two apart ${split} ticks in, inside its ${Math.round(lag*1000)} ms read`);
+  // and a finish: straight at it, it is there; off a euro, it is not
+  const finish = (euro, seed) => {
+    const g = fresh(seed); GM.setDefender(g, "defOn", false);
+    until(g, TOWARD, x => distance(x) <= 13);
+    GM.step(g, { ...TOWARD, gather: true }); run(g, 0.2, TOWARD); run(g, 23*GM.TICK, { ...AIM, u: true, r: euro });
+    shoot(g, 417, TOWARD);
+    return g.last.out.big;
+  };
+  const blocked = euro => [1, 2, 3, 4, 5, 6].filter(s => finish(euro, s) === "Blocked").length;
+  const a = blocked(false), b = blocked(true);
+  check(a >= 5 && b === 0, `blocked straight at it ${a} of 6, off a euro ${b} of 6`);
+  return `it told a euro right from one left after ${Math.round(split*GM.TICK*1000)} ms; blocked ${a} of 6 straight at it, ${b} of 6 off a euro`;
+});
+
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
   const g = fresh(81, { defenders: false });
   until(g, TOWARD, x => speed(x) >= 10);
