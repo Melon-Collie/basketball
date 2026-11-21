@@ -322,8 +322,10 @@ rtest("A dunk met at the rim is a live ball; left alone it is whistled dead and 
   GM.setDefender(g, "rimOn", true);
   for (let i = 0; i < 80 && !(g.last && g.last.kind === "dunk"); i++) {       // the rim protector in the way, at the top of a jump
     const u = { x: (RIM.x - g.P.x)/distance(g), y: (RIM.y - g.P.y)/distance(g) };
-    Object.assign(g.R, { x: g.P.x + u.x*1.8, y: g.P.y + u.y*1.8, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
-    GM.step(g, { ...TOWARD, shot: i < 62 });
+    // just touching once the dunker has moved this tick: bodies can't overlap, and the arm is what is being tried
+    const gap = 2.2 + Math.min(Math.hypot(g.P.vx, g.P.vy)*GM.TICK, Math.max(0, Math.hypot(RIM.x - g.P.x, RIM.y - g.P.y) - GM.C.KEEP_OUT));
+    Object.assign(g.R, { x: g.P.x + u.x*gap, y: g.P.y + u.y*gap, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
+    GM.step(g, { ...TOWARD, shot: i < 60 });   // let go as the dunker gets to the rim: blocks are all or nothing by position (see Calibration)
   }
   check(g.last && g.last.out.sub === "Met at the rim" && g.ball && g.ball.phase === "path", `${JSON.stringify(g.last && g.last.out)}; ${describe(g)}`);
   GM.setDefender(g, "rimOn", false);                               // and now nobody goes after it:

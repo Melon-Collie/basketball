@@ -368,8 +368,10 @@ gtest("An open dunk always goes down; with a shot blocker's arm over the rim it 
   GM.setDefender(met, "rimOn", true);
   for (let i = 0; i < 80 && !(met.last && met.last.kind === "dunk"); i++) {
     const u = { x: (RIM.x - met.P.x)/distance(met), y: (RIM.y - met.P.y)/distance(met) };
-    Object.assign(met.R, { x: met.P.x + u.x*1.8, y: met.P.y + u.y*1.8, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
-    GM.step(met, { ...TOWARD, shot: i < 62 });
+    // just touching once the dunker has moved this tick: bodies can't overlap, and the arm is what is being tried
+    const gap = 2.2 + Math.min(Math.hypot(met.P.vx, met.P.vy)*GM.TICK, Math.max(0, Math.hypot(RIM.x - met.P.x, RIM.y - met.P.y) - GM.C.KEEP_OUT));
+    Object.assign(met.R, { x: met.P.x + u.x*gap, y: met.P.y + u.y*gap, vx: 0, vy: 0, jumpT: 0.22, h: 1, hand: 1, jumpAt: null });
+    GM.step(met, { ...TOWARD, shot: i < 60 });   // let go as the dunker gets to the rim: blocks are all or nothing by position (see Calibration)
   }
   check(met.last && met.last.kind === "dunk" && met.last.out.big === "Blocked" && met.last.out.sub === "Met at the rim" && met.stats.pts === 0, `expected it met at the rim: ${JSON.stringify(met.last && met.last.out)}`);
   return `open: ${open.last.out.big} / ${open.last.out.sub}; with an arm there: ${met.last.out.big} / ${met.last.out.sub}`;
@@ -458,6 +460,41 @@ gtest("The rim protector reads a change of direction a reaction time late: for t
   const a = blocked(false), b = blocked(true);
   check(a >= 5 && b === 0, `blocked straight at it ${a} of 6, off a euro ${b} of 6`);
   return `it told a euro right from one left after ${Math.round(split*GM.TICK*1000)} ms; blocked ${a} of 6 straight at it, ${b} of 6 off a euro`;
+});
+
+gtest("Bodies meeting: a runner is stopped at a set body's back and barely moves it, and knocks one still on the move off its line", () => {
+  // a dribbler at full speed up the floor into a player on defense standing in the way, or sliding across it
+  const into = slide => {
+    const g = GM.create({ seed: 5, duo: true }), away = () => ({ x: g.P.x + 2, y: g.P.y + 1.5 });   // the ball on the far side, out of reach
+    Object.assign(g.P, { x: 25, y: 30 }); Object.assign(g.D, { x: slide ? 19 : 25, y: 22.6, vx: 0, vy: 0 });
+    let met = null;
+    for (let i = 0; i < 120; i++) {
+      const v = Math.hypot(g.P.vx, g.P.vy);
+      GM.step(g, [{ ...away(), u: true }, { x: g.D.x, y: g.D.y, r: slide && g.D.x < 31 }]);
+      if (!met && Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y) < 1.705) met = { before: v, after: Math.hypot(g.P.vx, g.P.vy), back: -g.D.vy };
+    }
+    return { met, gave: 22.6 - g.D.y, to: g.stats.to };
+  };
+  const set = into(false), slid = into(true);
+  check(set.met && set.gave < 0.1 && set.met.after < 2, `a set defender gave ${set.gave.toFixed(2)} ft and the dribbler kept ${set.met && set.met.after.toFixed(1)} ft/s`);
+  check(slid.met && slid.met.back > 3 && slid.met.after > 5, `one sliding across was knocked back at ${slid.met && slid.met.back.toFixed(1)} ft/s and the dribbler kept ${slid.met && slid.met.after.toFixed(1)} ft/s`);
+  return `set: gave ${set.gave.toFixed(2)} ft, the dribbler stopped; sliding across: knocked back at ${slid.met.back.toFixed(1)} ft/s, the dribbler on at ${slid.met.after.toFixed(1)}`;
+});
+
+gtest("Bodies meeting: two of a size leaning on each other go nowhere, and it takes half again the weight to move someone holding their ground", () => {
+  // the handler leans into a player on defense who stands still, for a second
+  const lean = mD => {
+    const g = GM.create({ seed: 5, duo: true }), away = () => ({ x: g.P.x + 2, y: g.P.y + 1.5 });
+    g.D.m = mD; Object.assign(g.P, { x: 25, y: 26 }); Object.assign(g.D, { x: 25, y: 24.25, vx: 0, vy: 0 });
+    for (let i = 0; i < 30; i++) GM.step(g, [away(), { x: g.D.x, y: g.D.y }]);
+    const d0 = { x: g.D.x, y: g.D.y };
+    for (let i = 0; i < 120; i++) GM.step(g, [{ ...away(), u: true }, { x: g.D.x, y: g.D.y }]);
+    return Math.hypot(g.D.x - d0.x, g.D.y - d0.y);
+  };
+  const same = lean(1), lighter = lean(0.8), half = lean(0.5);
+  check(same < 0.05 && lighter < 0.1, `holding: the same size gave ${same.toFixed(2)} ft, four fifths of it ${lighter.toFixed(2)} ft`);
+  check(half > 1.5, `half the weight should be backed down: ${half.toFixed(2)} ft in a second`);
+  return `in a second of leaning: ${same.toFixed(2)} ft against the same size, ${lighter.toFixed(2)} against four fifths of it, ${half.toFixed(1)} against half`;
 });
 
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {

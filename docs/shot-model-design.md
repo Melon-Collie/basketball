@@ -360,6 +360,24 @@ A pump fake is a jump called off: press the mouse button to go up and let it go 
 
 The AI's choice is a rule, so it can be learned: bring it in close (pulling the ball in tight reads as a pull-up and does that) and it will go up for anything that looks like a shot. A person defending makes their own call.
 
+## Bodies meeting
+
+One model decides what happens wherever two bodies meet: a drive into a defender, a box-out, a shooter flying into someone, two defenders under the ball. Nothing in it depends on who has the ball. Everything happens along the line between the two centers.
+
+- **Impact.** Two bodies coming together share their momentum, as a collision that doesn't bounce. A set body, on its feet and slower than 2 ft/s, is planted: it counts as up to 10 times its mass. So a runner is stopped at its back while it barely moves (a full-speed dribbler into a set defender moves them 0.03 ft), and a body still on the move is knocked off its line (a defender sliding across the dribbler's path is knocked back at about 4.5 ft/s, and the dribbler goes on at about 9). Nobody in the air is set.
+- **Pushing.** Pressed together, two bodies move as one, and each pushes toward where it wants to be with its legs: 32 ft/s² of drive, or 1.5 times that for a body that wants to stay where it is, because holding ground is easier than taking it. In the air there are no legs. The velocity is solved at the end of each tick, so two pushes that cancel leave the pair exactly where it is. Two of a size leaning on each other go nowhere, and it takes half again the weight (or, with frames, the strength) to move someone holding their ground: against a defender of four fifths the handler's mass a second of leaning moves them 0.03 ft, against half of it 3 ft. Wanting to be somewhere else is a body's own business: an AI defender keeping its cushion lets itself be moved.
+- **Overlap.** Each body ends the tick where its new velocity would have taken it, and anything left over is given back in proportion to the other's planted mass.
+- **Bodies** are 1.7 ft apart at closest, the rim protector 2.2 ft from anyone. Every body has the same mass until frames.
+
+What a meeting means for the rules is read from the collision itself:
+
+- **A shooter,** going up or in the air, meeting a set defender (slower than 1.5 ft/s, on the floor) outside the restricted area at more than 2 ft/s is a charge. Anyone else is a bump, and the bump costs the shot by how much speed it took off the shooter: 2 in of scatter for 7 ft/s, up to 3 in.
+- **On the glass,** in the air and still coming at more than 2 ft/s, onto a player who had the spot, is over the back.
+
+This replaces three separate rules: on a drive the defender gave a fixed 35% of any overlap; on the glass the overlap was split by approach speed; and a shooter in the air pushed whoever was there out of the way, losing nothing.
+
+**What it is built for.** Frames set each body's mass and leg strength, and the outcome of every meeting follows. A post game is meant to be built on it: backing down is pushing, so it works against someone smaller or weaker, and a bump is an impact, so it moves a defender who is not set.
+
 ## Shot noise and clean looks
 
 Every shot carries a universal noise floor, the same for every body, plus situational noise on top. Clean looks get a capped premium, and their misses rim out instead of clanging.
@@ -451,7 +469,7 @@ Each row replaces a placeholder or a rating. Multipliers are relative to the anc
 | Dribble height and rhythm | Height | Bounce height ≈ waist (0.38 × H); rhythm scales with the square root of that. Lower and quicker is harder to reach |
 | Dribble reach | Wingspan | Arm reach ≈ 0.39 × W (anchor 2.6 ft) |
 | Speed and acceleration | Height, weight over lean | Top speed and acceleration drop a little per inch of height and per pound over lean; stopping and cutting likewise |
-| Contact | Weight | Overlap splits by mass instead of the fixed rule that the defender holds ground |
+| Contact | Weight, strength | Each body's mass and leg drive in Bodies meeting, in place of the placeholders that make everyone the same |
 | Steal and block reach | Wingspan, reach | The defender's hand reach comes from the arms, not a steals slider |
 
 Two things stay universal on purpose: the shot noise floor (no accuracy by body) and the AI defender's reaction lag. Reaction time belongs to the person; in the real game a human is defending.
@@ -1072,6 +1090,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
 - **Dribbling isn't final:** no between the legs, behind the back or spins yet.
+- **Contact only moves bodies and calls charges and over the back.** Running into a dribbler doesn't threaten the ball, a defender who isn't set isn't called for blocking, and nobody falls.
 - **The triple threat is only reached by starting a possession or catching a rebound.** Catching a pass will be the third way, once there is passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **How often a player blocks a tight jumper is not known yet.** The arm now has a length, a block has a window of about 170 ms, and its edges are tips (see Calibration). Whether that lands near the frames target of about 1 in 12 tight contests depends on how people time their jumps, which only play will show.

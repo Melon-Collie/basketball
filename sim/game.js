@@ -41,7 +41,12 @@ const C = {
   DUNK_Z: 10.15, DUNK_BALL: 0.9, // a dunk: the ball at least this high, and within this of the rim's center
   UNDER_LOW: 2.0, UNDER_HIGH: 1.35,   // ft from the rim's center the hand keeps a ball that is 9 ft up or lower, and one 10 ft up
   KEEP_OUT: 1.0,                 // nobody's center gets closer to the rim's than this
-  BUMP_IN: 2,                    // in of scatter from a body met on the way up
+  BUMP_IN: 2, BUMP_REF: 7,       // in of scatter from a body met on the way up, for a meeting that took BUMP_REF ft/s off the shooter (scaled, up to 1.5 times)
+  // Bodies meeting (see there). Bodies are MASS each until frames. A body on its feet and slower than BRACE_V ft/s is
+  // set, and counts as up to BRACE times its mass when something runs into it. Pressed together, each pushes toward
+  // where it wants to be with LEG ft/s² of leg drive, or HOLD times that to stay where it is.
+  MASS: 1, BRACE: 10, BRACE_V: 2, LEG: 32, HOLD: 1.5,
+  BODY: { P: 0.85, D: 0.85, R: 1.35 },   // ft: half of how close two bodies' centers can get; the rim protector is a big
   CHARGE_V: 2, CHARGE_SET: 1.5, RESTRICTED: 4,   // a charge: flying this fast into a defender moving slower than this, who is at least this far from the rim
   KT: 0.09,                      // in of depth bias per ms of post-assist timing error
   PSPEED: 15, PACC: 70,
@@ -117,7 +122,7 @@ function create(opts = {}) {
     mouse: { x: 25, y: 5.25 },                               // the cursor, in court coordinates
     carry: null,                                             // the ball hand on gather steps and in the air: { x, y }, ft from the body's center
     keys: { u: false, d: false, l: false, r: false },        // movement keys held
-    shot: { state: "idle", kind: "jumper", t: 0, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0, finish: false, quick: false, line: 520, avx: 0, avy: 0, bump: false },
+    shot: { state: "idle", kind: "jumper", t: 0, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0, finish: false, quick: false, line: 520, avx: 0, avy: 0, bump: 0 },
     ball: null,                                              // the ball in flight, or null while it is in the handler's hands
     drib: { phase: 0, period: 400, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9,
             top: 3, hold: 0, crossing: false, lastMove: "" },
@@ -420,7 +425,7 @@ function shotAt(t, o) {
   const glass = glassAimFor(from), hs = handSpecs();
   const base = { ...from, player: { x: P.x, y: P.y }, contest: c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
   const inp = o.perfect ? base : { ...base, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK*far, timingMs: eEff*far };
-  const sc = { form, dist: f.dist, q, move: o.v0, contest: c, clean, fadeIn: airScatter(air), bump: o.bump ? C.BUMP_IN : 0,
+  const sc = { form, dist: f.dist, q, move: o.v0, contest: c, clean, fadeIn: airScatter(air), bump: o.bump ? C.BUMP_IN*Math.min(1.5, o.bump/C.BUMP_REF) : 0,
                extra: Math.hypot(fin.parts[1], fin.parts[2])*(o.foul ? 1.15 : 1) };
   // the same scatter by what it comes from, for the readout's bar: touch, placement and hang, movement, the defense
   const own = Math.sqrt((form.jumper*C.BAR_JUMPER**2 + form.floater*C.BAR_FLOATER**2)*(1 - params.bonus/100*q)**2 + near*fin.parts[0]**2);
@@ -500,7 +505,7 @@ function takeOff() {
   Object.assign(shot, { state: "shooting", kind: cx.kind, note: cx.note, t: 0, gatherSpeed: v0, vPerpG: P.vx*f.r.x + P.vy*f.r.y,
     gx: P.x, gy: P.y, finish: cx.kind === "layup", quick: cx.kind === "floater",
     line: lineFor(cx.kind === "floater", P.vx*C.KEEP, P.vy*C.KEEP, f, nearOf(cx.kind === "layup", f.dist)),
-    avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: false, pivoted: hold.state === "pivot" });
+    avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: 0, pivoted: hold.state === "pivot" });
   shot.glass = onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
   if (!g.carry) g.carry = carryTarget(C.FORM_R);                       // off the dribble or a pivot the hand is where the cursor is
   hold.state = "none";   // going up ends the gather
@@ -843,43 +848,89 @@ function stepToward(def, tx, ty, maxS, acc, dt) {
   const dx = tx - def.x, dy = ty - def.y, dd = Math.hypot(dx, dy);
   const want = Math.min(maxS, dd*4);
   const wx = dd ? dx/dd*want : 0, wy = dd ? dy/dd*want : 0;
+  def.wx = wx; def.wy = wy;                                           // where it wants to go, for contact
   const ex = wx - def.vx, ey = wy - def.vy, el = Math.hypot(ex, ey), st = acc*dt;
   if (el <= st || el < 1e-9) { def.vx = wx; def.vy = wy; } else { def.vx += ex/el*st; def.vy += ey/el*st; }
 }
-function moveDef(def, dt, sep = 1.7) {
+function moveDef(def, dt) {
   if (def.jumpT >= 0) { def.vx *= Math.exp(-dt*3); def.vy *= Math.exp(-dt*3); }
-  def.x += def.vx*dt; def.y += def.vy*dt;
-  const sx = def.x - P.x, sy = def.y - P.y, sd = Math.hypot(sx, sy);
-  if (sd < sep) {
-    const nx = sx/(sd || 1), ny = sy/(sd || 1), over = sep - sd;
-    if (shot.state === "idle" && ballFree()) {
-      // a defender holds their ground: you can't run through them, only around them
-      def.x += nx*over*0.35; def.y += ny*over*0.35;
-      P.x -= nx*over*0.65; P.y -= ny*over*0.65;
-      const into = P.vx*nx + P.vy*ny; if (into > 0) { P.vx -= into*nx; P.vy -= into*ny; }
-    } else if (g.flow.loose || (shot.state === "flight" && P.up < 0)) {
-      // Boxing out, from the moment the shooter is back on the floor. Each gives back the ground they took: whoever is standing their ground keeps the spot, and the
-      // one running into them is stopped there. Two running into each other split it by how fast each came.
-      const aP = Math.max(0, P.vx*nx + P.vy*ny), aD = Math.max(0, -(def.vx*nx + def.vy*ny)), tot = aP + aD;
-      const kP = tot > 1e-6 ? aP/tot : 0.5, kD = 1 - kP;
-      def.x += nx*over*kD; def.y += ny*over*kD; P.x -= nx*over*kP; P.y -= ny*over*kP;
-      P.vx -= aP*nx; P.vy -= aP*ny; def.vx += aD*nx; def.vy += aD*ny;
-      // over the back: in the air and still coming, into a player who had the spot
-      if (def.jumpT >= 0 && aD > C.OVER_V && aP < C.SET_V) foulCall("Over the back", "keep");
-      else if (P.jumpT >= 0 && aP > C.OVER_V && aD < C.SET_V) foulCall("Over the back", "change");
-    } else {
-      // A shooter in the air goes where their momentum takes them. Into a defender who was set, outside the
-      // restricted area, that is a charge. Into anyone else it is a bump, which the shot pays for.
-      const into = P.vx*nx + P.vy*ny;
-      if (shot.state === "shooting" && P.up*1000 >= C.LOAD && into > C.CHARGE_V) {
-        const set = def.jumpT < 0 && Math.hypot(def.vx, def.vy) < C.CHARGE_SET && Math.hypot(def.x - HOOP.x, def.y - HOOP.y) > C.RESTRICTED;
-        if (set && !(D.foulT > 0)) { stats.to++; foulCall("Charge", "change"); }
-        else shot.bump = true;
-      }
-      def.x += nx*over; def.y += ny*over;
-    }
+  def.x = clamp(def.x + def.vx*dt, FLOOR.x0, FLOOR.x1); def.y = clamp(def.y + def.vy*dt, FLOOR.y0, FLOOR.y1);
+}
+
+// ---------- Bodies meeting ----------
+// One model wherever two bodies meet: on a drive, on the glass, a shooter flying into someone, two defenders under
+// the ball. Nothing about it depends on who has the ball. Along the line between them:
+//   impact    coming together, they share their momentum, as a collision that doesn't bounce. A set body (on its feet
+//             and nearly still) is planted and counts as up to BRACE times its mass, so a runner is stopped at its
+//             back while it barely moves; one still on the move is knocked off its line. In the air nobody is set.
+//   pushing   pressed together they move as one, and each pushes toward where it wants to be (its controller's
+//             wish: wx, wy) with its legs: LEG, or HOLD times that for a body that wants to stay where it is, because
+//             holding ground is easier than taking it. In the air, no legs. Two of a size leaning on each other go
+//             nowhere; it takes more mass or strength to move someone who is holding. Wanting to be elsewhere (an AI
+//             defender keeping its cushion) is a body's own business: it lets itself be moved.
+//   overlap   each is put where its new velocity would have taken it this tick, and anything left over is given
+//             back in proportion to the other's planted mass.
+// What a meeting means for the rules is read from the collision itself: a shooter meeting a set defender outside the
+// restricted area is a charge, and anyone else costs the shot by how hard they were hit; on the glass, coming down
+// on someone's back is over the back.
+const massOf = b => b.m || C.MASS;
+const bodyR = b => b === P ? C.BODY.P : b === R ? C.BODY.R : C.BODY.D;
+const airborne = b => b === P ? (P.up >= 0 && P.up*1000 >= C.LOAD) || P.jumpT >= 0 : b.jumpT >= 0;
+const plantedness = (b, v) => airborne(b) ? 0 : clamp(1 - Math.hypot(v.x, v.y)/C.BRACE_V, 0, 1);
+// v0: each body's velocity as the tick began
+function contacts(dt, v0) {
+  const bodies = [P, ...defenders()];
+  for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) meet(bodies[i], bodies[j], dt, v0);
+  for (const b of bodies) { b.x = clamp(b.x, FLOOR.x0, FLOOR.x1); b.y = clamp(b.y, FLOOR.y0, FLOOR.y1); }
+  const hx = P.x - HOOP.x, hy = P.y - HOOP.y, hd = Math.hypot(hx, hy);
+  if (hd < C.KEEP_OUT) { P.x = HOOP.x + hx/(hd || 1)*C.KEEP_OUT; P.y = HOOP.y + (hd ? hy/hd : 1)*C.KEEP_OUT; }
+}
+function meet(A, B, dt, v0) {
+  const sep = bodyR(A) + bodyR(B), dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
+  if (d >= sep) return;
+  const nx = d > 1e-9 ? dx/d : 1, ny = d > 1e-9 ? dy/d : 0;                // from A to B; everything below is along it
+  const a0 = v0.get(A), b0 = v0.get(B), along = v => v.x*nx + v.y*ny;
+  const u0A = along(a0), u0B = along(b0), wA = A.vx*nx + A.vy*ny, wB = B.vx*nx + B.vy*ny;   // as the tick began; as moved this tick
+  const dA = A.wx === undefined ? wA : A.wx*nx + A.wy*ny, dB = B.wx === undefined ? wB : B.wx*nx + B.wy*ny;   // where each wants to go
+  const pA = plantedness(A, a0), pB = plantedness(B, b0);
+  const mA = massOf(A), mB = massOf(B), MA = mA*(1 + (C.BRACE - 1)*pA), MB = mB*(1 + (C.BRACE - 1)*pB);
+  // impact
+  const closing = u0A > u0B;
+  const u = closing ? (MA*u0A + MB*u0B)/(MA + MB) : (mA*u0A + mB*u0B)/(mA + mB);
+  let uA = wA, uB = wB;
+  if (closing || dA > dB) {
+    // pressed together: one velocity. Each body pushes toward its wish as hard as its legs allow, until it is there.
+    // Solved for the velocity at the end of the tick, so two pushes that cancel leave the pair where it is, and a push
+    // that gets a body to its wish stops there.
+    const leg = (b, wish) => airborne(b) ? 0 : C.LEG*(Math.abs(wish) < C.BRACE_V ? C.HOLD : 1);
+    const fA = mA*leg(A, dA), fB = mB*leg(B, dB), push = (x, wish, f) => x < wish ? f : x > wish ? -f : 0;
+    let lo = Math.min(u, dA, dB) - 1, hi = Math.max(u, dA, dB) + 1;
+    for (let i = 0; i < 50; i++) { const mid = (lo + hi)/2; if (mid - u - (push(mid, dA, fA) + push(mid, dB, fB))*dt/(mA + mB) < 0) lo = mid; else hi = mid; }
+    uA = uB = (lo + hi)/2;
   }
-  def.x = clamp(def.x, FLOOR.x0, FLOOR.x1); def.y = clamp(def.y, FLOOR.y0, FLOOR.y1);
+  A.vx += (uA - wA)*nx; A.vy += (uA - wA)*ny; B.vx += (uB - wB)*nx; B.vy += (uB - wB)*ny;
+  A.x += (uA - wA)*dt*nx; A.y += (uA - wA)*dt*ny; B.x += (uB - wB)*dt*nx; B.y += (uB - wB)*dt*ny;
+  const left = sep - Math.hypot(B.x - A.x, B.y - A.y);
+  if (left > 0) { const k = MB/(MA + MB); A.x -= nx*left*k; A.y -= ny*left*k; B.x += nx*left*(1 - k); B.y += ny*left*(1 - k); }
+  // for the rules: how fast each came at the other, and how much the handler was slowed
+  const intoA = Math.max(0, u0A), intoB = Math.max(0, -u0B);
+  if (A === P) called(B, intoA, intoB, Math.max(0, u0A - uA), closing);
+  else if (B === P) called(A, intoB, intoA, Math.max(0, uB - u0B), closing);
+}
+// What a meeting between the handler and a defender means for the rules.
+function called(def, pInto, dInto, hit, closing) {
+  if (shot.state === "shooting") {
+    // a shooter, going up or in the air: into a set defender outside the restricted area is a charge; anyone else, a bump
+    if (closing && pInto > C.CHARGE_V) {
+      const set = def.jumpT < 0 && Math.hypot(def.vx, def.vy) < C.CHARGE_SET && Math.hypot(def.x - HOOP.x, def.y - HOOP.y) > C.RESTRICTED;
+      if (set && !(D.foulT > 0)) { stats.to++; foulCall("Charge", "change"); return; }
+    }
+    if (hit > 0) shot.bump = Math.max(shot.bump || 0, hit);
+  } else if (g.flow.loose || (shot.state === "flight" && P.up < 0)) {
+    // on the glass: in the air and still coming, onto a player who had the spot
+    if (def.jumpT >= 0 && dInto > C.OVER_V && pInto < C.SET_V) foulCall("Over the back", "keep");
+    else if (P.jumpT >= 0 && pInto > C.OVER_V && dInto < C.SET_V) foulCall("Over the back", "change");
+  }
 }
 function update(dt) {
   // The AI reacts to a miss a reaction time after it sees the ball come off the rim, the glass or a hand, and to an air
@@ -888,6 +939,7 @@ function update(dt) {
   const offIron = !!(fl.on && b0 && b0.phase === "path" && b0.hitT !== null && b0.t >= b0.hitT + react);
   const sawLoose = offIron || (loose && fl.looseT >= react);
   if (fl.on && (fl.phase === "dead" || fl.phase === "over")) { deadTick(dt); return; }
+  const v0 = new Map([P, D, R].map(b => [b, { x: b.vx, y: b.vy }]));   // for contact: what each body adds this tick
   const still = fl.on && fl.phase === "ft";                           // free throws: the defenders stand and watch
   g.simT += dt; recordSeen();
   if (hold.fakeT > 0) hold.fakeT -= dt;
@@ -896,6 +948,7 @@ function update(dt) {
   const al = Math.hypot(ax, ay); if (al) { ax /= al; ay /= al; }
 
   if (hold.state === "steps" || shot.state === "shooting") { if (g.carry) moveCarry(dt); } else g.carry = null;   // the ball hand
+  P.wx = undefined; P.wy = undefined;                                  // unless set below, what they want is what they are doing
   if (P.up >= 0) { jumpMove(dt);                                      // in a jump with the ball, or coming down from one: no steering
   } else if (hold.state === "steps") { stepMove(dt);
   } else if (hold.state === "pivot") { pivotMove(dt);
@@ -905,6 +958,7 @@ function update(dt) {
     else {
       const sp0 = Math.hypot(P.vx, P.vy), top = loose ? C.PSPEED : C.DRIB_SPEED;   // faster without the ball, chasing it down
       const tx = ax*top, ty = ay*top, dx = tx - P.vx, dy = ty - P.vy, dl = Math.hypot(dx, dy);
+      P.wx = tx; P.wy = ty;                                            // where they want to go, for contact
       // explosive from a stop, tapering near top speed; stopping and cutting are sharper than starting
       const speedingUp = (ax || ay) && top > sp0 + 0.01;
       const step = (speedingUp ? C.ACC0*(1 - 0.6*clamp(sp0/top, 0, 1)) : C.DECEL)*dt;
@@ -998,11 +1052,12 @@ function update(dt) {
     if (sawLoose) { const c = readLanding(); tx = c.x; ty = c.y; maxS = 12; }
     else if (loose) { tx = R.x; ty = R.y; }
     if (R.jumpT < 0) stepToward(R, tx, ty, maxS, 40, dt);
-    moveDef(R, dt, 2.2);
+    moveDef(R, dt);
     const handUp = shooting && !isFin(shot.kind) && shot.t >= (shot.kind === "floater" ? params.react*0.6 : params.react) && Math.hypot(R.x - P.x, R.y - P.y) < 8;
     R.hand = clamp(R.hand + clamp((handUp ? 1 : 0) - R.hand, -dt/0.15, dt/0.15), 0, 1);
     aiHand(R, dt, false);
   }
+  contacts(dt, v0);
 
   tickBall(dt);
   if (fl.on && inPlay()) {
@@ -1138,6 +1193,7 @@ function playerDefender(dt) {
   if (D.jumpT < 0) {                                                   // no steering in the air
     const ax = (i.r ? 1 : 0) - (i.l ? 1 : 0), ay = (i.d ? 1 : 0) - (i.u ? 1 : 0), al = Math.hypot(ax, ay) || 1;
     const ex = ax/al*C.DEF_SPEED - D.vx, ey = ay/al*C.DEF_SPEED - D.vy, el = Math.hypot(ex, ey), st = C.DEF_ACC*dt;
+    D.wx = ax/al*C.DEF_SPEED; D.wy = ay/al*C.DEF_SPEED;
     if (el <= st) { D.vx += ex; D.vy += ey; } else { D.vx += ex/el*st; D.vy += ey/el*st; }
   }
   moveDef(D, dt);
