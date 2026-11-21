@@ -57,7 +57,7 @@ const C = {
   // floaters: lenient timed release, high arc
   FL_KT: 0.07, FL_PERFECT: 20, FL_CONTEST_SIG: 5.0,
   // contact: nothing here is rolled. A foul is a hand or a body that was somewhere it had no right to be
-  BODY_R: 0.75, ARM_HIT: 0.3,       // a hand within this of the handler's center is on their body; within this of their off arm, on the arm
+  BODY_R: 0.75, ARM_HIT: 0.3, BOX_GAP: 1.75,   // BOX_GAP: how far in front of the shooter's center a defender boxing out stands       // a hand within this of the handler's center is on their body; within this of their off arm, on the arm
   REACH_V: 4,                       // ft/s: a hand that got there faster than this reached in. A hand that was already there did not
   HAND_OFF: 0.95,                   // the AI keeps its hand at least this far from the handler's center
   HAND_V: 14, REACH_T: 0.25,        // the AI's reach for the ball: hand speed, and how long it stays out
@@ -260,7 +260,8 @@ const keep = res => { fixed.add(res.path); fixed.add(res.contacts); return res; 
 // toucher: "D" or "R" if that defender's arm touched the ball, at touchT s into its flight
 function startPathBall({ L, res, toucher }) {
   const RR = PHX.PHYS.RIM; keep(res);
-  g.ball = { phase: "path", t: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t,
+  const hit = res.contacts.find(k => k.type === "rim" || k.type === "board" || k.type === "hand");   // the first thing it came off, which everyone can see
+  g.ball = { phase: "path", t: 0, path: res.path, made: res.made, decideT: decideTime(res), endT: res.path[res.path.length - 1].t, hitT: hit ? hit.t : null,
            announced: false, relZ: L.pos.z, rimDist: Math.hypot(L.pos.x - RR.x, L.pos.y - RR.y) || 1, toucher, touchT: res.touchT };
   g.lastPhys = { path: res.path, contacts: res.contacts, from: L.pos, made: res.made };
 }
@@ -818,7 +819,7 @@ function heldBallPos() {
 // The defender's eyes: a short history of what the ball handler was doing.
 function recordSeen() {
   seen.push({ t: g.simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none" && !hold.live, live: hold.state === "pivot" && hold.live,
-              rising: shot.state === "shooting" || hold.fakeT > 0, ...seenBall(),
+              rising: shot.state === "shooting" || hold.fakeT > 0, gone: shot.state === "flight", ...seenBall(),
               threat: shot.state === "idle" && ballFree() ? pullUpThreat() : 0 });
   while (seen.length > 2 && seen[1].t < g.simT - 0.7) seen.shift();
 }
@@ -856,8 +857,8 @@ function moveDef(def, dt, sep = 1.7) {
       def.x += nx*over*0.35; def.y += ny*over*0.35;
       P.x -= nx*over*0.65; P.y -= ny*over*0.65;
       const into = P.vx*nx + P.vy*ny; if (into > 0) { P.vx -= into*nx; P.vy -= into*ny; }
-    } else if (g.flow.loose) {
-      // Boxing out. Each gives back the ground they took: whoever is standing their ground keeps the spot, and the
+    } else if (g.flow.loose || (shot.state === "flight" && P.up < 0)) {
+      // Boxing out, from the moment the shooter is back on the floor. Each gives back the ground they took: whoever is standing their ground keeps the spot, and the
       // one running into them is stopped there. Two running into each other split it by how fast each came.
       const aP = Math.max(0, P.vx*nx + P.vy*ny), aD = Math.max(0, -(def.vx*nx + def.vy*ny)), tot = aP + aD;
       const kP = tot > 1e-6 ? aP/tot : 0.5, kD = 1 - kP;
@@ -881,7 +882,11 @@ function moveDef(def, dt, sep = 1.7) {
   def.x = clamp(def.x, FLOOR.x0, FLOOR.x1); def.y = clamp(def.y, FLOOR.y0, FLOOR.y1);
 }
 function update(dt) {
-  const fl = g.flow, loose = fl.loose, sawLoose = loose && fl.looseT >= params.react/1000;   // the AI reacts to a miss a reaction time late
+  // The AI reacts to a miss a reaction time after it sees the ball come off the rim, the glass or a hand, and to an air
+  // ball a reaction time after it is loose. From then on it goes where the ball will come down.
+  const fl = g.flow, loose = fl.loose, b0 = g.ball, react = params.react/1000;
+  const offIron = !!(fl.on && b0 && b0.phase === "path" && b0.hitT !== null && b0.t >= b0.hitT + react);
+  const sawLoose = offIron || (loose && fl.looseT >= react);
   if (fl.on && (fl.phase === "dead" || fl.phase === "over")) { deadTick(dt); return; }
   const still = fl.on && fl.phase === "ft";                           // free throws: the defenders stand and watch
   g.simT += dt; recordSeen();
@@ -943,8 +948,8 @@ function update(dt) {
   else if (params.defOn && !still) {
     const f = frame(P);
     let tx, ty, maxS, acc;
-    if (loose && !sawLoose) { tx = D.x; ty = D.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }            // a miss takes a moment to register
-    else if (loose) { const c = looseTarget(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }   // go and get it
+    if (sawLoose) { const c = readLanding(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }   // go and get it
+    else if (fl.on && (loose || (perceived(react) || {}).gone)) { const c = boxOut(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
     else if (reacted) { tx = P.x + f.u.x*1.8; ty = P.y + f.u.y*1.8; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
     else {
       // act on what they saw `lag` ago, extrapolated forward: a sudden change leaves them guessing wrong
@@ -990,7 +995,7 @@ function update(dt) {
       tx = homeX + (HOOP.x + nx*k - homeX)*w; ty = homeY + (HOOP.y + ny*k - homeY)*w;
       maxS = R.mode === "up" ? 8 : finishing ? 12 : 11;   // a big who stepped up has to recover
     }
-    if (loose && sawLoose) { const c = looseTarget(); tx = c.x; ty = c.y; maxS = 12; }
+    if (sawLoose) { const c = readLanding(); tx = c.x; ty = c.y; maxS = 12; }
     else if (loose) { tx = R.x; ty = R.y; }
     if (R.jumpT < 0) stepToward(R, tx, ty, maxS, 40, dt);
     moveDef(R, dt, 2.2);
@@ -1177,6 +1182,24 @@ function shotDecided(made, blocked) {
     else whistle("Score", "change");
   } else if (fl.fouled) { fl.ft = fl.value; whistle("Foul", "ft"); }
   else { fl.loose = true; fl.looseT = 0; fl.lastTouch = blocked ? "d" : "o"; }
+}
+// Boxing out the shooter once the ball is gone: on the line from the rim to them, close enough to be in contact, and
+// never giving ground toward the rim to do it. Holding the spot is what keeps them off it (see moveDef).
+function boxOut() {
+  const nx0 = P.x - HOOP.x, ny0 = P.y - HOOP.y, dP = Math.hypot(nx0, ny0) || 1, nx = nx0/dP, ny = ny0/dP;
+  const along = (D.x - HOOP.x)*nx + (D.y - HOOP.y)*ny;
+  const k = Math.max(2.5, Math.min(along, dP - C.BOX_GAP));
+  return { x: HOOP.x + nx*k, y: HOOP.y + ny*k };
+}
+// Where the AI thinks a ball coming off the rim will come down: the flight it saw a reaction time ago, carried on as
+// a plain arc to reaching height. It can't know about the next bounce until it sees it, so a ball rattling on the
+// rim keeps changing its mind.
+function readLanding() {
+  const b = g.ball, t = Math.max(0, b.t - params.react/1000), p1 = pathAt(b, t), p0 = pathAt(b, Math.max(0, t - 0.03));
+  const dt = p1.t - p0.t || 0.01, vx = (p1.x - p0.x)/dt, vy = (p1.y - p0.y)/dt, vz = (p1.z - p0.z)/dt, G = 32.2, z0 = p1.z - RULES.CATCH_Z;
+  // time until it is down to reaching height: the later root of z0 + vz*s - G/2*s² = 0, or a moment on if it already is
+  const disc = vz*vz + 2*G*z0, s = z0 > 0 && disc >= 0 ? (vz + Math.sqrt(disc))/G : 0.15;
+  return { x: clamp(p1.x + vx*s, FLOOR.x0, FLOOR.x1), y: clamp(p1.y + vy*s, FLOOR.y0, FLOOR.y1) };
 }
 // Where a loose ball can first be caught: the spot it comes down to reaching height, or where it is now.
 function looseTarget() {

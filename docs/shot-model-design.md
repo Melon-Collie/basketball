@@ -738,7 +738,9 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 
 - **Getting there.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The ball is drawn with its height while it is loose, so you can see where and when it is coming down.
 - **Going up.** The mouse button jumps for a loose ball, for the handler as well as a player on defense. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
-- **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
+- **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball, or while a shot is in the air once the shooter is back on the floor, each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
+
+**The AI on the glass.** A reaction time after it sees the shot go up, the on-ball defender boxes the shooter out: it gets onto the line from the rim to them, close enough for contact, and never gives ground toward the rim to do it, so a shooter crashing straight in is held at its back. The rim protector holds its spot. A reaction time after the ball first comes off the rim, the glass or a hand (an air ball: after it is loose), both go for where they read it coming down: the flight as they saw it a reaction time ago, carried on as a plain arc to reaching height. They can't know about the next bounce until they see it, so a ball rattling on the rim keeps them guessing. Measured with a scripted shooter who crashes after every jumper and goes for the ball, against both AI defenders: the shooter gets about 3 to 12% of their misses back, depending on how they crash (it was about 28% when the AI waited for the ball to come down to catching height before reacting, and shooters ran through anyone in their way while the ball was in the air).
 
 **It is the same button.** Pressing the mouse button is the jump for everyone, with the ball or without it, so the shot and the contest are one motion. A free throw is the same press and release as any jumper.
 
@@ -1082,7 +1084,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 2. **Frames:** height, wingspan and weight replace the rating sliders.
 3. **Fouls and free throws:** a first version is in, under the game rules.
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
-5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out and the AI's reaction time are in. Size and strength wait for frames.
+5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out, the AI boxing the shooter out and reading the ball off the rim, and its reaction time are in. Size and strength wait for frames.
 6. **Post play:** back-to-the-basket dribbling into the same pivot system.
 7. **Human defense controls:** a first version is in for the on-ball defender (see Two players online). Passing-lane deflections wait for passing.
 

@@ -220,18 +220,66 @@ rtest("Over the back: jumping into a player who has the spot gives them the ball
   return "into the back in the air: the ball goes to the player who had the spot, whichever side they are";
 });
 
-rtest("Against the AI, a miss takes a reaction time to register before the defenders go after it", () => {
+rtest("Against the AI, a miss takes a reaction time to register: the defenders go after it that long after it comes off the rim", () => {
   const g = game(3); run(g, 0.5);
   g.forced.push(...Array(400).fill(1));
   shoot(g, EARLY); g.forced.length = 0;
-  check(until(g, AIM, x => x.flow.loose, 4), describe(g));
+  check(until(g, AIM, x => x.ball && x.ball.phase === "path" && x.ball.hitT !== null && x.ball.t >= x.ball.hitT, 4), `the shot never hit anything: ${describe(g)}`);
   const at0 = { x: g.R.x, y: g.R.y }, wait = g.params.react/1000;
   run(g, wait - 0.05);
   const early = Math.hypot(g.R.x - at0.x, g.R.y - at0.y);
-  run(g, 0.4);
+  check(early < 0.05, `the rim protector moved ${early.toFixed(2)} ft in the first ${(wait - 0.05).toFixed(2)} s off the rim`);
+  // on its way before the ball is down to where anyone can catch it
+  check(until(g, AIM, x => x.flow.loose, 3), describe(g));
+  const atLoose = Math.hypot(g.R.x - at0.x, g.R.y - at0.y);
+  run(g, 0.3);
   const later = Math.hypot(g.R.x - at0.x, g.R.y - at0.y);
-  check(early < 0.5 && later > 1, `the rim protector moved ${early.toFixed(2)} ft in the first ${(wait - 0.05).toFixed(2)} s and ${later.toFixed(2)} ft soon after`);
-  return `${early.toFixed(2)} ft before reacting, ${later.toFixed(1)} ft after`;
+  check(atLoose > 0.5 && later > atLoose + 1, `it had moved ${atLoose.toFixed(2)} ft as the ball came loose and ${later.toFixed(2)} ft soon after`);
+  return `${early.toFixed(2)} ft before reacting; ${atLoose.toFixed(1)} ft by the time the ball was loose, ${later.toFixed(1)} ft soon after`;
+});
+
+rtest("Against the AI, once the shot is up the defender boxes the shooter out: crashing straight in, they are held at its back", () => {
+  const g = game(3); run(g, 0.5);
+  g.forced.push(...Array(400).fill(1));
+  shoot(g, EARLY); g.forced.length = 0;
+  const fromRim = b => Math.hypot(b.x - RIM.x, b.y - RIM.y);
+  let gap = 9, ahead = 9, d0 = null;
+  // until it has seen the ball come off the rim, when it lets go of them to go and get it
+  const reading = () => g.ball && g.ball.hitT !== null && g.ball.t >= g.ball.hitT + g.params.react/1000;
+  for (let i = 0; i < 300 && !reading(); i++) {
+    GM.step(g, TOWARD);
+    if (g.P.up < 0) { gap = Math.min(gap, Math.hypot(g.P.x - g.D.x, g.P.y - g.D.y)); ahead = Math.min(ahead, fromRim(g.P) - fromRim(g.D)); }
+    if (d0 === null && gap < 1.8) d0 = fromRim(g.D);                 // from the moment they meet
+  }
+  check(reading(), describe(g));
+  check(gap < 1.8 && gap > 1.65, `the shooter should have run into the defender's back and stopped there: closest ${gap.toFixed(2)} ft`);
+  check(ahead > 1.5 && d0 - fromRim(g.D) < 1, `held behind it: the shooter got to within ${ahead.toFixed(2)} ft of being level, and the defender gave ${(d0 - fromRim(g.D)).toFixed(2)} ft`);
+  return `held ${gap.toFixed(2)} ft off, at the defender's back; the defender gave ${(d0 - fromRim(g.D)).toFixed(1)} ft`;
+});
+
+rtest("Against the AI, a shooter who crashes the glass alone gets few of their misses back", () => {
+  // jumpers from five spots let go well off the top, so most miss; after the release the shooter goes for the rim,
+  // and once the ball is loose for where it will come down, and jumps for it
+  const spots = [[25, 23], [35, 17], [14, 12], [25, 19], [31, 21]], tally = { offense: 0, defense: 0 };
+  for (const [x, y] of spots) for (const ms of [-140, 120, 160]) for (const seed of [1, 2, 3, 4]) {
+    const g = game(seed); Object.assign(g.P, { x, y }); Object.assign(g.D, { x: x + (RIM.x - x)*0.2, y: y + (RIM.y - y)*0.2 });
+    run(g, 0.5); shoot(g, PERFECT + ms);
+    if (!g.last || g.last.out.make) continue;
+    let jumped = false;
+    for (let i = 0; i < 900 && g.flow.phase === "live" && g.drib.lastMove !== "Offensive rebound"; i++) {
+      let to = g.P.up < 0 ? { x: RIM.x, y: RIM.y + 4 } : null;
+      if (g.flow.loose) { const b = g.ball; to = b.path.find(q => q.t >= b.t && q.z <= RULES.CATCH_Z) || b.path[b.path.length - 1]; }
+      const inp = { ...AIM };
+      if (to) { const dx = to.x - g.P.x, dy = to.y - g.P.y; Object.assign(inp, { l: dx < -0.3, r: dx > 0.3, u: dy < -0.3, d: dy > 0.3 }); }
+      if (g.flow.loose && to && Math.hypot(to.x - g.P.x, to.y - g.P.y) < 2 && !jumped) { inp.shot = true; jumped = true; }
+      GM.step(g, inp);
+    }
+    if (g.drib.lastMove === "Offensive rebound") tally.offense++; else if (/rebound|recovered/i.test(g.flow.why)) tally.defense++;
+  }
+  const all = tally.offense + tally.defense;
+  check(all >= 20, `too few rebounds to judge: ${JSON.stringify(tally)}`);
+  check(tally.defense >= 0.7*all, `the defense should get most of them: ${JSON.stringify(tally)}`);
+  return `of ${all} rebounds the shooter got ${tally.offense} back`;
 });
 
 rtest("The shot clock runs while the handler has the ball, and running out gives it away", () => {

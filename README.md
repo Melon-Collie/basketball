@@ -128,7 +128,7 @@ On defense, in an online game: **WASD** moves, the **cursor** is your hand (poin
 
 Nothing but a shot's scatter is left to chance. Reaching into the handler, getting a hand on a shooter's arms, running into a shooter and jumping over a rebounder's back are fouls, called from what the bodies and hands actually did, and the AI is held to the same rules.
 
-After a miss the ball is live. **Pressing the left mouse button** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there.
+After a miss the ball is live. **Pressing the left mouse button** jumps for it, for whoever is on offense as well, and it goes to whoever's reach it comes into first. Stand your ground under it and a player running into your back is stopped there. That holds from the moment a shooter lands, too: the AI boxes the shooter out while the shot is in the air, and goes for the ball a reaction time after it comes off the rim, reading the arc it saw.
 
 The shot meter sits beside your player. Tick **Shot meter follows the cursor**, under Display, to have it beside your cursor instead, with its release line level with the cursor, so you can time a shot without looking away from your aim. The choice is remembered by your browser and is yours alone in an online game.
 
