@@ -464,7 +464,7 @@ function lookOf(name, b, want, exact) {
   return l;
 }
 // name: "P", "D" or "R". o: { h (0 to 1, off the floor), color, face (where they look), exact (face is the game's own),
-// feet (draw a stance), hands: (u, r) => [left, right], each { x, y, lift (px above where the body is drawn), r (ft) } }
+// feet (draw a stance), wide (ft each foot sits out from the middle: wider than the shoulders for a low stance), hands: (u, r) => [left, right], each { x, y, lift (px above where the body is drawn), r (ft) } }
 function drawBody(name, b, o) {
   const l = lookOf(name, b, o.face, o.exact), u = { x: Math.cos(l.a), y: Math.sin(l.a) }, r = { x: -u.y, y: u.x };
   const w = SHOULDERS[name], h = o.h, lift = h*ppf*1.1, sc = 1 + 0.2*h, [cx, cy] = S(b.x, b.y);
@@ -478,7 +478,7 @@ function drawBody(name, b, o) {
     const stride = GM.clamp(sp/6, 0, 1)*0.55*Math.sin(l.run/3.2*Math.PI);
     ctx.fillStyle = OUTLINE;
     for (const s of [-1, 1]) {
-      const [fx, fy] = S(b.x + r.x*0.45*s + mv.x*stride*s, b.y + r.y*0.45*s + mv.y*stride*s);
+      const k = o.wide || 0.45, [fx, fy] = S(b.x + r.x*k*s + mv.x*stride*s, b.y + r.y*k*s + mv.y*stride*s);
       ctx.beginPath(); ctx.ellipse(fx, fy, ppf*0.34, ppf*0.2, l.a, 0, 2*Math.PI); ctx.fill();
     }
   }
@@ -504,7 +504,8 @@ function drawDefender(def, name, color) {
   const mine = ease[name], was = nudge, h = Math.max(0, def.h + mine.h);
   nudge = mine;
   const watch = G.ball && G.ball.phase === "path" ? pathPoint(G.ball) : P, fx = watch.x - def.x, fy = watch.y - def.y;
-  drawBody(name, def, { h, color, face: Math.hypot(fx, fy) > 0.2 ? { x: fx, y: fy } : { x: 0, y: -1 }, exact: false, feet: true, hands: (u, r) => {
+  const sp = Math.hypot(def.vx, def.vy), wide = 0.45 + 0.5*GM.clamp(1 - (sp - 4)/8, 0, 1);   // in a stance, wide; running, under them
+  drawBody(name, def, { h, color, face: Math.hypot(fx, fy) > 0.2 ? { x: fx, y: fy } : { x: 0, y: -1 }, exact: false, feet: true, wide, hands: (u, r) => {
     // the hand they use is where they put it (the AI's goes toward the handler); the other is ready at their side, or
     // up beside it in a jump
     const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1, up = Math.max(def.hand, h), reach = 0.85 + 0.75*up;
@@ -590,7 +591,7 @@ function draw() {
   const pFace = withBall ? (hold.state === "pivot" ? hold.face : hold.state === "steps" ? hold.stepDir : GM.bodyFrame(G).u)
               : inAir ? f.u : { x: watch.x - P.x, y: watch.y - P.y };
   drawBody("P", P, { h: ph, color: sideColor(G.flow.offense), face: Math.hypot(pFace.x, pFace.y) > 0.05 ? pFace : f.u, exact: withBall,
-    feet: !(withBall && hold.state !== "none"), hands: (u, r) => {
+    feet: !(withBall && hold.state !== "none"), wide: withBall && G.drib.post ? 1.0 : 0.45, hands: (u, r) => {
       if (inAir) {                                       // both hands on the ball, wherever the cursor has it
         const lift = airUp*ppf*0.45 - ph*ppf*1.1;
         return [{ x: airB.x - r.x*0.3, y: airB.y - r.y*0.3, lift }, { x: airB.x + r.x*0.3, y: airB.y + r.y*0.3, lift }];
