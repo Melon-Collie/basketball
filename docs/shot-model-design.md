@@ -394,7 +394,14 @@ Hold **Space** on the dribble and the handler turns their back to the defender (
 
 **The AI against it** gets behind the handler, on the line from the rim, into their back, leaning in a little, and holds. In contact it feels where they are; off them it goes by where it saw them a reaction time ago. So a spin leaves it leaning on where they were: in tests, a spin to the open side got past the defender every time, a spin toward the side it was shaded to ran into it, and facing up and driving never got past.
 
-**Still to come:** the turnaround jumper and the hook from the stance, the drop step out of it (Shift: gather steps that swing round the defender's hip), the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane.
+**Post shots.** A jump out of the stance is read as it starts, like any other (see What a jump is taken for):
+
+- **Inside 10 ft it is a hook.** A finish: no release line and no aim, the hand finds the rim, and the cursor is the ball. It differs from a layup in what it pays for distance: nothing out to 6 ft, then 0.35 in a foot (a layup pays 0.8 a foot from 4 ft), and holding the ball out to the side, which is what a hook is, costs 0.3 in for each arm's length of it instead of 0.8. Open, from 6 to 8 ft, it goes in about 60%. Against a defender on your back it is about getting the ball past their arm, and the AI shot blocker times its jump to be at its highest at the top of yours: held 1 ft out (high) or 2 ft or more out (wide) it gets over, about 45 to 65%; held 1.5 ft out and let go near the top, the hand is right there; let go early or late, it is not. In shooting form toward the rim, over them, it is blocked.
+- **Further out it is a turnaround jumper.** The body turns in the air from where it faced to the rim, at the stance's 9 rad/s, so a half turn is done about 350 ms in, before the top. Let go before it is square and it costs up to 8 in of scatter (facing straight away), less the squarer it is; the turning itself costs 1 in for every half turn. From 14 ft, open: 68% at the top against 78% for a jumper facing up, 10% let go at 300 ms. Straight up into a defender on your back the contest is 0.78 and nothing went in; leaning away as you go up, a turnaround fadeaway, it is 0.10 and about 45% went in.
+
+The body is drawn turning in the air as the game has it: to the rim, or side-on for a hook.
+
+**Still to come:** the drop step out of the stance (Shift: gather steps that swing round the defender's hip), the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane.
 
 ## Shot noise and clean looks
 

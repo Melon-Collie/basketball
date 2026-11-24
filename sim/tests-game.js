@@ -1,6 +1,7 @@
 // Tests for the game as a whole: it is deterministic, it is plain data, and scripted input plays out as designed.
 // These run the real rules tick by tick, with no page and no browser.
 const GM = require("./game.js");
+const SIT = require("./situation.js");
 
 const gameTests = [];
 function gtest(name, fn) { gameTests.push({ name, fn }); }
@@ -498,11 +499,11 @@ gtest("Bodies meeting: two of a size leaning on each other go nowhere, and it ta
 });
 
 // Driving in from the top with the ball out to one side, to 15 ft, then posted up for a while so the defender is on their back.
-function postedUp(seed, { mD = 1, side = 1, settle = 150 } = {}) {
-  const g = fresh(seed); GM.setDefender(g, "rimOn", false); g.D.m = mD;
+function postedUp(seed, { mD = 1, side = 1, settle = 150, d = 15, defender = true } = {}) {
+  const g = fresh(seed); GM.setDefender(g, "rimOn", false); g.D.m = mD; if (!defender) GM.setDefender(g, "defOn", false);
   run(g, 0.5);
-  until(g, { ...AIM, u: true }, x => distance(x) <= 15, 4);
-  for (let i = 0; i < 300 && distance(g) > 15; i++) GM.step(g, { x: g.P.x + 2.5*side, y: g.P.y, u: true });
+  until(g, { ...AIM, u: true }, x => distance(x) <= d, 4);
+  for (let i = 0; i < 400 && distance(g) > d; i++) GM.step(g, { x: g.P.x + 2.5*side, y: g.P.y, u: true, post: distance(g) < d + 6 });
   for (let i = 0; i < settle; i++) GM.step(g, { ...AIM, post: true });
   return g;
 }
@@ -556,6 +557,55 @@ gtest("Letting go of Space faces up; doing it moving sideways is a spin, and a s
   const open = spun.filter(([a, b]) => !a.between || !b.between).length;
   check(open === seeds.length && spun.flat().every(r => !r.to), `a spin one way or the other got past in ${open} of ${seeds.length}`);
   return `facing up: the defender still in the way ${up.filter(r => r.between).length} of ${up.length}; spinning to the open side: past them ${open} of ${seeds.length} (${spun.flat().filter(r => !r.between).length} of ${spun.flat().length} spins either way)`;
+});
+
+// Out of the post stance: press and hold, let go `ms` in, with the cursor where `at` puts it (as it is at each tick).
+function postShot(g, ms, at, keys = {}) {
+  const n = Math.round(ms/1000/GM.TICK);
+  GM.step(g, { ...at(g), ...keys, post: true, shot: true });
+  for (let i = 1; i < n; i++) GM.step(g, { ...at(g), ...keys, shot: true });
+  GM.step(g, at(g));
+  return g.last;
+}
+// the ball held out to the side, square to the line to the rim, on the side away from where the defender leans
+const outWide = ft => g => {
+  const u = { x: (RIM.x - g.P.x)/distance(g), y: (RIM.y - g.P.y)/distance(g) }, r = { x: -u.y, y: u.x };
+  const s = g.params.defOn && (g.D.x - g.P.x)*r.x + (g.D.y - g.P.y)*r.y > 0 ? -1 : 1;
+  return { x: g.P.x + r.x*ft*s, y: g.P.y + r.y*ft*s };
+};
+
+gtest("A jump out of the post stance inside 10 ft is a hook: a finish, so the cursor is the ball, that carries further than a layup", () => {
+  const g = postedUp(31, { d: 8, defender: false }), at = distance(g);
+  g.forced.push(...Array(400).fill(1));                                          // no scatter: where it goes is where it was sent
+  const h = postShot(g, TOP, outWide(1.5));
+  check(h.kind === "layup" && h.name === "Hook shot" && h.near === 1 && h.out.make, `from ${at.toFixed(1)} ft: ${h.name}, ${h.kind}, near ${h.near}, ${h.out.big}`);
+  // the same distance, and the same spot for the ball, as a layup would pay for it: a hook carries
+  const hookFar = SIT.finishScatter({ speed: 0, vPerp: 0, side: 0.7, limit: 10, dist: 8, hook: true }).lat;
+  const layupFar = SIT.finishScatter({ speed: 0, vPerp: 0, side: 0.7, limit: 10, dist: 8 }).lat;
+  check(hookFar < layupFar - 1.5, `from 8 ft, held out wide: σ ${hookFar.toFixed(1)} in as a hook against ${layupFar.toFixed(1)} as a layup`);
+  // further out it is a turnaround jumper
+  const t = postedUp(31, { d: 14, defender: false });
+  check(postShot(t, TOP, () => AIM).name === "Turnaround jumper", `from 14 ft: ${t.last.name}`);
+  return `from ${at.toFixed(1)} ft a hook; held out wide from 8 ft its finishing scatter is ${hookFar.toFixed(1)} in, against ${layupFar.toFixed(1)} for a layup; from 14 ft a turnaround jumper`;
+});
+
+gtest("A hook gets over a defender on your back held high or out wide; held toward the rim, the shot blocker's arm meets it", () => {
+  const try_ = at => { const g = postedUp(31, { d: 8 }); g.forced.push(...Array(400).fill(1)); return postShot(g, TOP, at).out; };
+  const high = try_(outWide(1.0)), wide = try_(outWide(2.2)), front = try_(() => AIM);
+  check(high.make && wide.make, `held 1 ft out: ${high.big} / ${high.sub}; 2.2 ft out: ${wide.big} / ${wide.sub}`);
+  check(front.touched && !front.make, `in shooting form toward the rim, over the defender: ${front.big} / ${front.sub}`);
+  return `1 ft out: ${high.big} / ${high.sub}; 2.2 ft out: ${wide.big} / ${wide.sub}; toward the rim: ${front.big} / ${front.sub}`;
+});
+
+gtest("A turnaround jumper turns to the rim in the air: square by the top it costs a little touch, let go before it costs a lot; fading away beats a defender on your back", () => {
+  const set = (() => { const g = postedUp(32, { d: 14, defender: false, settle: 0 }); run(g, 0.6); return postShot(g, TOP, () => AIM, {}); })();
+  const top = postShot(postedUp(32, { d: 14, defender: false }), TOP, () => AIM);
+  const early = postShot(postedUp(32, { d: 14, defender: false }), 300, () => AIM);
+  check(top.name === "Turnaround jumper" && top.sig.lat > set.sig.lat && top.sig.lat < set.sig.lat + 1.5, `σ at the top ${top.sig.lat.toFixed(1)} in, against ${set.sig.lat.toFixed(1)} for a jumper facing up`);
+  check(early.sig.lat > top.sig.lat + 1, `let go 300 ms in, before square: σ ${early.sig.lat.toFixed(1)} in`);
+  const straight = postShot(postedUp(33, { d: 14 }), TOP, () => AIM), fade = postShot(postedUp(33, { d: 14 }), TOP + 60, () => AIM, { d: true });
+  check(fade.name === "Turnaround fadeaway" && straight.con.c > 0.5 && fade.con.c < straight.con.c - 0.3, `contest straight up ${straight.con.c.toFixed(2)}, fading ${fade.con.c.toFixed(2)} (${fade.name})`);
+  return `σ ${set.sig.lat.toFixed(1)} in facing up, ${top.sig.lat.toFixed(1)} turning around by the top, ${early.sig.lat.toFixed(1)} let go early; contest ${straight.con.c.toFixed(2)} straight up into them, ${fade.con.c.toFixed(2)} fading`;
 });
 
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
