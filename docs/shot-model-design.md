@@ -57,6 +57,7 @@ Two buttons and the movement keys.
 - **Left mouse, pressed**, jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too, so the shot and the contest are the same button.
 - **Left mouse, let go**, lets the ball go, the moment it comes up, if you are in the air. Let go while the legs are still loading, before the feet leave, and the jump is called off: a pump fake. So a shot is a hold and a fake is a tap.
 - **Shift** gathers the ball, or puts a ball that has not been dribbled yet on the floor.
+- **Space**, held on the dribble, is the post stance: back to the defender (see The post stance). Letting go faces up.
 - **WASD as you take off** is a lean: it decides what you carry into the air (see The jump). Inputs are read relative to the floor, not the shot line.
 
 **How a shot is resolved is not picked from a list.** There used to be a table here: a click was a jumper, a floater, a layup or a dunk according to distance and speed at the moment it was pressed, and each was resolved by its own rules. Now there is one shot, and what it is follows from where the ball was let go (see One shot).
@@ -377,6 +378,21 @@ What a meeting means for the rules is read from the collision itself:
 This replaces three separate rules: on a drive the defender gave a fixed 35% of any overlap; on the glass the overlap was split by approach speed; and a shooter in the air pushed whoever was there out of the way, losing nothing.
 
 **What it is built for.** Frames set each body's mass and leg strength, and the outcome of every meeting follows. A post game is meant to be built on it: backing down is pushing, so it works against someone smaller or weaker, and a bump is an impact, so it moves a defender who is not set.
+
+## The post stance
+
+Hold **Space** on the dribble and the handler turns their back to the defender (to the rim, with nobody within 8 ft), so the body is between the defender and the ball. It works anywhere on the floor: on the block, or backing down from the wing or the top. It is not a move list; it changes what the body is doing, and the moves come out of that.
+
+- **The turn** is 9 rad/s, about a third of a second for a half turn, into the stance and out of it. Until now the dribble was always worked out as if facing the rim; in and out of the stance it is worked out in the body's own facing.
+- **The dribble** goes low (2.2 ft) and quick, at most 1.4 ft out, from the hip forward and never behind toward the defender. The cursor picks the hip.
+- **Movement** is a back-down walk: at most 5.5 ft/s, WASD relative to the floor as always.
+- **Backing down** is pushing (see Bodies meeting). Against the same size it gets nowhere: pushing straight at the rim for two seconds gained nothing and slid off to one side. Against half the size it walked them back 9 ft.
+- **The ball is shielded:** a hand has to get round the body to reach it. That is now true of any dribble, not only the post.
+- **Letting go of Space faces up,** turning to face the rim with the dribble still live. Letting go while moving sideways is a **spin**: the turn goes the way they are moving and carries them past the defender's shoulder. The ball comes round with the body; if the turn would swing it past the defender, it goes over to the other hand first, across the front. A half turn without moving goes the way that keeps the ball away from them.
+
+**The AI against it** gets behind the handler, on the line from the rim, into their back, leaning in a little, and holds. In contact it feels where they are; off them it goes by where it saw them a reaction time ago. So a spin leaves it leaning on where they were: in tests, a spin to the open side got past the defender every time, a spin toward the side it was shaded to ran into it, and facing up and driving never got past.
+
+**Still to come:** the turnaround jumper and the hook from the stance, the drop step out of it (Shift: gather steps that swing round the defender's hip), the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane. The body is still drawn as a circle, so its facing only shows through the hands and the POST UP tag.
 
 ## Shot noise and clean looks
 
@@ -1089,7 +1105,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **A dunk's carry is a straight line at a fixed speed,** not a simulated arm.
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
-- **Dribbling isn't final:** no between the legs, behind the back or spins yet.
+- **Dribbling isn't final:** no between the legs or behind the back yet. A spin exists only out of the post stance.
 - **Contact only moves bodies and calls charges and over the back.** Running into a dribbler doesn't threaten the ball, a defender who isn't set isn't called for blocking, and nobody falls.
 - **The triple threat is only reached by starting a possession or catching a rebound.** Catching a pass will be the third way, once there is passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
@@ -1104,7 +1120,7 @@ Full physics is built, the game runs outside the page, and there is a first set 
 3. **Fouls and free throws:** a first version is in, under the game rules.
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
 5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out, the AI boxing the shooter out and reading the ball off the rim, and its reaction time are in. Size and strength wait for frames.
-6. **Post play:** back-to-the-basket dribbling into the same pivot system.
+6. **Post play:** the stance is in (see The post stance): back to the defender, backing down, facing up and spinning. Next are shots and the drop step out of it, then the AI's other ways of guarding it.
 7. **Human defense controls:** a first version is in for the on-ball defender (see Two players online). Passing-lane deflections wait for passing.
 
 **Engineering:** the whole game now runs outside the page. Physics, launch, noise, the situation rules and the game itself are modules in `sim/`, tested in Node, and the page only handles input and drawing. The game is deterministic on one JavaScript engine. Across engines that is not guaranteed, because functions like `Math.sin` may differ in their last digits, which matters for how online play keeps two machines in step.

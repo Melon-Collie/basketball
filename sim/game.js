@@ -58,6 +58,9 @@ const C = {
   STEP_T: 0.2, GATHER_SPEED: 6,   // gather steps
   ARM: 2.6, SHOULDER: 0.75,       // hands: reach from each shoulder (will come from wingspan)
   DEF_SPEED: 14, DEF_ACC: 60, STEAL_R: 0.55,                               // a player on defense: top speed, acceleration, and how close a hand must get to the ball
+  // The post stance (Space, held, on the dribble): back to the defender, at most POST_SPEED ft/s, the ball bounced
+  // POST_TOP ft high and at most POST_REACH ft out, on the far side. The body turns at TURN rad/s, into it and out.
+  POST_SPEED: 5.5, POST_TOP: 2.2, POST_REACH: 1.4, TURN: 9,
   DRIB_SPEED: 13.5, ACC0: 85, DECEL: 95, REACH_MIN: 0.7, REACH_MAX: 2.4,   // explosive from a stop, sharper to stop than to start
   // floaters: lenient timed release, high arc
   FL_KT: 0.07, FL_PERFECT: 20, FL_CONTEST_SIG: 5.0,
@@ -121,11 +124,12 @@ function create(opts = {}) {
     R: makeDef(25, 9.5),                                     // rim protector
     mouse: { x: 25, y: 5.25 },                               // the cursor, in court coordinates
     carry: null,                                             // the ball hand on gather steps and in the air: { x, y }, ft from the body's center
-    keys: { u: false, d: false, l: false, r: false },        // movement keys held
+    keys: { u: false, d: false, l: false, r: false, post: false },   // movement keys held, and the post stance (Space)
     shot: { state: "idle", kind: "jumper", t: 0, gatherSpeed: 0, vPerpG: 0, gx: 0, gy: 0, note: "", cooldown: 0, finish: false, quick: false, line: 520, avx: 0, avy: 0, bump: 0 },
     ball: null,                                              // the ball in flight, or null while it is in the handler's hands
     drib: { phase: 0, period: 400, side: 1, from: { x: 0.9, y: 0 }, to: { x: 0.9, y: 0 }, len: 0.9,
-            top: 3, hold: 0, crossing: false, lastMove: "" },
+            top: 3, hold: 0, crossing: false, lastMove: "",
+            post: false, faceA: null, spin: 0 },   // the post stance; faceA: the body's facing (radians) while it is not just the rim's; spin: which way it is turning
     // gathered ball: "none" (dribbling), "steps" (gather steps on the move), "pivot" (dead dribble, feet planted)
     hold: { state: "none", step: 0, t: 0, speed: 0, dir: { x: 0, y: -1 }, from: null, to: null, euro: 0, jumpStop: false,
             landedT: 0, center: null, pivot: null, free: null, freeSide: 0, face: { x: 0, y: -1 }, ext: 0, stripT: 0,
@@ -608,6 +612,51 @@ function defHand() {
   return { x: D.x + tx/tl*reach, y: D.y + ty/tl*reach };
 }
 const tightness = () => drib.hold;   // 1 = ball pulled in tight; follows the cursor continuously
+
+// ---------- The post stance ----------
+// Space, held on the dribble, turns the handler's back to the defender (to the rim, with nobody within 8 ft), so the
+// body is between them and the ball. The dribble goes low and stays on the far side, out to either hip as the cursor
+// says, and the handler moves no faster than a back-down walk. Backing into the defender is pushing (see Bodies
+// meeting). Letting go of Space turns them to face up; moving sideways as they let go, the turn goes that way and
+// carries them past the defender's shoulder: a spin. The ball comes round with the body.
+// The dribble is worked out in the body's frame: facing the rim, as always, except in and out of the stance.
+function bodyFrame() {
+  const f = frame(P);
+  if (drib.faceA === null) return f;
+  const u = { x: Math.cos(drib.faceA), y: Math.sin(drib.faceA) };
+  return { dist: f.dist, u, r: { x: -u.y, y: u.x } };
+}
+const rot = (v, a) => ({ x: v.x*Math.cos(a) - v.y*Math.sin(a), y: v.x*Math.sin(a) + v.y*Math.cos(a) });
+function postStance(dt) {
+  if (!(ballFree() && hold.state === "none" && shot.state === "idle" && P.jumpT < 0)) { Object.assign(drib, { post: false, faceA: null, spin: 0 }); return; }
+  const want = keys.post, f = frame(P), rimA = Math.atan2(f.u.y, f.u.x);
+  if (want && !drib.post) drib.lastMove = "Post up";
+  if (!want && drib.post) { const b = bodyFrame(), lat = P.vx*b.r.x + P.vy*b.r.y; drib.lastMove = Math.abs(lat) > 2 ? "Spin" : "Face up"; }
+  drib.post = want;
+  if (!want && drib.faceA === null) return;
+  if (drib.faceA === null) drib.faceA = rimA;
+  const near = params.defOn && Math.hypot(D.x - P.x, D.y - P.y) < 8;
+  const target = !want ? rimA : near ? Math.atan2(P.y - D.y, P.x - D.x) : rimA + Math.PI;
+  let da = Math.atan2(Math.sin(target - drib.faceA), Math.cos(target - drib.faceA));
+  // A half turn could go either way: the way they are moving, or else the way that keeps the ball away from the
+  // defender. The ball goes round with the body, so turning the other way would swing it past them: it goes over to the
+  // other hand first, across the front, away from them. Once begun the turn goes on that way.
+  const cur = bodyFrame(), lat = P.vx*cur.r.x + P.vy*cur.r.y;
+  if (!drib.spin && Math.abs(da) > Math.PI - 0.6) {
+    const safe = want ? drib.side : -drib.side;                        // into the stance they are in front; out of it, behind
+    drib.spin = Math.abs(lat) > 1 ? Math.sign(lat) : safe;
+    if (drib.spin !== safe) {
+      const mirror = v => { const k = 2*(v.x*cur.u.x + v.y*cur.u.y); return { x: k*cur.u.x - v.x, y: k*cur.u.y - v.y }; };
+      drib.from = mirror(drib.from); drib.to = mirror(drib.to); drib.side = -drib.side; drib.crossing = false;
+    }
+  }
+  if (drib.spin && Math.sign(da) !== drib.spin) da += drib.spin*2*Math.PI;
+  if (Math.abs(da) < 0.6) drib.spin = 0;
+  const turn = clamp(da, -C.TURN*dt, C.TURN*dt);
+  drib.faceA += turn;
+  drib.from = rot(drib.from, turn); drib.to = rot(drib.to, turn);     // the ball comes round with the body
+  if (!want && Math.abs(da - turn) < 1e-6) Object.assign(drib, { faceA: null, spin: 0 });   // facing up again: the rim's frame
+}
 // What a defender reads as a pull-up: a shooter in range, slowing down, ball held up and tight.
 function pullUpThreat() {
   const f = frame(P), sp = Math.hypot(P.vx, P.vy);
@@ -620,20 +669,24 @@ function updateDribble(dt) {
   const cd = Math.hypot(mouse.x - P.x, mouse.y - P.y);
   drib.hold += ((1 - clamp((cd - 2)/8, 0, 1)) - drib.hold)*Math.min(1, dt/0.1);   // the hand reacts now, not at the next bounce
   const sf = clamp(Math.hypot(P.vx, P.vy)/C.DRIB_SPEED, 0, 1), tight = tightness();
-  drib.period = 430 - 110*sf + 190*tight*(1 - sf);     // slow and tight: the ball hangs at the top
-  drib.top = 3 + 1.2*tight*(1 - sf);
+  drib.period = drib.post ? 330 : 430 - 110*sf + 190*tight*(1 - sf);     // slow and tight: the ball hangs at the top; in the post, low and quick
+  drib.top = drib.post ? C.POST_TOP : 3 + 1.2*tight*(1 - sf);
   drib.phase += dt*1000/drib.period;
   if (drib.phase >= 1) { drib.phase -= 1; newBounce(); }
 }
 function newBounce() {
-  const f = frame(P);
+  const f = bodyFrame();
   const cdx = mouse.x - P.x, cdy = mouse.y - P.y, cd = Math.hypot(cdx, cdy);
   const latC = cdx*f.r.x + cdy*f.r.y, oldSide = drib.side;
-  if (Math.abs(latC) > 0.6) drib.side = Math.sign(latC);                        // deadzone: jitter can't cross you
+  if (Math.abs(latC) > 0.6 && !drib.spin) drib.side = Math.sign(latC);         // deadzone: jitter can't cross you; nor can a turn
   // toward the cursor, but never straight ahead into the defender: at least 30 degrees to the ball side
   let ang = cd > 0.3 ? Math.atan2(latC, cdx*f.u.x + cdy*f.u.y) : drib.side*Math.PI/2;
   ang = drib.side > 0 ? clamp(ang, Math.PI/6, Math.PI - 0.2) : clamp(ang, -(Math.PI - 0.2), -Math.PI/6);
-  const len = C.REACH_MIN + (C.REACH_MAX - C.REACH_MIN)*clamp((cd - 2)/8, 0, 1);
+  let len = C.REACH_MIN + (C.REACH_MAX - C.REACH_MIN)*clamp((cd - 2)/8, 0, 1);
+  if (drib.post) {                                                     // back to them: from the hip forward, never behind toward them
+    ang = drib.side > 0 ? clamp(ang, 0.3, Math.PI/2 + 0.15) : clamp(ang, -(Math.PI/2 + 0.15), -0.3);
+    len = Math.min(len, C.POST_REACH);
+  }
   const fw = Math.cos(ang)*len, lt = Math.sin(ang)*len;
   drib.from = drib.to;
   drib.to = { x: f.u.x*fw + f.r.x*lt, y: f.u.y*fw + f.r.y*lt };
@@ -652,7 +705,7 @@ function reachFrom(o, tx, ty, maxR) {
   return { x: o.x + dx, y: o.y + dy };
 }
 function handPositions() {
-  const f = frame(P), s = drib.side;
+  const f = bodyFrame(), s = drib.side;
   if (hold.state !== "none") {                                    // held ball: both hands on it
     const b = heldBallPos();
     return { L: reachFrom(shoulder(f, -1), b.x - f.r.x*0.3, b.y - f.r.y*0.3, C.ARM), R: reachFrom(shoulder(f, 1), b.x + f.r.x*0.3, b.y + f.r.y*0.3, C.ARM), guard: false };
@@ -694,7 +747,7 @@ function turnover(text) {
   if (g.flow.on) whistle("Stolen", "change");
 }
 function dribbleBallPos() {
-  const ph = drib.phase, top = drib.top, f = frame(P);
+  const ph = drib.phase, top = drib.top, f = bodyFrame();
   const mix = (a, b, t) => ({ x: a.x + (b.x - a.x)*t, y: a.y + (b.y - a.y)*t });
   let o, h;
   if (ph < 0.5) {
@@ -791,6 +844,7 @@ function startDribble() {
 }
 function enterPivot() {
   P.vx = 0; P.vy = 0;
+  if (drib.faceA !== null) hold.face = bodyFrame().u;                  // out of the post: still facing where they were
   Object.assign(hold, { state: "pivot", center: { x: P.x, y: P.y }, pivot: null, free: null, freeSide: 0, ext: 0, stripT: 0 });
 }
 function pivotMove(dt) {
@@ -824,7 +878,7 @@ function heldBallPos() {
 // The defender's eyes: a short history of what the ball handler was doing.
 function recordSeen() {
   seen.push({ t: g.simT, x: P.x, y: P.y, vx: P.vx, vy: P.vy, side: drib.side, dead: hold.state !== "none" && !hold.live, live: hold.state === "pivot" && hold.live,
-              rising: shot.state === "shooting" || hold.fakeT > 0, gone: shot.state === "flight", ...seenBall(),
+              rising: shot.state === "shooting" || hold.fakeT > 0, gone: shot.state === "flight", post: drib.post, ...seenBall(),
               threat: shot.state === "idle" && ballFree() ? pullUpThreat() : 0 });
   while (seen.length > 2 && seen[1].t < g.simT - 0.7) seen.shift();
 }
@@ -948,6 +1002,7 @@ function update(dt) {
   const al = Math.hypot(ax, ay); if (al) { ax /= al; ay /= al; }
 
   if (hold.state === "steps" || shot.state === "shooting") { if (g.carry) moveCarry(dt); } else g.carry = null;   // the ball hand
+  postStance(dt);
   P.wx = undefined; P.wy = undefined;                                  // unless set below, what they want is what they are doing
   if (P.up >= 0) { jumpMove(dt);                                      // in a jump with the ball, or coming down from one: no steering
   } else if (hold.state === "steps") { stepMove(dt);
@@ -956,7 +1011,7 @@ function update(dt) {
     if (ballFree()) updateDribble(dt);
     if (P.jumpT >= 0) { P.vx *= Math.exp(-dt*3); P.vy *= Math.exp(-dt*3); }   // no steering in the air
     else {
-      const sp0 = Math.hypot(P.vx, P.vy), top = loose ? C.PSPEED : C.DRIB_SPEED;   // faster without the ball, chasing it down
+      const sp0 = Math.hypot(P.vx, P.vy), top = loose ? C.PSPEED : drib.post ? C.POST_SPEED : C.DRIB_SPEED;   // faster without the ball, chasing it down; a walk in the post
       const tx = ax*top, ty = ay*top, dx = tx - P.vx, dy = ty - P.vy, dl = Math.hypot(dx, dy);
       P.wx = tx; P.wy = ty;                                            // where they want to go, for contact
       // explosive from a stop, tapering near top speed; stopping and cutting are sharper than starting
@@ -1005,7 +1060,13 @@ function update(dt) {
     if (sawLoose) { const c = readLanding(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }   // go and get it
     else if (fl.on && (loose || (perceived(react) || {}).gone)) { const c = boxOut(); tx = c.x; ty = c.y; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
     else if (reacted) { tx = P.x + f.u.x*1.8; ty = P.y + f.u.y*1.8; maxS = C.CLOSE_SPEED; acc = C.CLOSE_ACC; }
-    else {
+    else if ((perceived(defLag()) || {}).post) {
+      // posted up: get behind them, between them and the rim, into their back, and hold. Touching them it feels where
+      // they are; off them it goes by where it saw them a reaction time ago, so when they spin out of it, it is still
+      // leaning on where they were
+      const touching = Math.hypot(D.x - P.x, D.y - P.y) < bodyR(P) + bodyR(D) + 0.15;
+      const c = postDefense(touching ? P : perceived(defLag())); tx = c.x; ty = c.y; maxS = params.aiSpeed; acc = C.DACC; D.threat = 0.3;
+    } else {
       // act on what they saw `lag` ago, extrapolated forward: a sudden change leaves them guessing wrong
       const lag = defLag(), s0 = perceived(lag) || { x: P.x, y: P.y, vx: 0, vy: 0, side: drib.side, threat: 0 };
       const ex = s0.x + s0.vx*lag*0.8, ey = s0.y + s0.vy*lag*0.8, pf = frame({ x: ex, y: ey });
@@ -1150,8 +1211,8 @@ function aiHand(d, dt, reaches) {
   const hx = d.hx === undefined ? gx : d.hx, hy = d.hy === undefined ? gy : d.hy, mx = gx - hx, my = gy - hy, ml = Math.hypot(mx, my), go = C.HAND_V*dt;
   setHand(d, ml <= go ? gx : hx + mx/ml*go, ml <= go ? gy : hy + my/ml*go, dt);
 }
-// A held ball on the far side of the handler's body from the defender: the arm that would get to it has to go
-// through them first.
+// A ball on the far side of the handler's body from the defender, held or dribbled: the arm that would get to it has
+// to go through them first.
 function shielded(b) {
   const ax = b.x - D.x, ay = b.y - D.y, t = clamp(((P.x - D.x)*ax + (P.y - D.y)*ay)/(ax*ax + ay*ay || 1), 0, 1);
   return Math.hypot(D.x + ax*t - P.x, D.y + ay*t - P.y) < C.BODY_R && Math.hypot(ax, ay) > Math.hypot(P.x - D.x, P.y - D.y);
@@ -1161,13 +1222,13 @@ function handOnHandler() {
   if (D.foulT > 0) D.foulT -= TICK;
   if (shot.state !== "idle" || !ballFree() || !graceOver()) return;
   const b = hold.state === "none" ? dribbleBallPos() : heldBallPos();
-  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1 && !(hold.state !== "none" && shielded(b)))
+  if (Math.hypot(D.hx - b.x, D.hy - b.y) < C.STEAL_R && armBarFactor(b.x, b.y) === 1 && !shielded(b))
     return turnover(hold.state === "none" ? "Picked clean" : "Stripped");
   // what else is there to hit: their body, or the arm they are holding out to guard the ball
   let hit = Math.hypot(D.hx - P.x, D.hy - P.y) < C.BODY_R ? { x: P.x, y: P.y } : null;
   const hp = hit ? null : handPositions();
   if (hp && hp.guard) {
-    const o = shoulder(frame(P), -drib.side), off = drib.side > 0 ? hp.L : hp.R, ax = off.x - o.x, ay = off.y - o.y;
+    const o = shoulder(bodyFrame(), -drib.side), off = drib.side > 0 ? hp.L : hp.R, ax = off.x - o.x, ay = off.y - o.y;
     const t = clamp(((D.hx - o.x)*ax + (D.hy - o.y)*ay)/(ax*ax + ay*ay || 1), 0, 1), q = { x: o.x + ax*t, y: o.y + ay*t };
     if (Math.hypot(D.hx - q.x, D.hy - q.y) < C.ARM_HIT) hit = q;
   }
@@ -1256,6 +1317,12 @@ function readLanding() {
   // time until it is down to reaching height: the later root of z0 + vz*s - G/2*s² = 0, or a moment on if it already is
   const disc = vz*vz + 2*G*z0, s = z0 > 0 && disc >= 0 ? (vz + Math.sqrt(disc))/G : 0.15;
   return { x: clamp(p1.x + vx*s, FLOOR.x0, FLOOR.x1), y: clamp(p1.y + vy*s, FLOOR.y0, FLOOR.y1) };
+}
+// Against a post-up: on the line from the rim to the handler, in contact with their back, leaning in a little. Pressed
+// together, wanting to be no further back than that is holding ground (see Bodies meeting).
+function postDefense(at) {
+  const nx0 = at.x - HOOP.x, ny0 = at.y - HOOP.y, dP = Math.hypot(nx0, ny0) || 1, k = Math.max(2.5, dP - C.BOX_GAP + 0.1);
+  return { x: HOOP.x + nx0/dP*k, y: HOOP.y + ny0/dP*k };
 }
 // Where a loose ball can first be caught: the spot it comes down to reaching height, or where it is now.
 function looseTarget() {
@@ -1384,17 +1451,18 @@ function preview() { viewing = true; try { return previewNow(); } finally { view
 // is called off, and that is a pump fake.
 function releaseNow() { if (shot.state !== "shooting") return; if (shot.t >= C.LOAD) letGo(); else pumpFake(); }
 // One tick. An input is plain data: { u, d, l, r } movement keys held, { x, y } the cursor in court coordinates,
-// shot (the mouse button is down), gather (Shift is down). Presses and releases are read off the change since the
+// shot (the mouse button is down), gather (Shift is down), post (Space is down). Presses and releases are read off the change since the
 // last tick.
 //   shot     pressed: with the ball, leave the floor; without it, go up for a loose ball.
 //            let go: in the air, let the ball go; before the feet have left, a pump fake
 //   gather   pick the dribble up, or put a ball that has not been dribbled yet on the floor
+//   post     held, on the dribble: the post stance, back to the defender (see The post stance)
 // With one player, pass their input. With two, pass [side 0's input, side 1's input]: the side with the ball plays
 // offense and the other controls the on-ball defender, for whom the press is a jump as well.
 function step(input) {
   const fl = g.flow, live = !fl.on || fl.phase === "live", ft = fl.on && fl.phase === "ft";
   const two = Array.isArray(input), side = two ? fl.offense : 0, off = two ? input[side] : input;
-  keys.u = live && !!off.u; keys.d = live && !!off.d; keys.l = live && !!off.l; keys.r = live && !!off.r;   // nobody moves at the line or on a dead ball
+  keys.u = live && !!off.u; keys.d = live && !!off.d; keys.l = live && !!off.l; keys.r = live && !!off.r; keys.post = live && !!off.post;   // nobody moves at the line or on a dead ball
   mouse.x = off.x; mouse.y = off.y;
   const was = g.prev[side], now = { shot: !!off.shot, gather: !!off.gather };
   if (live && now.gather && !was.gather) gather();
@@ -1454,7 +1522,7 @@ return {
   step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats), setRules: on(setRules), newGame: on(newGame),
   digest: on(digest), snapshot: on(snapshot), load: on(load), lastOdds: on(lastOdds),
   // read-only helpers for drawing and readouts
-  shotContext: on(shotContext), handPositions: on(handPositions), shoulder: on(shoulder), stepFoot: on(stepFoot),
+  shotContext: on(shotContext), handPositions: on(handPositions), bodyFrame: on(bodyFrame), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), airBall: on(airBall),
 };
 })();

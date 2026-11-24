@@ -497,6 +497,67 @@ gtest("Bodies meeting: two of a size leaning on each other go nowhere, and it ta
   return `in a second of leaning: ${same.toFixed(2)} ft against the same size, ${lighter.toFixed(2)} against four fifths of it, ${half.toFixed(1)} against half`;
 });
 
+// Driving in from the top with the ball out to one side, to 15 ft, then posted up for a while so the defender is on their back.
+function postedUp(seed, { mD = 1, side = 1, settle = 150 } = {}) {
+  const g = fresh(seed); GM.setDefender(g, "rimOn", false); g.D.m = mD;
+  run(g, 0.5);
+  until(g, { ...AIM, u: true }, x => distance(x) <= 15, 4);
+  for (let i = 0; i < 300 && distance(g) > 15; i++) GM.step(g, { x: g.P.x + 2.5*side, y: g.P.y, u: true });
+  for (let i = 0; i < settle; i++) GM.step(g, { ...AIM, post: true });
+  return g;
+}
+
+gtest("Holding Space on the dribble is the post stance: back to the defender, the ball low on the far side, no faster than a walk", () => {
+  const g = postedUp(7, { settle: 0 });
+  let toward = -9, high = 0, fastest = 0;
+  for (let i = 0; i < 120; i++) {
+    GM.step(g, { ...AIM, post: true, l: i > 60 });
+    const away = { x: g.P.x - g.D.x, y: g.P.y - g.D.y }, al = Math.hypot(away.x, away.y), b = GM.dribbleBallPos(g);
+    if (i >= 45) { toward = Math.max(toward, -((b.x - g.P.x)*away.x + (b.y - g.P.y)*away.y)/al); high = Math.max(high, b.h); }
+    if (i > 70) fastest = Math.max(fastest, speed(g));
+  }
+  const f = GM.bodyFrame(g), away = { x: g.P.x - g.D.x, y: g.P.y - g.D.y }, al = Math.hypot(away.x, away.y);
+  check(g.drib.post && (f.u.x*away.x + f.u.y*away.y)/al > 0.98, `facing ${((f.u.x*away.x + f.u.y*away.y)/al).toFixed(2)} of the way from the defender`);
+  check(toward < 0.3, `once turned, the ball should stay on the far side, at most at the hip: it came ${toward.toFixed(2)} ft toward them`);
+  check(high <= GM.C.POST_TOP + 1e-9 && fastest <= GM.C.POST_SPEED + 1e-9, `bounced ${high.toFixed(1)} ft high, moved at up to ${fastest.toFixed(1)} ft/s`);
+  return `back to them, the ball at most ${toward.toFixed(2)} ft toward them and ${high.toFixed(1)} ft up, ${fastest.toFixed(1)} ft/s sideways`;
+});
+
+gtest("Backing down: against the same size it barely gets anywhere, and half the size is walked back to the rim", () => {
+  const back = mD => {
+    const g = postedUp(7, { mD });
+    for (let i = 0; i < 120 && Math.hypot(g.D.x - g.P.x, g.D.y - g.P.y) > 1.71; i++) GM.step(g, { ...AIM, post: true, u: true });   // into their chest first
+    const d0 = distance(g); run(g, 2, { ...AIM, post: true, u: true });
+    return { gained: d0 - distance(g), to: g.stats.to };
+  };
+  const same = back(1), half = back(0.5);
+  check(same.to === 0 && half.to === 0, "nobody should have lost the ball backing down");
+  check(same.gained < 1.2 && half.gained > 5, `in two seconds: ${same.gained.toFixed(1)} ft against the same size, ${half.gained.toFixed(1)} ft against half of it`);
+  return `in two seconds: ${same.gained.toFixed(1)} ft against the same size (sliding off them), ${half.gained.toFixed(1)} ft against half of it`;
+});
+
+gtest("Letting go of Space faces up; doing it moving sideways is a spin, and a spin to the open side gets past a defender still leaning on where they were", () => {
+  // posted up, then: let go and drive at the rim; or step sideways along them, let go still going, and then drive
+  const go = (seed, spin) => {
+    const g = postedUp(seed, { side: -1 }), lat = spin < 0 ? { l: true } : spin > 0 ? { r: true } : {};
+    if (spin) for (let i = 0; i < 15; i++) GM.step(g, { ...AIM, post: true, ...lat });
+    let move = null;
+    for (let i = 0; i < 240 && distance(g) > 6 && !g.stats.to; i++) {
+      GM.step(g, { ...AIM, u: true, ...(i < 30 ? lat : {}) });
+      if (!move && /Spin|Face up/.test(g.drib.lastMove)) move = g.drib.lastMove;
+    }
+    const between = Math.hypot(g.D.x - RIM.x, g.D.y - RIM.y) < distance(g) - 0.5;            // the defender still between them and the rim
+    return { move, between, to: g.stats.to };
+  };
+  // the defender is never exactly behind: a spin toward the side they are on runs into them, so try both ways
+  const seeds = [1, 2, 3, 4], up = seeds.map(s => go(s, 0)), spun = seeds.map(s => [go(s, 1), go(s, -1)]);
+  check(up.every(r => r.move === "Face up") && spun.flat().every(r => r.move === "Spin"), `named ${up.map(r => r.move).join(", ")} / ${spun.flat().map(r => r.move).join(", ")}`);
+  check(up.every(r => r.between) && up.every(r => !r.to), "facing up and driving should leave the defender between them and the rim");
+  const open = spun.filter(([a, b]) => !a.between || !b.between).length;
+  check(open === seeds.length && spun.flat().every(r => !r.to), `a spin one way or the other got past in ${open} of ${seeds.length}`);
+  return `facing up: the defender still in the way ${up.filter(r => r.between).length} of ${up.length}; spinning to the open side: past them ${open} of ${seeds.length} (${spun.flat().filter(r => !r.between).length} of ${spun.flat().length} spins either way)`;
+});
+
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
   const g = fresh(81, { defenders: false });
   until(g, TOWARD, x => speed(x) >= 10);
