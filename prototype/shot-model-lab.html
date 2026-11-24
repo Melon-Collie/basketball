@@ -445,22 +445,76 @@ function drawBall(x, y, h, alpha) {
 // Each side keeps one colour all game: whoever has the ball is drawn in their side's, and the defense in the other's.
 const sideColor = side => side === 0 ? T.home : T.away;
 const OUTLINE = "#14202B";
-function drawDefender(def, color, radius) {
-  const mine = def === D ? ease.D : ease.R, was = nudge, h = Math.max(0, def.h + mine.h);
-  nudge = mine;
-  const [dx, dy] = S(def.x, def.y), lift = h*ppf*1.1, sc = 1 + 0.2*h;
-  if (h > 0.02) {
+// ---------- Bodies ----------
+// A player from above: feet under them, shoulders turned the way they face with the head a little forward, and two
+// arms out to their hands. Only drawing: it reads the game and changes nothing. The facing is the game's where it has
+// one (the ball handler on the dribble, in a pivot, on gather steps); otherwise it is toward what they are watching,
+// turned to smoothly.
+const look = { P: null, D: null, R: null };            // per body: facing (radians), how far it has run (for the feet), last spot
+const SHOULDERS = { P: 1.0, D: 1.0, R: 1.25 };          // ft: half the width of the shoulders; the rim protector is the big
+function lookOf(name, b, want, exact) {
+  const ta = Math.atan2(want.y, want.x);
+  let l = look[name];
+  if (!l) l = look[name] = { a: ta, run: 0, x: b.x, y: b.y };
+  if (exact) l.a = ta;
+  else { const d = Math.atan2(Math.sin(ta - l.a), Math.cos(ta - l.a)); l.a += GM.clamp(d, -0.2, 0.2); }
+  const moved = Math.hypot(b.x - l.x, b.y - l.y);
+  if (moved < 3) l.run += moved;                       // a jump of more than that is a reset, not a stride
+  l.x = b.x; l.y = b.y;
+  return l;
+}
+// name: "P", "D" or "R". o: { h (0 to 1, off the floor), color, face (where they look), exact (face is the game's own),
+// feet (draw a stance), hands: (u, r) => [left, right], each { x, y, lift (px above where the body is drawn), r (ft) } }
+function drawBody(name, b, o) {
+  const l = lookOf(name, b, o.face, o.exact), u = { x: Math.cos(l.a), y: Math.sin(l.a) }, r = { x: -u.y, y: u.x };
+  const w = SHOULDERS[name], h = o.h, lift = h*ppf*1.1, sc = 1 + 0.2*h, [cx, cy] = S(b.x, b.y);
+  const at = (x, y, up = 0) => { const [sx, sy] = S(x, y); return [sx, sy - lift - up]; };
+  if (h > 0.02) {                                       // off the floor: a shadow where they left it
     ctx.globalAlpha = 0.25; ctx.fillStyle = "#000";
-    ctx.beginPath(); ctx.ellipse(dx, dy, ppf*radius, ppf*radius*0.6, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.ellipse(cx, cy, ppf*w, ppf*w*0.6, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1;
   }
-  ctx.fillStyle = color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.14;
-  ctx.beginPath(); ctx.arc(dx, dy - lift, ppf*radius*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
-  const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1;
-  const up = Math.max(def.hand, h), reach = radius*0.8 + 0.75*up;
-  // a player's hand is where their cursor put it; the AI's reaches toward the ball handler
-  const [hx, hy] = G.duo && def === D && D.hx !== undefined ? S(D.hx, D.hy) : S(def.x + tx/tl*reach, def.y + ty/tl*reach);
-  ctx.fillStyle = color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.1;
-  ctx.beginPath(); ctx.arc(hx, hy - lift, ppf*(0.28 + 0.14*up)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  if (o.feet && h <= 0.02) {                            // a stance, and a stride when running
+    const sp = Math.hypot(b.vx, b.vy), mv = sp > 0.3 ? { x: b.vx/sp, y: b.vy/sp } : u;
+    const stride = GM.clamp(sp/6, 0, 1)*0.55*Math.sin(l.run/3.2*Math.PI);
+    ctx.fillStyle = OUTLINE;
+    for (const s of [-1, 1]) {
+      const [fx, fy] = S(b.x + r.x*0.45*s + mv.x*stride*s, b.y + r.y*0.45*s + mv.y*stride*s);
+      ctx.beginPath(); ctx.ellipse(fx, fy, ppf*0.34, ppf*0.2, l.a, 0, 2*Math.PI); ctx.fill();
+    }
+  }
+  const hands = o.hands(u, r);
+  ctx.save(); ctx.strokeStyle = OUTLINE; ctx.lineCap = "round"; ctx.lineWidth = ppf*0.2*sc;
+  hands.forEach((hd, i) => {                            // arms first, so the shoulders sit over them
+    const s = i ? 1 : -1, [ox, oy] = at(b.x + r.x*w*0.78*s, b.y + r.y*w*0.78*s), [hx, hy] = at(hd.x, hd.y, hd.lift || 0);
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(hx, hy); ctx.stroke();
+  });
+  ctx.restore();
+  ctx.fillStyle = o.color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.14;
+  ctx.beginPath(); ctx.ellipse(cx, cy - lift, ppf*w*sc, ppf*0.52*sc, Math.atan2(r.y, r.x), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  { const [hx, hy] = at(b.x + u.x*0.24, b.y + u.y*0.24);   // the head, forward of the shoulders: which way they face
+    ctx.beginPath(); ctx.arc(hx, hy, ppf*0.34*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke(); }
+  ctx.lineWidth = ppf*0.1;
+  for (const hd of hands) {
+    const [hx, hy] = at(hd.x, hd.y, hd.lift || 0);
+    ctx.beginPath(); ctx.arc(hx, hy, ppf*(hd.r || 0.25)*sc, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  }
+}
+// A defender looks at the ball: in the handler's hands, or wherever it is once it has left them.
+function drawDefender(def, name, color) {
+  const mine = ease[name], was = nudge, h = Math.max(0, def.h + mine.h);
+  nudge = mine;
+  const watch = G.ball && G.ball.phase === "path" ? pathPoint(G.ball) : P, fx = watch.x - def.x, fy = watch.y - def.y;
+  drawBody(name, def, { h, color, face: Math.hypot(fx, fy) > 0.2 ? { x: fx, y: fy } : { x: 0, y: -1 }, exact: false, feet: true, hands: (u, r) => {
+    // the hand they use is where they put it (the AI's goes toward the handler); the other is ready at their side, or
+    // up beside it in a jump
+    const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1, up = Math.max(def.hand, h), reach = 0.85 + 0.75*up;
+    const main = def.hx !== undefined ? { x: def.hx, y: def.hy } : { x: def.x + tx/tl*reach, y: def.y + ty/tl*reach };
+    const s = (main.x - def.x)*r.x + (main.y - def.y)*r.y >= 0 ? 1 : -1, w = SHOULDERS[name];
+    const other = h > 0.1 ? { x: main.x - r.x*0.4*s, y: main.y - r.y*0.4*s, r: 0.25 + 0.1*up }
+                          : { x: def.x - r.x*w*0.8*s + u.x*0.55, y: def.y - r.y*w*0.8*s + u.y*0.55 };
+    const m = { ...main, r: 0.28 + 0.14*up };
+    return s > 0 ? [other, m] : [m, other];
+  } });
   nudge = was;
 }
 function drawFeet() {
@@ -474,19 +528,6 @@ function drawFeet() {
   if (hold.pivot) { foot(hold.pivot, true); foot(hold.free, false); }
   else { const pp = { x: -hold.face.y, y: hold.face.x };
          foot({ x: hold.center.x - pp.x*0.7, y: hold.center.y - pp.y*0.7 }, false); foot({ x: hold.center.x + pp.x*0.7, y: hold.center.y + pp.y*0.7 }, false); }
-  ctx.restore();
-}
-function drawHands() {
-  const f = GM.bodyFrame(G), hp = handPositions();
-  ctx.save();
-  for (const [s, h] of [[-1, hp.L], [1, hp.R]]) {
-    const [ox, oy] = S(shoulder(f, s).x, shoulder(f, s).y), [hx, hy] = S(h.x, h.y);
-    ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.2; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(hx, hy); ctx.stroke();
-    const isBall = hold.state === "none" && s === drib.side && !(drib.crossing && drib.phase < 0.5);
-    ctx.fillStyle = sideColor(G.flow.offense); ctx.lineWidth = ppf*0.09;
-    ctx.beginPath(); ctx.arc(hx, hy, ppf*(isBall ? 0.3 : 0.25), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
-  }
   ctx.restore();
 }
 function drawGatherFeet() {
@@ -539,21 +580,30 @@ function draw() {
     ctx.save(); ctx.globalAlpha = Math.min(0.9, live.con.c*1.1); ctx.strokeStyle = T.miss; ctx.lineWidth = ppf*0.18;
     ctx.beginPath(); ctx.arc(px, py, ppf*1.6, 0, 2*Math.PI); ctx.stroke(); ctx.restore();
   }
-  if (params.rimOn) drawDefender(R, sideColor(1 - G.flow.offense), 1.25);   // the rim protector is the bigger of the two
-  if (params.defOn) drawDefender(D, sideColor(1 - G.flow.offense), 1.05);
+  if (params.rimOn) drawDefender(R, "R", sideColor(1 - G.flow.offense));
+  if (params.defOn) drawDefender(D, "D", sideColor(1 - G.flow.offense));
 
-  // the handler, lifted off their shadow when they go up for a loose ball
-  const ph = Math.max(0, P.h + ease.P.h);
-  if (ph > 0.02) { ctx.globalAlpha = 0.25; ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(px, py, ppf*1.05, ppf*0.63, 0, 0, 2*Math.PI); ctx.fill(); ctx.globalAlpha = 1; }
-  ctx.fillStyle = sideColor(G.flow.offense); ctx.strokeStyle = OUTLINE; ctx.lineWidth = ppf*0.14;
-  ctx.beginPath(); ctx.arc(px, py - ph*ppf*1.1, ppf*1.05*(1 + 0.2*ph), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+  // the handler, lifted off their shadow when they go up
+  const ph = Math.max(0, P.h + ease.P.h), withBall = shot.state === "idle" && ballFree(), inAir = shot.state === "shooting";
+  const airB = inAir ? GM.airBall(G) : null, airUp = inAir ? (airB.z - 5.5)*Math.min(1, shot.t/C.LOAD) : 0;
+  const watch = G.ball && G.ball.phase === "path" ? pathPoint(G.ball) : G.ball && G.ball.bx !== undefined ? { x: G.ball.bx, y: G.ball.by } : HOOP;
+  const pFace = withBall ? (hold.state === "pivot" ? hold.face : hold.state === "steps" ? hold.stepDir : GM.bodyFrame(G).u)
+              : inAir ? f.u : { x: watch.x - P.x, y: watch.y - P.y };
+  drawBody("P", P, { h: ph, color: sideColor(G.flow.offense), face: Math.hypot(pFace.x, pFace.y) > 0.05 ? pFace : f.u, exact: withBall,
+    feet: !(withBall && hold.state !== "none"), hands: (u, r) => {
+      if (inAir) {                                       // both hands on the ball, wherever the cursor has it
+        const lift = airUp*ppf*0.45 - ph*ppf*1.1;
+        return [{ x: airB.x - r.x*0.3, y: airB.y - r.y*0.3, lift }, { x: airB.x + r.x*0.3, y: airB.y + r.y*0.3, lift }];
+      }
+      if (withBall) {                                    // dribbling, or both hands on a held ball, up where it is
+        const hp = handPositions(), lift = hold.state === "none" ? 0 : heldBallPos().h*ppf*0.45;
+        return [{ ...hp.L, lift, r: hold.state === "none" && drib.side < 0 ? 0.3 : 0.25 }, { ...hp.R, lift, r: hold.state === "none" && drib.side > 0 ? 0.3 : 0.25 }];
+      }
+      const up = P.jumpT >= 0 ? ppf*2.2 : 0;               // no ball: hands at their sides, or up going for one
+      return [-1, 1].map(s => ({ x: P.x + r.x*0.85*s + u.x*0.45, y: P.y + r.y*0.85*s + u.y*0.45, lift: up }));
+    } });
   if (shot.state === "idle" && hold.state === "pivot") drawFeet();   // on top, so the pivot foot is always readable
   else if (shot.state === "idle" && hold.state === "steps") drawGatherFeet();
-  if (shot.state === "idle" && ballFree()) drawHands();
-  if (al > 0.5 && !(shot.state === "idle" && ballFree())) {   // facing tick only when the arms aren't drawn
-    const [f1x, f1y] = S(P.x + ax/al*0.45, P.y + ay/al*0.45), [f2x, f2y] = S(P.x + ax/al*1.05, P.y + ay/al*1.05);
-    ctx.beginPath(); ctx.moveTo(f1x, f1y); ctx.lineTo(f2x, f2y); ctx.stroke();
-  }
   const fadeTag = kind === "jumper" && live && live.cx.fade;
   if (shot.state !== "flight" && (kind !== "jumper" || fadeTag)) {
     const tg = fadeTag ? [{ back: "FADEAWAY", left: "FADE LEFT", right: "FADE RIGHT" }[live.cx.fade], "#4B3F8C"] : { dunk: ["DUNK", "#B23445"], layup: ["LAYUP", "#2A4C70"], floater: ["FLOATER", "#2C6464"] }[kind];
@@ -561,13 +611,7 @@ function draw() {
   } else if (shot.state === "idle" && hold.state !== "none") tag(hold.state === "steps" ? "GATHER" : hold.live ? "TRIPLE THREAT" : "DEAD BALL", px, py + ppf*3.6, hold.live ? "#2A4C70" : "#5B5F66");   // lower, clear of the feet
   else if (shot.state === "idle" && G.drib.post) tag("POST UP", px, py + ppf*3.6, "#2A4C70");
 
-  if (shot.state === "shooting") {
-    // in the air the ball is in the hand, and the hand is where the cursor has it: an arm from the body out to it
-    const b = GM.airBall(G), [bx, by] = S(b.x, b.y), up = (b.z - 5.5)*Math.min(1, shot.t/C.LOAD);
-    ctx.save(); ctx.strokeStyle = "#14202B"; ctx.lineWidth = ppf*0.2; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(px, py - ph*ppf*1.1); ctx.lineTo(bx, by - up*ppf*0.45); ctx.stroke(); ctx.restore();
-    drawBall(b.x, b.y, up, 1);
-  }
+  if (inAir) drawBall(airB.x, airB.y, airUp, 1);       // in the air the ball is in the hands, where the cursor has it
   if (shot.state === "idle" && ballFree()) { const b = hold.state === "none" ? dribbleBallPos() : heldBallPos(); drawBall(b.x, b.y, b.h, 1); }
   nudge = null;                                          // a ball out of the hands is nobody's
   if (G.ball && G.ball.phase === "path") { const pp = pathPoint(G.ball); drawBall(pp.x, pp.y, pathVisH(G.ball, pp), G.ball.announced ? 0.45 : 1); }

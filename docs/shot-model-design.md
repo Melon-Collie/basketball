@@ -377,6 +377,8 @@ What a meeting means for the rules is read from the collision itself:
 
 This replaces three separate rules: on a drive the defender gave a fixed 35% of any overlap; on the glass the overlap was split by approach speed; and a shooter in the air pushed whoever was there out of the way, losing nothing.
 
+**How bodies are drawn.** From above: feet under them (a stride when running), shoulders as an oval turned the way they face with the head forward of them, and two arms out to their hands. The handler's facing is the game's (on the dribble, in a pivot, on gather steps); a defender faces the ball. A held ball and a shot have both hands on it. The rim protector is drawn bigger. Drawing only: it changes nothing in the game.
+
 **What it is built for.** Frames set each body's mass and leg strength, and the outcome of every meeting follows. A post game is meant to be built on it: backing down is pushing, so it works against someone smaller or weaker, and a bump is an impact, so it moves a defender who is not set.
 
 ## The post stance
@@ -392,7 +394,7 @@ Hold **Space** on the dribble and the handler turns their back to the defender (
 
 **The AI against it** gets behind the handler, on the line from the rim, into their back, leaning in a little, and holds. In contact it feels where they are; off them it goes by where it saw them a reaction time ago. So a spin leaves it leaning on where they were: in tests, a spin to the open side got past the defender every time, a spin toward the side it was shaded to ran into it, and facing up and driving never got past.
 
-**Still to come:** the turnaround jumper and the hook from the stance, the drop step out of it (Shift: gather steps that swing round the defender's hip), the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane. The body is still drawn as a circle, so its facing only shows through the hands and the POST UP tag.
+**Still to come:** the turnaround jumper and the hook from the stance, the drop step out of it (Shift: gather steps that swing round the defender's hip), the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane.
 
 ## Shot noise and clean looks
 
