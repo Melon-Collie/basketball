@@ -292,7 +292,7 @@ const { C, HOOP, FADE_NAME, clamp, frame, footSpot, pathPoint } = GM;
 const LAB = new URLSearchParams(location.search).has("lab");   // ...html?lab opens straight into free shooting, with the game rules off
 const G = GM.create({ seed: Math.floor(Math.random()*4294967296), rules: !LAB });
 const { P, D, R, shot, hold, drib, stats, params } = G;
-window.shotLab = { game: G, get net() { return net; }, get ease() { return ease; } };   // for the console and for tools/
+window.shotLab = { game: G, get net() { return net; }, get ease() { return ease; }, get look() { return look; } };   // for the console and for tools/
 const handPositions = () => GM.handPositions(G), shoulder = (f, s) => GM.shoulder(G, f, s), stepFoot = k => GM.stepFoot(G, k);
 const dribbleBallPos = () => GM.dribbleBallPos(G), heldBallPos = () => GM.heldBallPos(G), ballFree = () => GM.ballFree(G);
 const tightness = () => GM.tightness(G);
@@ -506,13 +506,21 @@ function drawDefender(def, name, color) {
   const watch = G.ball && G.ball.phase === "path" ? pathPoint(G.ball) : P, fx = watch.x - def.x, fy = watch.y - def.y;
   const sp = Math.hypot(def.vx, def.vy), wide = 0.45 + 0.5*GM.clamp(1 - (sp - 4)/8, 0, 1);   // in a stance, wide; running, under them
   drawBody(name, def, { h, color, face: Math.hypot(fx, fy) > 0.2 ? { x: fx, y: fy } : { x: 0, y: -1 }, exact: false, feet: true, wide, hands: (u, r) => {
-    // the hand they use is where they put it (the AI's goes toward the handler); the other is ready at their side, or
-    // up beside it in a jump
+    // The hand they use is where they put it (the AI's goes toward the handler), on the arm nearer it; it changes arms
+    // only once the hand is well over to the other side, so a hand straight in front stays on one. The other arm hangs
+    // relaxed when that hand is in front, spreads out the other way when it is out to the side (both arms wide, taking
+    // away a pass), and goes up beside it in a jump.
     const tx = P.x - def.x, ty = P.y - def.y, tl = Math.hypot(tx, ty) || 1, up = Math.max(def.hand, h), reach = 0.85 + 0.75*up;
     const main = def.hx !== undefined ? { x: def.hx, y: def.hy } : { x: def.x + tx/tl*reach, y: def.y + ty/tl*reach };
-    const s = (main.x - def.x)*r.x + (main.y - def.y)*r.y >= 0 ? 1 : -1, w = SHOULDERS[name];
+    const rel = { x: main.x - def.x, y: main.y - def.y }, lat = rel.x*r.x + rel.y*r.y, w = SHOULDERS[name], l = look[name];
+    let s = l.arm || (lat >= 0 ? 1 : -1);
+    if (lat*s < -0.3) s = -s;
+    l.arm = s;
+    const out = GM.clamp((Math.abs(lat)/Math.max(0.6, Math.hypot(rel.x, rel.y)) - 0.45)/0.4, 0, 1);   // 0: in front, 1: out to the side
+    const relaxed = { x: def.x - r.x*w*0.75*s + u.x*0.35, y: def.y - r.y*w*0.75*s + u.y*0.35 };
+    const spread = { x: def.x + rel.x - 2*lat*r.x, y: def.y + rel.y - 2*lat*r.y };   // the controlled hand, mirrored across their front
     const other = h > 0.1 ? { x: main.x - r.x*0.4*s, y: main.y - r.y*0.4*s, r: 0.25 + 0.1*up }
-                          : { x: def.x - r.x*w*0.8*s + u.x*0.55, y: def.y - r.y*w*0.8*s + u.y*0.55 };
+                          : { x: relaxed.x + (spread.x - relaxed.x)*out, y: relaxed.y + (spread.y - relaxed.y)*out, r: 0.25 + 0.03*out };
     const m = { ...main, r: 0.28 + 0.14*up };
     return s > 0 ? [other, m] : [m, other];
   } });
