@@ -403,7 +403,7 @@ The body is drawn turning in the air as the game has it: to the rim, or side-on 
 
 **The drop step.** Shift in the stance gives two gather steps from a standstill, each 2.4 ft. The first goes round the defender's hip: by default toward the rim at about 77° off the line to the defender, on the ball's side; WASD steers it, and a step steered within 72° of the line to the defender goes round them at 77° on that side instead (on the ball's side if straight at them). The second goes on to the rim, or where WASD steers it; with nothing held it is not a jump stop. Going up out of them is a finish, as out of any gather steps, and a drop step is never a euro. The first step takes the handler off the defender's body: the defender, which felt them while touching, now goes by what it saw a reaction time ago, and the second step goes past it. From about 9 ft against the AI on their back, with no rim protector, the defender was left behind every time and 8 in 10 went in. With the rim protector, a finish at the rim at the top of the jump was blocked every time; held out away from its arm, 7 in 10 went in.
 
-**Still to come:** the AI fronting and playing three-quarter, arm fouls (push-offs, the defender's arm bar), and three seconds in the lane.
+**Still to come:** arm fouls (push-offs, the defender's arm bar), and three seconds in the lane. The AI only bodies up, on purpose: fronting and playing three-quarter are ways of denying the entry pass, so they wait for passing and teammates. Shading a side or playing off a post player who already has the ball were considered and left out for now.
 
 ## Shot noise and clean looks
 
