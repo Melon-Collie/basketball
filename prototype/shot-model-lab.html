@@ -82,6 +82,8 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .stat .v small{font-size:1rem;font-weight:600;color:var(--muted);margin-left:4px}
 .stat .k{color:var(--muted);font-size:.85rem}
 .stats button{margin-left:auto}
+.shotlog{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;font-size:.9rem;color:var(--muted)}
+.shotlog span{flex:1 1 260px}
 button{font:inherit;font-weight:600;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--muted)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -155,6 +157,8 @@ dd small{color:var(--muted)}
         <div class="stat"><div class="v" id="sPPP">–</div><div class="k">Points per possession</div></div>
         <button id="reset" type="button">Reset stats</button>
       </div>
+      <div class="shotlog"><span id="logCount">Shot log: nothing yet. Every shot you take here is kept, to save for tuning (tools/whatif.js).</span>
+        <button id="logSave" type="button" disabled>Save shot log</button> <button id="logClear" type="button" disabled>Clear</button></div>
       <details class="online" id="online">
         <summary>Play online: two players</summary>
         <p class="caption">Host a game and send the other player the link. The game starts when they open it. Each of you plays your own side. When you don't have the ball you are the on-ball defender: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, the cursor is your hand (point it at the ball handler to contest a shot, get it onto the ball to take it), the mouse button to jump. Keep the cursor close to your body to reach straight up, or further away to reach out lower. Reaching into the handler, getting a hand on a shooter’s arms or running into them is a foul. After a miss, the mouse button jumps for the ball for both of you.</p>
@@ -839,9 +843,40 @@ const panelGame = () => net && net.live ? net.peer.sure : G;
 let shownLast = 0, shownStats = 0;
 function syncPanels() {
   const g = panelGame();
-  if (g.lastSeq !== shownLast) { shownLast = g.lastSeq; if (g.last) renderLast(); else clearLast(); }
+  if (g.lastSeq !== shownLast) { shownLast = g.lastSeq; if (g.last) renderLast(); else clearLast(); if (g === G) logShot(); }
   if (g.statsSeq !== shownStats) { shownStats = g.statsSeq; renderStats(); }
 }
+// ---------- Shot log ----------
+// Every shot taken here: the game as it was the moment the ball was let go, and how it came out. Saved as a file, it
+// can be worked out again under other settings (tools/whatif.js). Not online, where a shot can be played more than
+// once as guesses about the other player are corrected. Kept only until the page is closed.
+const shotLog = [];
+let logPending = null;
+GM.setReleaseHook(game => {
+  if (game !== G || (net && net.live)) return;
+  const snap = GM.snapshot(game); delete snap.lastPhys; delete snap.fx;
+  logPending = { at: new Date().toISOString(), snap };
+});
+function logShot() {
+  if (!logPending || !G.last) return;
+  const L = G.last;
+  shotLog.push({ ...logPending, result: { name: L.name, kind: L.kind, dist: +L.dist.toFixed(2), three: !!L.three, make: !!L.out.make, out: `${L.out.big} / ${L.out.sub}`,
+                 e: L.e === undefined ? null : +L.e.toFixed(1), contest: L.con ? +L.con.c.toFixed(3) : null } });
+  logPending = null;
+  const made = shotLog.filter(x => x.result.make).length;
+  $("logCount").textContent = `Shot log: ${shotLog.length} shot${shotLog.length === 1 ? "" : "s"}, ${made} made`;
+  $("logSave").disabled = $("logClear").disabled = false;
+}
+$("logSave").addEventListener("click", () => {
+  const file = { version: 1, build: BUILD, savedAt: new Date().toISOString(), shots: shotLog };
+  const a = document.createElement("a"), url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
+  a.href = url; a.download = `shot-log-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$("logClear").addEventListener("click", () => {
+  shotLog.length = 0; logPending = null;
+  $("logCount").textContent = "Shot log: cleared."; $("logSave").disabled = $("logClear").disabled = true;
+});
 const clearLast = () => { $("last").innerHTML = `<p class="empty">Take a shot to see how it was resolved.</p>`; renderStats(); };
 $("reset").addEventListener("click", () => { GM.resetStats(G); clearLast(); });
 

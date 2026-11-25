@@ -579,13 +579,19 @@ function travel() {
 
 // ---------- Release ----------
 // The button let go in the air: the ball leaves the hand, from where the hand is, now.
-function letGo() {
+// Everything about the ball let go now: what went into it (o), the shot (s), and whether it was a foul.
+function releaseShot() {
   const fl = g.flow, ft = fl.on && fl.phase === "ft", f = frame(P), ball = airBall();
   const o = { ball, av: { x: P.vx, y: P.vy }, v0: shot.gatherSpeed, vp0: shot.vPerpG, finish: shot.finish, quick: shot.quick, line: shot.line, euro: shot.euro, bump: shot.bump,
               hook: shot.hook, square: squareNow(), turned: shot.turned || 0 };
+  const s = shotAt(shot.t, o);
+  return { ft, f, ball, o, s, foul: ft ? null : shotFoul(s.hs) };
+}
+function letGo() {
+  if (releaseHook) releaseHook(g);                                   // a tool watching releases (the page's shot log) sees the game as it is let go
+  const fl = g.flow, r0 = releaseShot(), { ft, f, ball, o, foul } = r0;
   const common = { dist: f.dist, ball, upMs: shot.t, speed: shot.gatherSpeed, carried: Math.hypot(P.x - shot.gx, P.y - shot.gy), bump: shot.bump };
-  let s = shotAt(shot.t, o), res;
-  const foul = ft ? null : shotFoul(s.hs);
+  let s = r0.s, res;
   if (canDunk(ball)) {
     res = dunkShot(ball, s.hs);
     const r = res.res, over = defenders().some(d => Math.hypot(d.x - HOOP.x, d.y - HOOP.y) < 3.5);
@@ -616,6 +622,29 @@ function letGo() {
   if (res) startPathBall(res); else launchBall(f, 0.4, 3);
   shot.state = "flight";
   g.lastSeq++; g.statsSeq++;
+}
+
+// ---------- The shot log ----------
+// A tool can watch releases: the page keeps each as the game was the moment it was let go, to save and work out
+// again under other settings (tools/whatif.js). Not part of any game: a game is plain data.
+let releaseHook = null;
+function setReleaseHook(fn) { releaseHook = fn; }
+// A game copied as a ball is let go, worked out again under whatever settings are in force now: the shot as letGo
+// builds it, and how often it goes in over n simulated shots. The draws are its own and the same for the same seed, so
+// two sets of settings are compared on the same luck, shot for shot. Changes nothing in the game.
+function releaseOdds(n = 400, seed = 1) {
+  viewing = true;
+  try {
+    const { f, ball, o, foul } = releaseShot();
+    if (canDunk(ball)) return { kind: "dunk", make: 1, dist: f.dist };
+    const s = foul ? shotAt(shot.t, { ...o, foul }) : releaseShot().s;
+    let a = seed | 0;
+    const rand = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; };
+    const z = () => Math.sqrt(-2*Math.log(rand() || 1e-12))*Math.cos(2*Math.PI*rand());
+    const r = physRates(s.inp, s.sc, n, Array.from({ length: n }, () => [z(), z()]));
+    return { kind: s.near >= 0.5 ? (o.hook ? "hook" : "layup") : s.quick ? "floater" : "jumper", make: r.make, block: r.block, dist: f.dist,
+             three: isThree({ x: shot.gx, y: shot.gy }), e: s.e, q: s.q, line: s.line, c: s.con.c, aim: s.aim.theta, sig: s.sig.lat, near: s.near, foul: !!foul };
+  } finally { viewing = false; }
 }
 
 function recordFreeThrow(make) { stats.fta++; if (make) { stats.ftm++; stats.pts++; } }
@@ -1579,7 +1608,7 @@ const on = fn => (game, ...args) => { use(game); return fn(...args); };
 return {
   C, HOOP, TICK, RULES, FADE_NAME, clamp, frame, footSpot, pathPoint, create,
   step: on(step), preview: on(preview), setDefender: on(setDefender), resetStats: on(resetStats), setRules: on(setRules), newGame: on(newGame),
-  digest: on(digest), snapshot: on(snapshot), load: on(load), lastOdds: on(lastOdds),
+  digest: on(digest), snapshot: on(snapshot), load: on(load), lastOdds: on(lastOdds), releaseOdds: on(releaseOdds), setReleaseHook,
   // read-only helpers for drawing and readouts
   shotContext: on(shotContext), handPositions: on(handPositions), bodyFrame: on(bodyFrame), shoulder: on(shoulder), stepFoot: on(stepFoot),
   dribbleBallPos: on(dribbleBallPos), heldBallPos: on(heldBallPos), ballFree: on(ballFree), tightness: on(tightness), airBall: on(airBall),
