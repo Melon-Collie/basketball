@@ -56,6 +56,7 @@ const C = {
   PERFECT_MS: 12,
   // dribbling
   STEP_T: 0.2, GATHER_SPEED: 6,   // gather steps
+  DROP_LEN: 2.4, DROP_AROUND: 1.25, // a drop step: ft a step, and how far (radians) off the line to the defender the first one has to be to go round them
   ARM: 2.6, SHOULDER: 0.75,       // hands: reach from each shoulder (will come from wingspan)
   DEF_SPEED: 14, DEF_ACC: 60, STEAL_R: 0.55,                               // a player on defense: top speed, acceleration, and how close a hand must get to the ball
   // The post stance (Space, held, on the dribble): back to the defender, at most POST_SPEED ft/s, the ball bounced
@@ -794,20 +795,46 @@ function gather() {
   if (shot.state === "idle" && ballFree() && hold.state === "pivot" && hold.live) return startDribble();
   if (shot.state !== "idle" || !ballFree() || hold.state !== "none" || shot.cooldown > 0) return;
   const sp = Math.hypot(P.vx, P.vy);
+  if (drib.post) return dropStep();
   if (sp < C.GATHER_SPEED) { enterPivot(); drib.lastMove = "Gathered: dead dribble"; return; }
   // the ball-side foot steps first, then the other
   Object.assign(hold, { state: "steps", step: 0, t: 0, speed: sp, dir: { x: P.vx/sp, y: P.vy/sp }, euro: 0, jumpStop: false,
-                        landedT: 0, firstFoot: drib.side, prints: [] });
+                        landedT: 0, firstFoot: drib.side, prints: [], drop: false });
   const b = dribbleBallPos(); startCarry(b.x, b.y);
   drib.lastMove = "Gathered on the move";
   beginStep();
 }
 function beginStep() { hold.step++; hold.t = 0; hold.from = { x: P.x, y: P.y }; aimStep(); }
 // The landing spot follows WASD for the whole step: you steer the foot until it plants.
+// Shift in the post stance: a drop step. Two gather steps from a standstill, each a big one: the first swings round the
+// defender's hip toward the rim, on the ball's side unless WASD says otherwise, and the second goes on to the rim (or
+// where WASD steers it). Going up out of them is a finish, as out of any gather steps.
+function dropStep() {
+  const f = frame(P), b = bodyFrame(), side = drib.side;
+  const ball = { x: b.r.x*side, y: b.r.y*side }, c = Math.cos(C.DROP_AROUND + 0.1), s = Math.sin(C.DROP_AROUND + 0.1);
+  const dir = { x: f.u.x*c + ball.x*s, y: f.u.y*c + ball.y*s };
+  Object.assign(hold, { state: "steps", step: 0, t: 0, speed: C.DROP_LEN/0.2, dir, euro: 0, jumpStop: false,
+                        landedT: 0, firstFoot: side, prints: [], drop: true });
+  const bp = dribbleBallPos(); startCarry(bp.x, bp.y);
+  drib.lastMove = "Drop step";
+  beginStep();
+}
+// Where a drop step's first step goes: where WASD says, unless that is into the defender, when it goes round them on
+// that side (on the ball's, if straight at them).
+function dropAround(d) {
+  if (!params.defOn) return d;
+  const tx = D.x - P.x, ty = D.y - P.y, tl = Math.hypot(tx, ty) || 1, t = { x: tx/tl, y: ty/tl };
+  const off = Math.atan2(t.x*d.y - t.y*d.x, t.x*d.x + t.y*d.y);           // signed angle from the line to them
+  if (Math.abs(off) >= C.DROP_AROUND) return d;
+  const sgn = Math.abs(off) > 0.25 ? Math.sign(off) : Math.sign(t.x*hold.dir.y - t.y*hold.dir.x) || 1, a = (C.DROP_AROUND + 0.1)*sgn;
+  return { x: t.x*Math.cos(a) - t.y*Math.sin(a), y: t.x*Math.sin(a) + t.y*Math.cos(a) };
+}
 function aimStep() {
-  const d = inputDir();
-  hold.stopping = hold.step === 2 && !d;                               // nothing held on the second step: two-foot stop
-  const dir = d || hold.dir;
+  let d = inputDir();
+  hold.stopping = hold.step === 2 && !d && !hold.drop;                 // nothing held on the second step: two-foot stop
+  if (hold.drop && hold.step === 2 && !d) { const f = frame(P); d = f.u; }   // a drop step goes on to the rim
+  let dir = d || hold.dir;
+  if (hold.drop && hold.step === 1) dir = dropAround(dir);
   const len = hold.stopping ? 0.8 : clamp(hold.speed*0.2, 1.2, 3.0);
   hold.stepDir = dir;
   hold.to = { x: hold.from.x + dir.x*len, y: hold.from.y + dir.y*len };
@@ -820,7 +847,7 @@ function stepMove(dt) {
     aimStep();
     const rem = Math.max(0.02, C.STEP_T - hold.t);
     P.vx = (hold.to.x - P.x)/rem; P.vy = (hold.to.y - P.y)/rem;
-    if (hold.step === 2) {                                             // sideways off the first step's line, so far = euro
+    if (hold.step === 2 && !hold.drop) {                               // sideways off the first step's line, so far = euro
       hold.euro = Math.abs((P.x - hold.from.x)*(-hold.dir.y) + (P.y - hold.from.y)*hold.dir.x);
     }
     if (hold.t >= C.STEP_T) plantStep();
@@ -841,6 +868,7 @@ function plantStep() {
     hold.dir = { x: dx/dl, y: dy/dl };                                 // the first step is the reference line
     beginStep();
   } else if (hold.euro > 0.8) drib.lastMove = `Euro step: ${hold.euro.toFixed(1)} ft sideways`;
+  else if (hold.drop) drib.lastMove = "Drop step";
 }
 // The button let go while the legs are still loading: the jump is called off. The ball went up and the feet stay
 // down, so it was a pump fake. From a dribble or gather steps that picks the ball up; from a pivot the pivot foot

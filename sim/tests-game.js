@@ -499,8 +499,8 @@ gtest("Bodies meeting: two of a size leaning on each other go nowhere, and it ta
 });
 
 // Driving in from the top with the ball out to one side, to 15 ft, then posted up for a while so the defender is on their back.
-function postedUp(seed, { mD = 1, side = 1, settle = 150, d = 15, defender = true } = {}) {
-  const g = fresh(seed); GM.setDefender(g, "rimOn", false); g.D.m = mD; if (!defender) GM.setDefender(g, "defOn", false);
+function postedUp(seed, { mD = 1, side = 1, settle = 150, d = 15, defender = true, rim = false } = {}) {
+  const g = fresh(seed); GM.setDefender(g, "rimOn", rim); g.D.m = mD; if (!defender) GM.setDefender(g, "defOn", false);
   run(g, 0.5);
   until(g, { ...AIM, u: true }, x => distance(x) <= d, 4);
   for (let i = 0; i < 400 && distance(g) > d; i++) GM.step(g, { x: g.P.x + 2.5*side, y: g.P.y, u: true, post: distance(g) < d + 6 });
@@ -606,6 +606,45 @@ gtest("A turnaround jumper turns to the rim in the air: square by the top it cos
   const straight = postShot(postedUp(33, { d: 14 }), TOP, () => AIM), fade = postShot(postedUp(33, { d: 14 }), TOP + 60, () => AIM, { d: true });
   check(fade.name === "Turnaround fadeaway" && straight.con.c > 0.5 && fade.con.c < straight.con.c - 0.3, `contest straight up ${straight.con.c.toFixed(2)}, fading ${fade.con.c.toFixed(2)} (${fade.name})`);
   return `σ ${set.sig.lat.toFixed(1)} in facing up, ${top.sig.lat.toFixed(1)} turning around by the top, ${early.sig.lat.toFixed(1)} let go early; contest ${straight.con.c.toFixed(2)} straight up into them, ${fade.con.c.toFixed(2)} fading`;
+});
+
+// Shift out of the post stance, then the two steps with `keys` held (none: let the drop step go where it goes).
+function dropStep(g, keys = {}) {
+  const fromD = { x: g.D.x - g.P.x, y: g.D.y - g.P.y }, p0 = { x: g.P.x, y: g.P.y };
+  GM.step(g, { ...AIM, ...keys, post: true, gather: true });
+  let first = null;
+  for (let i = 0; i < 47 && g.hold.state === "steps"; i++) { GM.step(g, { ...AIM, ...keys }); if (!first && g.hold.step === 2) first = { x: g.P.x - p0.x, y: g.P.y - p0.y }; }
+  const off = first && Math.abs(Math.atan2(fromD.x*first.y - fromD.y*first.x, fromD.x*first.x + fromD.y*first.y));
+  return { off, between: Math.hypot(g.D.x - RIM.x, g.D.y - RIM.y) < distance(g) - 0.3 };
+}
+
+gtest("Shift in the post stance is a drop step: round the defender's hip, off their body, and on to the rim past them", () => {
+  const g = postedUp(31, { d: 9 }), d0 = distance(g);
+  const r = dropStep(g);
+  check(g.drib.lastMove === "Drop step" && g.hold.state === "steps" && g.stats.to === 0, `"${g.drib.lastMove}", ${g.hold.state}`);
+  check(r.off > 1 && !r.between && d0 - distance(g) > 2, `first step ${r.off.toFixed(2)} rad off the line to the defender; ${(d0 - distance(g)).toFixed(1)} ft nearer the rim; defender still between: ${r.between}`);
+  // WASD straight at them goes round them all the same
+  const h = postedUp(31, { d: 9 }), at = { x: h.D.x - h.P.x, y: h.D.y - h.P.y };
+  const keys = { u: at.y < -0.5*Math.hypot(at.x, at.y), d: at.y > 0.5*Math.hypot(at.x, at.y), l: at.x < -0.5*Math.hypot(at.x, at.y), r: at.x > 0.5*Math.hypot(at.x, at.y) };
+  const s = dropStep(h, keys);
+  check(s.off > 1, `stepping at the defender, the first step went ${s.off.toFixed(2)} rad off the line to them`);
+  // going up out of it, at the top with no scatter, is a finish
+  for (let i = 0; i < 62; i++) GM.step(g, { ...HELD }); GM.step(g, AIM);
+  check(g.last && g.last.kind === "layup", `going up out of it: ${g.last && g.last.kind}`);
+  return `from ${d0.toFixed(1)} ft: first step ${r.off.toFixed(2)} rad off the line to them, ${(d0 - distance(g)).toFixed(1)} ft nearer, the defender behind; then a ${g.last.name.toLowerCase()}`;
+});
+
+gtest("Against the rim protector a drop step's finish is a finish like any other: up at the rim it is met, held away from its arm it gets off", () => {
+  const finish = at => {
+    const g = postedUp(31, { d: 9, rim: true }); dropStep(g);
+    g.forced.push(...Array(400).fill(1));
+    for (let i = 0; i < 62; i++) GM.step(g, { ...at(g), shot: true }); GM.step(g, at(g));
+    return g.last.out;
+  };
+  const away = g => { const dx = g.P.x - g.R.x, dy = g.P.y - g.R.y, dl = Math.hypot(dx, dy) || 1; return { x: g.P.x + dx/dl*1.8, y: g.P.y + dy/dl*1.8 }; };
+  const atRim = finish(() => AIM), held = finish(away);
+  check(atRim.big === "Blocked" && !held.touched && held.make, `at the rim: ${atRim.big} / ${atRim.sub}; held away: ${held.big} / ${held.sub}`);
+  return `at the rim: ${atRim.big}; held away from the arm: ${held.big} / ${held.sub}`;
 });
 
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
