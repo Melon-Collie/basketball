@@ -78,10 +78,10 @@ function inPlay(label, shots, { back = 0, guard = null, tight = false } = {}) {
     if (guard !== null) g.params.sag = guard;
     for (let k = 0; k < t(back); k++) GM.step(g, { ...aim, d: true });
     for (let k = 0; k < t(1); k++) GM.step(g, tight ? { x: g.P.x + 0.3, y: g.P.y - 0.6 } : aim);
-    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, jump: k === 0 });
+    for (let k = 0; k < 62; k++) GM.step(g, { ...aim, shot: true });
     if (g.shot.state !== "shooting") continue;                    // the ball was taken first
     if (g.D.jumpT >= 0 || g.D.land > 0) jumped++;
-    GM.step(g, { ...aim, shot: true });
+    GM.step(g, aim);
     off++; dist += g.last.dist; if (g.last.out.make) made++; if (g.last.out.big === "Blocked") blocked++; if (g.last.out.foul) fouled++;
   }
   const pct = x => off ? `${(x/off*100).toFixed(0).padStart(3)}%` : "   –";

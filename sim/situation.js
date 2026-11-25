@@ -27,6 +27,7 @@ const SITU = {
   // finishing
   FINISH_FLOOR: 1.8 + 15*0.045,    // in: the part of a layup's scatter nothing takes away, as shown in the readout
   FINISH_NEAR: 4, FINISH_FAR_IN: 0.8,   // a finish let go further out than this pays this many inches for every foot of it: it is a heave
+  HOOK_NEAR: 6, HOOK_FAR_IN: 0.35, HOOK_SIDE: 0.3,   // a hook carries further (from 6 ft, 0.35 in a foot), and is meant to be held out to the side
 };
 const clampS = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -106,9 +107,9 @@ function finishScatter(s) {
   const r = SITU.FINISH_FLOOR, limit = s.limit;
   const sp = 0.35*Math.max(0, s.speed - limit);
   const vp = clampS(s.vPerp/6, -1, 1);
-  const turn = 2.2*Math.max(0, -s.side*vp) + 0.8*Math.abs(s.side) + 0.6*(s.euro || 0);   // the ball held across your momentum, held out wide, euro footwork
+  const turn = 2.2*Math.max(0, -s.side*vp) + (s.hook ? SITU.HOOK_SIDE : 0.8)*Math.abs(s.side) + 0.6*(s.euro || 0);   // the ball held across your momentum, held out wide, euro footwork
   const hang = 0.9*(s.hangMs || 0)/100;
-  const out = SITU.FINISH_FAR_IN*Math.max(0, (s.dist || 0) - SITU.FINISH_NEAR);
+  const out = s.hook ? SITU.HOOK_FAR_IN*Math.max(0, (s.dist || 0) - SITU.HOOK_NEAR) : SITU.FINISH_FAR_IN*Math.max(0, (s.dist || 0) - SITU.FINISH_NEAR);
   const lat = Math.sqrt(r*r + sp*sp + turn*turn + hang*hang + out*out);
   return { lat, dep: lat*1.2, parts: [r, Math.hypot(turn, hang, out), sp], limit };
 }

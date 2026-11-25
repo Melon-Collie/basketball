@@ -33,7 +33,7 @@ function scatterIn(s) {
   for (const k of FORMS) { const w = s.form[k] || 0; if (w > 0) { const o = scatterOne(k, s); lat += w*o.lat*o.lat; dep += w*o.dep*o.dep; } }
   return { lat: Math.sqrt(lat), dep: Math.sqrt(dep) };
 }
-// s.bump: inches added to any of them by a body met on the way up.
+// s.bump: inches added to any of them by a body met on the way up. s.turn: by turning to the rim in the air.
 function scatterOne(kind, s) {
   const q = s.q ?? 1;
   let lat;
@@ -46,7 +46,7 @@ function scatterOne(kind, s) {
     const r = NOISE.FLOOR_IN*(1 - NOISE.BONUS*q);
     lat = Math.hypot(r, NOISE.DIST_IN*s.dist, Math.hypot(NOISE.MOVE_IN*(s.move || 0), s.fadeIn || 0), NOISE.CONTEST_IN*(s.contest || 0));
   }
-  lat = Math.hypot(lat, s.bump || 0)*NOISE.MULT[kind]*(1 - NOISE.PREMIUM*(s.clean || 0)*q);
+  lat = Math.hypot(lat, s.bump || 0, s.turn || 0)*NOISE.MULT[kind]*(1 - NOISE.PREMIUM*(s.clean || 0)*q);
   return { lat, dep: lat*NOISE.DEP_RATIO[kind] };
 }
 
@@ -81,7 +81,7 @@ function makeRate(situ, n = 3000, seed = 1) {
   const R = PLn.PHYS.RIM, r = rngN(seed), player = situ.player || { x: R.x, y: R.y + situ.dist };
   const base = { kind: situ.kind || "jumper", form: situ.form, pos: situ.pos, player, contest: situ.contest || 0, timingMs: situ.timingMs || 0, relZ: situ.relZ };
   const sc = { kind: base.kind, form: situ.form, dist: situ.dist, q: situ.q ?? 1, move: situ.move || 0, contest: situ.contest || 0,
-               clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0, bump: situ.bump || 0 };
+               clean: situ.clean || 0, fadeIn: situ.fadeIn || 0, extra: situ.extra || 0, bump: situ.bump || 0, turn: situ.turn || 0 };
   let made = 0, near = 0, misses = 0, air = 0, blocks = 0; const labels = {};
   for (let i = 0; i < n; i++) {
     const noise = sampleNoise(base, sc, [gaussN(r), gaussN(r)]);

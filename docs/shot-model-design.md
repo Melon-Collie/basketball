@@ -51,12 +51,13 @@ A key property: when scatter is small (open, good shooter), input error matters 
 
 ## Input scheme
 
-Three buttons, and each means one thing.
+Two buttons and the movement keys.
 
 - **WASD** moves. **Cursor** aims from range, and in the air at the rim it is the ball.
-- **Space** jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too.
-- **Left mouse** lets the ball go, the moment it is pressed, if you are in the air. With your feet on the floor it is a pump fake.
+- **Left mouse, pressed**, jumps. With the ball that is the start of every shot; without it, it goes up for a loose ball. It is the defender's jump too, so the shot and the contest are the same button.
+- **Left mouse, let go**, lets the ball go, the moment it comes up, if you are in the air. Let go while the legs are still loading, before the feet leave, and the jump is called off: a pump fake. So a shot is a hold and a fake is a tap.
 - **Shift** gathers the ball, or puts a ball that has not been dribbled yet on the floor.
+- **Space**, held on the dribble, is the post stance: back to the defender (see The post stance). Letting go faces up.
 - **WASD as you take off** is a lean: it decides what you carry into the air (see The jump). Inputs are read relative to the floor, not the shot line.
 
 **How a shot is resolved is not picked from a list.** There used to be a table here: a click was a jumper, a floater, a layup or a dunk according to distance and speed at the moment it was pressed, and each was resolved by its own rules. Now there is one shot, and what it is follows from where the ball was let go (see One shot).
@@ -86,7 +87,7 @@ Two lines on every jump, with the nearer one counting, was tried and taken out b
 
 This section is the shot from range, where a finish has no part (beyond 8 ft; see One shot). Timing sets depth and the cursor sets lateral aim. Distance, movement and contest set the scatter.
 
-**Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after Space, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
+**Timing (depth).** The ball has to be let go on the jump's release line: the top of the jump, 520 ms after the press, or, off a drive from floater range, the quick line, 330 ms after it (see The quick line). The line is moved by whatever you are carrying along the shot line (see The jump). There is no automatic release: come down with the ball and it is travelling. Timing error, after the assist deadzone, changes launch speed by 0.0158% per ms. That is 0.09 in of depth per ms at 24 ft and less closer in (0.056 at 15 ft). Early misses short, late misses long.
 
 - Perfect window: ±12 ms. Timing assist (default ±15 ms) is a deadzone added on top, where error costs nothing.
 - **Perfect release bonus** (default 30%): release quality q is 1 inside the perfect window and fades to 0 over the next 40 ms. It shrinks the shooter's own scatter by bonus × q. It never touches contest scatter.
@@ -114,7 +115,7 @@ Depth scatter = 1.16 × lateral. The total is multiplied by 1.23 (calibration) a
 
 Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop are what its one rule produces.
 
-**The timeline.** Space starts it. For 170 ms the legs load with the feet still down; a click then does nothing. Then 350 ms up and 350 ms down. The top is 520 ms after Space, and the feet are back on the floor at 870 ms.
+**The timeline.** Pressing the mouse button starts it, and letting it go lets the ball go. For 170 ms the legs load with the feet still down; letting go then calls the jump off, and that is a pump fake. Then 350 ms up and 350 ms down. The top is 520 ms after the press, and the feet are back on the floor at 870 ms.
 
 **What you carry into the air.** Decided while the legs load, and nothing changes it after that:
 
@@ -232,11 +233,11 @@ So with the cursor on the rim from a few feet out you shoot a normal layup, and 
 
 **Euros.** Open, going up out of the second step and leaning at the rim: gathered at 10 ft, the jump starts 5.7 ft out and the ball is let go 3 ft out at the top, 78%. Gathered at 12 ft, 68%. Gathered at 14 ft the jump starts 9.6 ft out and only gets to 6.7 ft, 47%.
 
-**What the AI gives up.** On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
+**What the AI gives up.** (Measured before the rim protector read the handler late; see Rim protector's read.) On blunt straight-line drives with no moves, against the rim protector waiting at home: the ball in front and let go on the way up was blocked about 60% of the time and scored 3%; at the top, a dunk attempt, 39% and 61%; held out away from the arm at the top, 11% and 29%; held straight up and hung until the blocker was coming down, 0% and 59%. Before this, the same drives were blocked two times in three or more whatever was done.
 
 ## The quick line
 
-The quick line is the early release: let go on the way up, 330 ms after Space, 160 ms after the feet leave and 190 ms before the top. A jump has it when it starts on a drive from 7 to 14 ft, and that shot is a floater.
+The quick line is the early release: let go on the way up, 330 ms after the press, 160 ms after the feet leave and 190 ms before the top. A jump has it when it starts on a drive from 7 to 14 ft, and that shot is a floater.
 
 - **Timing:** perfect window ±20 ms plus the timing assist, against ±12 on the top line. The perfect release bonus applies.
 - **Touch:** a floor of 4.6 in × (1 − bonus × q) against 3.93, movement 0.08 × ft/s against 0.14 and with no cost for speed in the air: it is built for moving. Depth = 1.45 × lateral, since soft high arcs miss short or long. The total is multiplied by 1.50 (calibration).
@@ -250,6 +251,8 @@ The quick line is the early release: let go on the way up, 330 ms after Space, 1
 - **Step up** (concedes the lane): moves to a spot on the drive line at clamp(distance − 4.5, 6, 10) ft from the rim. Once the driver gets past that spot, it recovers at only 8 ft/s, which opens the layup.
 
 Whether it steps up is a rule on a slider (default 50: when the handler is level with their defender). The decision resets after every shot. The rim protector's current choice is shown in the panel, but in the real game reading its position should be the skill.
+
+Like the on-ball defender, it goes by where it saw the handler a reaction time ago (260 ms by default), carried on the way they were going then. A straight drive it sees coming; a euro, or any change of direction, is a reaction time old before it moves for it. Its arm still goes for the ball where the ball is.
 
 ## Dribbling
 
@@ -314,9 +317,11 @@ The gather button (Shift) is a state change, not a move: it turns a dribbled bal
 
 - The ball-side foot steps first. Each foot's landing spot follows WASD until it plants, and a ghost circle shows where it will land, so you can steer it mid-step.
 - Step length is speed × 0.2 s, between 1.2 and 3.0 ft. With nothing held, the first step continues your momentum.
-- **Euro:** sideways movement off the first step's line during the second step, tracked continuously. It costs 0.6 in of finishing scatter per foot.
+- **The ball on the steps is where the cursor holds it.** The gather picks the dribble up from wherever it was, and from there the ball goes after the cursor, at most 1.8 ft out, 3.6 ft up. It moves in a straight line at 14 ft/s, a defender's hand speed, so a swing from one side to the other takes 0.26 s and comes across the chest. It never goes behind the back: when the straight way would, it goes by the front. Cursor on the body is the ball tucked in. The ball carries on into the jump from where it was, and in the air goes on after the cursor at the same speed, out to where the shooting form begins.
+- **On the steps a hand can take it.** A defender's hand that gets to the ball takes it, as on the dribble, unless the handler's body is in the way: a ball held on the far side from the defender, or behind the hip, is safe; one run into their hand is gone. The AI goes for it as it does for a dribble, once it has seen it left open.
+- **Euro:** sideways movement off the first step's line during the second step, tracked continuously. It costs 0.6 in of finishing scatter per foot. What it buys is not a rule: the defenders read the handler a reaction time late (see Rim protector's read), so the second step goes where they saw nothing coming, and the ball can be carried on the side away from them.
 - **Jump stop:** nothing held on the second step plants both feet (0.8 ft) and kills the dribble.
-- **Going up:** click any time, off either step. Out of gather steps, layups count up to 9 ft (7 ft normally), floaters to 14 ft, jumpers beyond. If you haven't gone up within 0.3 s of planting the second step, you stop with a dead dribble.
+- **Going up:** press any time, off either step. Out of gather steps, layups count up to 9 ft (7 ft normally), floaters to 14 ft, jumpers beyond. If you haven't gone up within 0.3 s of planting the second step, you stop with a dead dribble.
 
 **Gathering while stopped** gives a dead dribble with feet planted.
 
@@ -325,7 +330,7 @@ The gather button (Shift) is a state change, not a move: it turns a dribbled bal
 - **Free foot:** WASD extends it up to 2.6 ft in that direction; letting go returns it to stance, 1.4 ft beside the pivot.
 - **Travels are impossible by construction:** the pivot never lifts and there is never a third gather step.
 - **Shots:** a set shot by default. With the free foot reaching toward the rim (more than 1.2 ft) within 8 ft, it's a step-through finish. Holding the away-from-rim key as you shoot gives a step-back fade.
-- **Strips:** every 0.25 s, a ball held within 1.2 ft of the defender's hand can be stripped, up to 12%.
+- **Strips:** a defender's hand that gets to the ball takes it, unless the handler's body is between them and it.
 
 | Move | What produces it |
 | --- | --- |
@@ -347,14 +352,58 @@ Post moves are planned to use this same system from a back-to-the-basket stance:
 
 ## Pump fakes
 
-A pump fake is a click with your feet on the floor: the ball goes up and you stay down. A shot needs the jump first, so the fake and the shot are different inputs and neither can be the other by accident.
+A pump fake is a jump called off: press the mouse button to go up and let it go again while the legs are still loading, in the first 170 ms. The ball goes up and you stay down. Once the feet have left, letting go is a shot, however early, so a fake is a tap and a shot is a hold. The two share a button, as the real things share a motion: the start of a shot and a fake look the same to a defender because they are the same, until the feet leave.
 
 - **When:** any time you have the ball and are not in the air: off the dribble, during gather steps, from a dead dribble or a triple threat.
-- **After a fake, your dribble is dead,** because rising into a shot picks up the ball. If you were already pivoting, you keep the same pivot foot.
+- **After a fake, your dribble is dead,** because rising into a shot picks up the ball. Out of a triple threat you still have it to come. If you were already pivoting, you keep the same pivot foot, and the body is back where it went up from: a lean while the legs loaded does not move it.
 - **Defenders react to the motion they saw,** real or fake, one shot reaction time later. The AI leaves its feet for a shot it sees only from inside 3.2 ft, which is as far as a block reaches. Up close it has to respect the shot, so that is also where a fake gets it in the air. From further off it keeps its feet, closes out and gets a hand up. The jump lasts 0.5 s.
 - **The payoff window:** in the air, a defender drifts and can't close out. For 0.45 s after landing, they can only get about 30% of a hand up on a jumper or floater. Shooting into that window, or stepping through, is the reward; shooting while they're still in the air runs into the full contest.
 
 The AI's choice is a rule, so it can be learned: bring it in close (pulling the ball in tight reads as a pull-up and does that) and it will go up for anything that looks like a shot. A person defending makes their own call.
+
+## Bodies meeting
+
+One model decides what happens wherever two bodies meet: a drive into a defender, a box-out, a shooter flying into someone, two defenders under the ball. Nothing in it depends on who has the ball. Everything happens along the line between the two centers.
+
+- **Impact.** Two bodies coming together share their momentum, as a collision that doesn't bounce. A set body, on its feet and slower than 2 ft/s, is planted: it counts as up to 10 times its mass. So a runner is stopped at its back while it barely moves (a full-speed dribbler into a set defender moves them 0.03 ft), and a body still on the move is knocked off its line (a defender sliding across the dribbler's path is knocked back at about 4.5 ft/s, and the dribbler goes on at about 9). Nobody in the air is set.
+- **Pushing.** Pressed together, two bodies move as one, and each pushes toward where it wants to be with its legs: 32 ft/s² of drive, or 1.5 times that for a body that wants to stay where it is, because holding ground is easier than taking it. In the air there are no legs. The velocity is solved at the end of each tick, so two pushes that cancel leave the pair exactly where it is. Two of a size leaning on each other go nowhere, and it takes half again the weight (or, with frames, the strength) to move someone holding their ground: against a defender of four fifths the handler's mass a second of leaning moves them 0.03 ft, against half of it 3 ft. Wanting to be somewhere else is a body's own business: an AI defender keeping its cushion lets itself be moved.
+- **Overlap.** Each body ends the tick where its new velocity would have taken it, and anything left over is given back in proportion to the other's planted mass.
+- **Bodies** are 1.7 ft apart at closest, the rim protector 2.2 ft from anyone. Every body has the same mass until frames.
+
+What a meeting means for the rules is read from the collision itself:
+
+- **A shooter,** going up or in the air, meeting a set defender (slower than 1.5 ft/s, on the floor) outside the restricted area at more than 2 ft/s is a charge. Anyone else is a bump, and the bump costs the shot by how much speed it took off the shooter: 2 in of scatter for 7 ft/s, up to 3 in.
+- **On the glass,** in the air and still coming at more than 2 ft/s, onto a player who had the spot, is over the back.
+
+This replaces three separate rules: on a drive the defender gave a fixed 35% of any overlap; on the glass the overlap was split by approach speed; and a shooter in the air pushed whoever was there out of the way, losing nothing.
+
+**How bodies are drawn.** From above: feet under them (a stride when running), shoulders as an oval turned the way they face with the head forward of them, and two arms out to their hands. The handler's facing is the game's (on the dribble, in a pivot, on gather steps); a defender faces the ball. A held ball and a shot have both hands on it. The rim protector is drawn bigger. Drawing only: it changes nothing in the game.
+
+**What it is built for.** Frames set each body's mass and leg strength, and the outcome of every meeting follows. A post game is meant to be built on it: backing down is pushing, so it works against someone smaller or weaker, and a bump is an impact, so it moves a defender who is not set.
+
+## The post stance
+
+Hold **Space** on the dribble and the handler turns their back to the defender (to the rim, with nobody within 8 ft), so the body is between the defender and the ball. It works anywhere on the floor: on the block, or backing down from the wing or the top. It is not a move list; it changes what the body is doing, and the moves come out of that.
+
+- **The turn** is 9 rad/s, about a third of a second for a half turn, into the stance and out of it. Until now the dribble was always worked out as if facing the rim; in and out of the stance it is worked out in the body's own facing.
+- **The dribble** goes low (2.2 ft) and quick, at most 1.4 ft out, from the hip forward and never behind toward the defender. The cursor picks the hip.
+- **Movement** is a back-down walk: at most 5.5 ft/s, WASD relative to the floor as always.
+- **Backing down** is pushing (see Bodies meeting). Against the same size it gets nowhere: pushing straight at the rim for two seconds gained nothing and slid off to one side. Against half the size it walked them back 9 ft.
+- **The ball is shielded:** a hand has to get round the body to reach it. That is now true of any dribble, not only the post.
+- **Letting go of Space faces up,** turning to face the rim with the dribble still live. Letting go while moving sideways is a **spin**: the turn goes the way they are moving and carries them past the defender's shoulder. The ball comes round with the body; if the turn would swing it past the defender, it goes over to the other hand first, across the front. A half turn without moving goes the way that keeps the ball away from them.
+
+**The AI against it** gets behind the handler, on the line from the rim, into their back, leaning in a little, and holds. In contact it feels where they are; off them it goes by where it saw them a reaction time ago. So a spin leaves it leaning on where they were: in tests, a spin to the open side got past the defender every time, a spin toward the side it was shaded to ran into it, and facing up and driving never got past.
+
+**Post shots.** A jump out of the stance is read as it starts, like any other (see What a jump is taken for):
+
+- **Inside 10 ft it is a hook.** A finish: no release line and no aim, the hand finds the rim, and the cursor is the ball. It differs from a layup in what it pays for distance: nothing out to 6 ft, then 0.35 in a foot (a layup pays 0.8 a foot from 4 ft), and holding the ball out to the side, which is what a hook is, costs 0.3 in for each arm's length of it instead of 0.8. Open, from 6 to 8 ft, it goes in about 60%. Against a defender on your back it is about getting the ball past their arm, and the AI shot blocker times its jump to be at its highest at the top of yours: held 1 ft out (high) or 2 ft or more out (wide) it gets over, about 45 to 65%; held 1.5 ft out and let go near the top, the hand is right there; let go early or late, it is not. In shooting form toward the rim, over them, it is blocked.
+- **Further out it is a turnaround jumper.** The body turns in the air from where it faced to the rim, at the stance's 9 rad/s, so a half turn is done about 350 ms in, before the top. Let go before it is square and it costs up to 8 in of scatter (facing straight away), less the squarer it is; the turning itself costs 1 in for every half turn. From 14 ft, open: 68% at the top against 78% for a jumper facing up, 10% let go at 300 ms. Straight up into a defender on your back the contest is 0.78 and nothing went in; leaning away as you go up, a turnaround fadeaway, it is 0.10 and about 45% went in.
+
+The body is drawn turning in the air as the game has it: to the rim, or side-on for a hook.
+
+**The drop step.** Shift in the stance gives two gather steps from a standstill, each 2.4 ft. The first goes round the defender's hip: by default toward the rim at about 77° off the line to the defender, on the ball's side; WASD steers it, and a step steered within 72° of the line to the defender goes round them at 77° on that side instead (on the ball's side if straight at them). The second goes on to the rim, or where WASD steers it; with nothing held it is not a jump stop. Going up out of them is a finish, as out of any gather steps, and a drop step is never a euro. The first step takes the handler off the defender's body: the defender, which felt them while touching, now goes by what it saw a reaction time ago, and the second step goes past it. From about 9 ft against the AI on their back, with no rim protector, the defender was left behind every time and 8 in 10 went in. With the rim protector, a finish at the rim at the top of the jump was blocked every time; held out away from its arm, 7 in 10 went in.
+
+**Still to come:** arm fouls (push-offs, the defender's arm bar), and three seconds in the lane. The AI only bodies up, on purpose: fronting and playing three-quarter are ways of denying the entry pass, so they wait for passing and teammates. Shading a side or playing off a post player who already has the ball were considered and left out for now.
 
 ## Shot noise and clean looks
 
@@ -447,7 +496,7 @@ Each row replaces a placeholder or a rating. Multipliers are relative to the anc
 | Dribble height and rhythm | Height | Bounce height ≈ waist (0.38 × H); rhythm scales with the square root of that. Lower and quicker is harder to reach |
 | Dribble reach | Wingspan | Arm reach ≈ 0.39 × W (anchor 2.6 ft) |
 | Speed and acceleration | Height, weight over lean | Top speed and acceleration drop a little per inch of height and per pound over lean; stopping and cutting likewise |
-| Contact | Weight | Overlap splits by mass instead of the fixed rule that the defender holds ground |
+| Contact | Weight, strength | Each body's mass and leg drive in Bodies meeting, in place of the placeholders that make everyone the same |
 | Steal and block reach | Wingspan, reach | The defender's hand reach comes from the arms, not a steals slider |
 
 Two things stay universal on purpose: the shot noise floor (no accuracy by body) and the AI defender's reaction lag. Reaction time belongs to the person; in the real game a human is defending.
@@ -685,7 +734,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
 - Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
-- Scripted input plays out as designed, with no browser: a click 517 ms after Space is a perfect jumper, a click on the floor is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, and the defender closes out or jumps on a shot they see.
+- Scripted input plays out as designed, with no browser: letting go 517 ms after the press is a perfect jumper, letting go before the feet leave is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, on the steps the ball goes after the cursor across the chest and never behind the back and a hand can take it only when the body is not in the way, the rim protector reads a euro a reaction time late, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.
 - Nothing is rolled: the only random draws in the game are the two behind each normal deviate of a shot's scatter. An open dunk always goes down, and the AI jumps for a shot only from where it could block it.
@@ -733,10 +782,12 @@ With the rules on, the prototype is a game: two sides take turns with the ball a
 **Rebounding.** Three things decide who gets a loose ball, and none of them is a roll.
 
 - **Getting there.** Without the ball the handler runs at 15 ft/s, against 13.5 ft/s dribbling. The ball is drawn with its height while it is loose, so you can see where and when it is coming down.
-- **Going up.** Space jumps for a loose ball, for the handler as well as a player on defense. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
-- **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
+- **Going up.** The mouse button jumps for a loose ball, for the handler as well as a player on defense. A jump is half a second with no steering and a moment to recover, and it raises the hands by up to 2.2 ft. Of two players under the ball, the one in the air at the right moment takes it first. Too early or too late and it is the other player's.
+- **Boxing out.** Two bodies can't share a spot. When they meet over a loose ball, or while a shot is in the air once the shooter is back on the floor, each gives back the ground they took: a player standing still is not moved at all, and the one running into them is stopped at their back, 1.7 ft away. That is further than the 1.6 ft a ball can be caught from, so a player who gets to the spot first and holds it has the rebound unless they mistime it. Two players running into each other split the bump by how fast each came.
 
-**It is the same key.** Space is the jump for everyone, with the ball or without it. A free throw is the same jump and click as any jumper.
+**The AI on the glass.** A reaction time after it sees the shot go up, the on-ball defender boxes the shooter out: it gets onto the line from the rim to them, close enough for contact, and never gives ground toward the rim to do it, so a shooter crashing straight in is held at its back. The rim protector holds its spot. A reaction time after the ball first comes off the rim, the glass or a hand (an air ball: after it is loose), both go for where they read it coming down: the flight as they saw it a reaction time ago, carried on as a plain arc to reaching height. They can't know about the next bounce until they see it, so a ball rattling on the rim keeps them guessing. Measured with a scripted shooter who crashes after every jumper and goes for the ball, against both AI defenders: the shooter gets about 3 to 12% of their misses back, depending on how they crash (it was about 28% when the AI waited for the ball to come down to catching height before reacting, and shooters ran through anyone in their way while the ball was in the air).
+
+**It is the same button.** Pressing the mouse button is the jump for everyone, with the ball or without it, so the shot and the contest are one motion. A free throw is the same press and release as any jumper.
 
 **Against the AI.** The defenders take a reaction time to register a miss before they go after it, and they go up for a ball that is about to come within a jump's reach.
 
@@ -774,7 +825,7 @@ Two people can now play each other: each plays their own side, and whoever doesn
 | WASD | Moves the defender: 14 ft/s, a little quicker than a dribbler's 13.5 |
 | Cursor | The hand. Pointed at the ball handler it is a hand up, which is what the contest formulas read, however far out it is. How far it is from the body is how far the arm reaches, between 0.85 ft (nearly straight up, and as high as it goes) and 1.6 ft (reaching out, and lower). On the defender's own body, the hand is down |
 | Cursor on the ball | Takes it, if the hand gets within 0.55 ft of a ball that is being dribbled or held and the handler's off arm is not in the way. Not during the first second after a check |
-| Space | Jumps, to block a shot or go up for a rebound. No steering in the air, and the usual recovery on landing |
+| Left mouse | Pressed, jumps, to block a shot or go up for a rebound. No steering in the air, and the usual recovery on landing. Letting it go does nothing |
 
 **The defender's hand.** Every defender has one hand, and what it meets decides what happens, for the AI and a player alike: the ball with nothing in the way is a steal, and the handler's body or off arm, if the hand was moving into them, is a reach-in foul. From in front, across the handler's body, the ball can't be reached without going through them; from the ball's side it can. A player's hand is where their cursor puts it. The AI's rests toward the handler, held off their body, and it reaches when it has seen the ball left open: within its reach, with neither the handler's arm nor their body in the way, for long enough. Under its nose that is 0.12 s; at the end of its reach, 1.2 s; both stretched for a better handler and shortened for a better thief. It reaches for where that ball would be now if the handler had done nothing since, a reaction time on. If they have moved it, the hand finds an arm, or nothing. **Blocks are the defender's timing and reach:** the jump is theirs to choose and the hand is where they put it (see Blocks, under Full physics, and the measurements under Calibration).
 
@@ -903,7 +954,7 @@ What this shows:
 - **A block needs the defender inside about 3.2 ft, and a jump that left the floor between about 320 and 150 ms before the release.** Before the arm had a length, the same jumper was blocked from anywhere inside 3.5 ft over a 350 ms span of timings, and a jump at the right moment from 4 ft still got there.
 - **Reaching out and reaching up are different tools.** Out gets a hand to shots from 3 to 3.4 ft that straight up cannot touch. Up is better inside 2.6 ft, where an arm reaching out ends up behind the ball.
 - **The edges are tips, not a cliff.** Around the block timings, and at the far end of the reach, the hand only grazes the ball.
-- **The timing is the contest.** A jumper takes 520 ms to its release and cannot be called off once Space is pressed. A defender who goes on the first movement is up in time, and is beaten by a pump fake. One who waits to see the feet leave, 170 ms in, and then reacts in 200 ms has a hand up about 30 ms before a perfect release: an early release beats them, at a small cost in distance.
+- **The timing is the contest.** A jumper takes 520 ms to its release, and can be called off only in the first 170 ms, while the legs load: that is the pump fake. A defender who goes on the first movement is up in time, and is beaten by the fake. One who waits to see the feet leave, 170 ms in, and then reacts in 200 ms has a hand up about 30 ms before a perfect release: an early release beats them, at a small cost in distance.
 - **A hand held up no longer blocks a floater.** Reaching toward the shooter now puts it below the ball. It takes a jump.
 - **A standing rim protector still barely costs a layup:** 71–78%, against 81% open. Their hand stays down on a finish unless they jump, and the contest scatter alone is small.
 - **Against the AI, a block is all-or-nothing for a given position,** because the AI's jump follows a rule. The variation comes from a player's timing and reach, and from whether the AI was brought in close.
@@ -1001,7 +1052,7 @@ Values as of the current prototype. Distances in feet, rim offsets in inches, ti
 | HAND\_V / REACH\_T / REACH\_CD / LEFT\_OPEN | 14 ft/s / 0.25 s / 2 s / 0.12–1.2 s | The AI's reach for the ball: hand speed, time out, wait before another, and how long the ball must have been left open |
 | LAYUP\_RANGE / FLOATER\_RANGE | 7 / 14 ft | Context cutoffs on a drive |
 | DRIVE\_SPEED | 4 ft/s | Minimum speed toward the rim to count as driving |
-| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | The quick line after Space, and its perfect window |
+| FL\_IDEAL / FL\_PERFECT | 330 / 20 ms | The quick line after the press, and its perfect window |
 | FL\_KT | 0.07 in/ms | Depth estimate per ms in the floater's last-shot readout. Outcomes use K\_SPEED below |
 | FL\_CONTEST\_SIG | 5.0 in | Floater contest scatter |
 | PSPEED / PACC | 15 ft/s / 70 ft/s² | Ball handler movement |
@@ -1065,7 +1116,8 @@ Full physics is built, the game runs outside the page, and there is a first set 
 - **A dunk's carry is a straight line at a fixed speed,** not a simulated arm.
 - **Free throws only exist under the game rules.** In the shot lab, fouls and and-ones are still only labeled.
 - **The rules are a first pass:** bare rebounding, no rebound off the last free throw, and one person plays both sides (see The game).
-- **Dribbling isn't final:** no between the legs, behind the back or spins yet.
+- **Dribbling isn't final:** no between the legs or behind the back yet. A spin exists only out of the post stance.
+- **Contact only moves bodies and calls charges and over the back.** Running into a dribbler doesn't threaten the ball, a defender who isn't set isn't called for blocking, and nobody falls.
 - **The triple threat is only reached by starting a possession or catching a rebound.** Catching a pass will be the third way, once there is passing.
 - **The rim protector's step-up choice is shown in the panel;** in the real game, reading its position should be the skill.
 - **How often a player blocks a tight jumper is not known yet.** The arm now has a length, a block has a window of about 170 ms, and its edges are tips (see Calibration). Whether that lands near the frames target of about 1 in 12 tight contests depends on how people time their jumps, which only play will show.
@@ -1078,8 +1130,8 @@ Full physics is built, the game runs outside the page, and there is a first set 
 2. **Frames:** height, wingspan and weight replace the rating sliders.
 3. **Fouls and free throws:** a first version is in, under the game rules.
 4. **Passing and teammates:** catch-and-shoot, live-ball triple threat, lobs, and the open-three problem.
-5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out and the AI's reaction time are in. Size and strength wait for frames.
-6. **Post play:** back-to-the-basket dribbling into the same pivot system.
+5. **Rebounding:** misses are live balls on real caroms, and jumping, boxing out, the AI boxing the shooter out and reading the ball off the rim, and its reaction time are in. Size and strength wait for frames.
+6. **Post play:** the stance is in (see The post stance): back to the defender, backing down, facing up and spinning. Next are shots and the drop step out of it, then the AI's other ways of guarding it.
 7. **Human defense controls:** a first version is in for the on-ball defender (see Two players online). Passing-lane deflections wait for passing.
 
 **Engineering:** the whole game now runs outside the page. Physics, launch, noise, the situation rules and the game itself are modules in `sim/`, tested in Node, and the page only handles input and drawing. The game is deterministic on one JavaScript engine. Across engines that is not guaranteed, because functions like `Math.sin` may differ in their last digits, which matters for how online play keeps two machines in step.

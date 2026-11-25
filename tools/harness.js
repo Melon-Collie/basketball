@@ -38,9 +38,9 @@ async function open({ file = PROTOTYPE, seed = 12345, lab = true } = {}) {
     const box = await page.locator('#court').boundingBox();
     await page.mouse.move(box.x + box.width*fx, box.y + box.height*fy);
   };
-  const click = async (frames = 1) => { await page.mouse.down(); await step(frames); await page.mouse.up(); };   // the mouse button: a release in the air, a pump fake on the floor
-  // Space, then a click `frames` later: one jump and one release
-  const shoot = async frames => { await page.keyboard.down('Space'); await step(1); await page.keyboard.up('Space'); await step(frames - 1); await click(1); };
+  const click = async (frames = 1) => { await page.mouse.down(); await step(frames); await page.mouse.up(); };   // a tap of the mouse button: with the ball, a pump fake
+  // press the mouse button and let it go `frames` later: one jump and one release
+  const shoot = async frames => { await click(frames); await step(1); };
   const key = async (code, frames) => { await page.keyboard.down(code); await step(frames); await page.keyboard.up(code); };
   const text = selector => page.evaluate(s => document.querySelector(s).textContent, selector);
   return { page, errors, step, at, click, shoot, key, text, close: () => browser.close() };

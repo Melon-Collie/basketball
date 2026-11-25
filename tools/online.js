@@ -115,28 +115,25 @@ const pct = (list, q) => { const s = [...list].sort((a, b) => a - b); return s.l
     for (const p of [host, guest]) await p.page.waitForFunction(() => window.shotLab.net && window.shotLab.net.live, null, { timeout: 15000 });
     console.log(`Connected. Playing ${opt.seconds} s with ${opt.lag}–${opt.lag + opt.jitter} ms each way and ${opt.loss}% of input packets lost.`);
 
-    // both players stay busy: the cursor circles, they move in bursts, they jump and click half a second later, and
-    // now and then they press Shift
+    // both players stay busy: the cursor circles, they move in bursts, they press the mouse button and let it go about
+    // half a second later, and now and then they press Shift
     const start = Date.now(), keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
     const drive = async (p, phase) => {
       await p.page.evaluate(() => window.scrollTo(0, 0));
       const box = await p.page.locator('#court').boundingBox();
-      let n = 0, down = null, pressed = false, up = false;
+      let n = 0, down = null, pressed = false;
       while (Date.now() - start < opt.seconds*1000) {
         const s = (Date.now() - start)/1000 + phase;
         await p.page.mouse.move(box.x + box.width*(0.5 + 0.25*Math.sin(s*2.1)), box.y + box.height*(0.35 + 0.2*Math.cos(s*1.3)));
         const want = Math.floor(s/0.7) % 3 === 0 ? null : keys[Math.floor(s/0.7) % 4];
         if (want !== down) { if (down) await p.page.keyboard.up(down); if (want) await p.page.keyboard.down(want); down = want; }
-        const press = s % 3.5 > 2.9;
+        const press = s % 3.5 > 2.4 && s % 3.5 < 2.92;               // held about as long as it takes to reach the top
         if (press !== pressed) { if (press) await p.page.mouse.down(); else await p.page.mouse.up(); pressed = press; }
-        const jump = s % 3.5 > 2.4 && s % 3.5 < 2.6;                  // Space half a second before the click: a shot let go near the top
-        if (jump !== up) { if (jump) await p.page.keyboard.down('Space'); else await p.page.keyboard.up('Space'); up = jump; }
         if (n++ % 90 === 45) await p.page.keyboard.press('ShiftLeft');
         await new Promise(r => setTimeout(r, 12));
       }
       if (down) await p.page.keyboard.up(down);
       if (pressed) await p.page.mouse.up();
-      if (up) await p.page.keyboard.up('Space');
     };
     await Promise.all([drive(host, 0), drive(guest, 1.7)]);
     await new Promise(r => setTimeout(r, 1500));                       // hands off, so everything in flight arrives

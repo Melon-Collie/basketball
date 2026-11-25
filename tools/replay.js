@@ -6,8 +6,8 @@
 //
 //   node tools/replay.js [ref] [--verbose]      ref defaults to HEAD
 //
-// The session presses the game's current buttons (Space to jump, a click to let go, Shift to gather), so a ref from
-// before those were the controls plays out as nothing much, and every checkpoint differs.
+// The session presses the game's current buttons (the mouse button down to jump and up to let go, Shift to gather),
+// so a ref from before those were the controls plays out differently, and every checkpoint differs.
 // Exits 1 if any checkpoint differs, and says which parts. A change that is meant to alter behavior will differ too:
 // this only tells you whether behavior changed, not whether it should have.
 const { execFileSync } = require('child_process');
@@ -53,7 +53,7 @@ async function session(file) {
   };
 
   await step(5); await snap('start');                     // the harness opens the page in free shooting: this session exercises the shot lab
-  // 1. standing jumpers aimed at the rim: let go at the top of the jump (31 frames after Space), early and late
+  // 1. standing jumpers aimed at the rim: let go at the top of the jump (31 frames after the press), early and late
   for (const frames of [31, 28, 36]) { await at(0.5, 0.26); await step(3); await shoot(frames); await step(4); await snap(`jumper let go at ${frames}`); await step(200); await snap(`after jumper ${frames}`); }
   // 2. cursor on the glass from straight on, then a fadeaway: leaning away from the rim at the jump
   await at(0.56, 0.1); await step(8); await snap('glass aim'); await shoot(31); await step(220); await snap('after bank attempt');
@@ -83,7 +83,7 @@ async function session(file) {
   // 9. crossovers while moving, then a pull-up, and a jump that is never let go
   for (let i = 0; i < 6; i++) { await at(i % 2 ? 0.62 : 0.38, 0.5); await key(i % 2 ? 'KeyA' : 'KeyD', 22); }
   await snap('after crossovers'); await at(0.5, 0.2); await page.keyboard.down('KeyW'); await step(20); await shoot(29); await page.keyboard.up('KeyW'); await step(220); await snap('after pull-up');
-  await key('Space', 2); await step(70); await snap('travelling');
+  await page.mouse.down(); await step(72); await page.mouse.up(); await snap('travelling');
   // 10. open jumpers for a spread of outcomes
   await page.locator('#defOn').uncheck(); await retreat(); await key('KeyW', 40); await step(30); await aimAtRim();
   for (const frames of [31, 31, 32, 30, 31, 33]) { await step(3); await shoot(frames); await step(220); await snap(`open jumper ${frames}`); }

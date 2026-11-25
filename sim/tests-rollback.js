@@ -50,11 +50,11 @@ const idle = (x, y) => ({ ...RB.NEUTRAL, x, y });
 // side 0 has the ball first: it holds, shoots, drives; side 1 defends: moves, reaches, jumps
 function script(me, t) {
   const s = t/120;
-  if (me === 0) return { ...idle(RIM.x + 3*Math.sin(s), RIM.y), u: s > 3 && s < 3.6, jump: (s > 1 && s < 1.05) || (s > 6 && s < 6.05), shot: (s > 1.52 && s < 1.57) || (s > 6.3 && s < 6.35), gather: s > 5 && s < 5.05, l: s > 7 && s < 7.5 };
-  return { ...idle(25 + 2*Math.cos(s*2), 28), d: s > 0.3 && s < 0.6, l: (s > 2 && s < 2.4) || (s > 9 && s < 9.5), r: s > 4 && s < 4.5, jump: (s > 1.3 && s < 1.35) || (s > 6.2 && s < 6.25), shot: s > 8 && s < 8.5 };
+  if (me === 0) return { ...idle(RIM.x + 3*Math.sin(s), RIM.y), u: s > 3 && s < 3.6, shot: (s > 1 && s < 1.52) || (s > 6 && s < 6.3), gather: s > 5 && s < 5.05, l: s > 7 && s < 7.5 };
+  return { ...idle(25 + 2*Math.cos(s*2), 28), d: s > 0.3 && s < 0.6, l: (s > 2 && s < 2.4) || (s > 9 && s < 9.5), r: s > 4 && s < 4.5, shot: (s > 1.3 && s < 1.35) || (s > 6.2 && s < 6.25) || (s > 8 && s < 8.5) };
 }
 
-ltest("The side without the ball controls the on-ball defender: WASD moves, the cursor raises a hand, Space jumps", () => {
+ltest("The side without the ball controls the on-ball defender: WASD moves, the cursor raises a hand, the mouse button jumps", () => {
   const g = GM.create({ seed: 1, rules: true, duo: true }), start = { ...g.D };
   const step = (n, def, off = idle(g.P.x - 3, g.P.y + 3)) => { for (let i = 0; i < n; i++) GM.step(g, [off, def]); };   // the handler keeps the ball away
   step(60, idle(g.D.x, g.D.y));
@@ -66,8 +66,8 @@ ltest("The side without the ball controls the on-ball defender: WASD moves, the 
   check(g.D.hand > 0.9, `pointing at the handler from range should raise the hand: ${g.D.hand.toFixed(2)}`);
   step(1, idle(g.D.x, g.D.y - 6));                                   // cursor straight away from them
   check(g.D.hand < 0.5, `pointing away should not: ${g.D.hand.toFixed(2)}`);
-  step(1, { ...idle(g.D.x, g.D.y), jump: true });
-  check(g.D.jumpT >= 0, "Space should jump");
+  step(1, { ...idle(g.D.x, g.D.y), shot: true });
+  check(g.D.jumpT >= 0, "a press should jump");
   step(70, idle(g.D.x, g.D.y));
   check(g.D.jumpT < 0 && g.D.land > 0, "half a second later they should have landed");
   return `moved ${moved.toFixed(1)} ft in half a second`;
@@ -99,7 +99,7 @@ function contested(gap, before, out, seed = 1) {
   Object.assign(g.P, { x: 25, y: RIM.y + 15 }); Object.assign(g.D, { x: 25, y: RIM.y + 15 - gap });
   const press = 60, hold = 62, jump = before === null ? -1 : press + hold - Math.round(before/1000/GM.TICK);
   for (let t = 0; t < 600 && !(g.last && g.ball && g.ball.announced); t++)
-    GM.step(g, [{ ...idle(RIM.x, RIM.y), jump: t === press, shot: t === press + hold }, { ...idle(g.D.x, g.D.y + out), jump: t === jump }]);
+    GM.step(g, [{ ...idle(RIM.x, RIM.y), shot: t >= press && t < press + hold }, { ...idle(g.D.x, g.D.y + out), shot: t === jump }]);
   return g;
 }
 ltest("A defender close enough who goes up in time blocks a jumper; from further out, late, or flat-footed, the ball clears them", () => {
@@ -181,7 +181,7 @@ ltest("A defender who is still running when they get to a shooter has fouled the
     const press = 60, hold = 62;
     for (let t = 0; t < 400 && !g.last; t++) {
       const gap = g.P.y - g.D.y, go = t >= press && gap > stopAt;                      // sets off as the shot goes up
-      GM.step(g, [{ ...idle(RIM.x, RIM.y), jump: t === press, shot: t === press + hold }, { ...idle(g.D.x, g.D.y + 0.7), d: go }]);
+      GM.step(g, [{ ...idle(RIM.x, RIM.y), shot: t >= press && t < press + hold }, { ...idle(g.D.x, g.D.y + 0.7), d: go }]);
     }
     return g;
   };
