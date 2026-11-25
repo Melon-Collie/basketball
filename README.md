@@ -62,6 +62,20 @@ The measurement with defenders' hands takes about three minutes and prints its t
 node sim/measure.js
 ```
 
+## Tuning the jump shot from real play
+
+The prototype keeps every shot you take in it (not online), as the game was the moment the ball was let go. **Save shot log**, under the stats, saves them as a file; the log lasts until the page is closed. `tools/whatif.js` works each shot out again, as the game has it now and with any settings you give it, on the same simulated luck, and reports your timing (how often you hit the perfect window, how far off you typically are) and make rates by situation against rough real-game references:
+
+```bash
+node tools/whatif.js shot-log.json
+```
+
+```bash
+node tools/whatif.js shot-log.json PERFECT_MS=20 tAssist=25
+```
+
+A setting is anything in the settings panel (`tAssist`, `bonus`, `aAssist`, ...) or a constant in `sim/game.js`, `sim/noise.js` or `sim/launch.js` (`PERFECT_MS`, `CONTEST_IN`, `K_SPEED`, ...). It needs only Node.
+
 ## Hosting on GitHub Pages
 
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the prototype whenever it or `sim/` changes on `main`. It needs Pages enabled for the repository with GitHub Actions as its source, under Settings > Pages.

@@ -647,6 +647,23 @@ gtest("Against the rim protector a drop step's finish is a finish like any other
   return `at the rim: ${atRim.big}; held away from the arm: ${held.big} / ${held.sub}`;
 });
 
+gtest("A shot copied as it is let go is worked out again the same way, and moves the way the settings say", () => {
+  const copies = [];
+  GM.setReleaseHook(game => copies.push(GM.snapshot(game)));
+  try {
+    const g = fresh(41); run(g, 0.5);
+    GM.step(g, HELD); run(g, 0.44, HELD); GM.step(g, AIM);           // let go about 60 ms early
+    check(copies.length === 1 && g.last && g.stats.fga === 1, `${copies.length} copies for ${g.stats.fga} shots`);
+    const again = () => { const c = GM.create(); GM.load(c, JSON.parse(JSON.stringify(copies[0]))); return GM.releaseOdds(c); };
+    const a = again(), b = again();
+    check(a.make === b.make && Math.abs(a.e - g.last.e) < 1e-9 && a.kind === "jumper", `twice: ${a.make} and ${b.make}; ${a.e.toFixed(1)} ms off against ${g.last.e.toFixed(1)} as played`);
+    const was = GM.C.PERFECT_MS; GM.C.PERFECT_MS = 80;
+    let wide; try { wide = again(); } finally { GM.C.PERFECT_MS = was; }
+    check(a.q < 1 && wide.q === 1 && wide.make > a.make, `an 80 ms window: quality ${a.q.toFixed(2)} to ${wide.q}, ${Math.round(a.make*100)}% to ${Math.round(wide.make*100)}%`);
+    return `let go ${Math.abs(a.e).toFixed(0)} ms early: ${Math.round(a.make*100)}% as played, ${Math.round(wide.make*100)}% with an 80 ms perfect window`;
+  } finally { GM.setReleaseHook(null); }
+});
+
 gtest("Gathering on the move gives two steps and then a dead dribble; gathering while stopped is a dead dribble at once", () => {
   const g = fresh(81, { defenders: false });
   until(g, TOWARD, x => speed(x) >= 10);
