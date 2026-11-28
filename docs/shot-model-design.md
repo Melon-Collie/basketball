@@ -127,13 +127,16 @@ Every shot is the same jump, and a fadeaway, a runner, a leaner and a hard stop 
 | --- | --- |
 | Standing, no keys | Nothing: straight up and down |
 | Standing, away from the rim | 5 ft/s back: a fadeaway, about 2.2 ft of separation by the top |
-| Sprinting at 13.5 ft/s, no keys | 6.75 ft/s the way you were going |
+| Sprinting at 13.5 ft/s, no keys, a jumper (a pull-up) | Nothing: the plant stops you |
+| Sprinting at 13.5 ft/s, no keys, a floater or a finish | 6.75 ft/s the way you were going |
 | Sprinting, toward the rim | 11.75 ft/s: a runner, or the last stride of a layup |
 | Sprinting, against your momentum | 1.75 ft/s: a hard stop |
 
+**The pull-up.** A jump read as a jumper off the dribble, with no keys held as the legs load, carries nothing into the air: the plant stops you. Floaters and finishes keep their momentum, and a held key still leans, so runners and fades are unchanged. This came from play: in two logged games, a player's own pull-ups were all taken by letting go of the keys, which used to carry half their speed (about 6.8 ft/s) into the air, and with it the scatter of a shot on the move. The same drive from the top, ended as a pull-up and let go on the line, now goes in about 45%, with the defender, still backing off, 4 ft away (contest 0.12); before, it was about 30%.
+
 **How high.** A jump from a standstill reaches 85% of one taken at 7 ft/s or more. Standing reach is 8.3 ft, and a full jump adds 2.3 ft.
 
-**The release line.** Moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The line is placed where that is while the legs load, and stays there once the feet leave, however far the jump then carries. So the line is always the release that puts the depth right, and it never moves in the air.
+**The release line.** By default it does not move: the top of the jump for a jumper, the quick line for a floater. The ball does not carry the body's momentum (the launch is not given it), so moving the line was only ever a rule, and in play a player let go near the top whatever the line did. The "Release line shift" setting turns the old rule back on: moving along the shot line would carry the ball long or short, and the release makes up for it: later going away from the rim, earlier going at it. The line is placed where that is while the legs load, and stays there once the feet leave, however far the jump then carries. So the line is always the release that puts the depth right, and it never moves in the air.
 
 ```latex
 \text{shift} = -\frac{\text{DRIFT\_DEP} \times \text{line shift setting} \times v_{along}}{0.09\ \text{in/ms}}
@@ -1100,7 +1103,7 @@ The context cutoffs, drive speeds and RIM\_CONTEST\_SIG now live in `sim/situati
 
 **Tuning sliders and defaults:** timing assist ±15 ms, perfect release bonus 30%, scatter in the air 2.0 in at 5 ft/s, aim assist 40%, release line shift 1.0×, layup speed limit 11.4 ft/s, on-ball defender and rim protector on, rim protector steps up 50% (when the handler is level with their defender), guarding distance 4.5 ft, the AI's read of you 260 ms, AI top speed 13 ft/s, AI reaches after 1.8 s and again after 3 s, AI sees a shot after 250 ms, defender's contest reach 1.0×. None is a rating: each is the mechanic in its own units, the same for every player.
 
-**Display:** the shot meter sits beside the player, or beside the cursor if the player ticks "Shot meter follows the cursor". Beside the cursor, the meter's release line is level with the cursor, so the bar reaches the cursor's height at the moment to let go, and aim and timing can be read in one place. It moves to the cursor's left where there is no room on the right. The choice is the player's own: it is remembered by their browser, is not one of the host's settings online, and applies only to their own shots.
+**Display:** the shot meter sits beside the cursor by default ("Shot meter follows the cursor"), or beside the player if the player unticks it. With it at the cursor, one player's in-play timing went from 94 ms typically off, nearly always late, to 37 ms off either way. Beside the cursor, the meter's release line is level with the cursor, so the bar reaches the cursor's height at the moment to let go, and aim and timing can be read in one place. It moves to the cursor's left where there is no room on the right. The choice is the player's own: it is remembered by their browser, is not one of the host's settings online, and applies only to their own shots.
 
 ## Known gaps and roadmap
 

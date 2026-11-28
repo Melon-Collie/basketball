@@ -84,10 +84,10 @@ gtest("Pressing the button jumps and letting it go lets the ball go: at the top 
   return `${g.last.e.toFixed(1)} ms from the top, ${g.last.dist.toFixed(1)} ft: ${g.last.out.big} / ${g.last.out.sub}`;
 });
 
-gtest("A jump carries half the speed you arrived with, plus up to 5 ft/s the way you lean; nothing steers it after that", () => {
-  const air = keys => {
+gtest("A jump carries half the speed you arrived with, plus up to 5 ft/s the way you lean, except a pull-up, which stops; nothing steers it after that", () => {
+  const air = (keys, to = 99) => {
     const g = fresh(45, { defenders: false });
-    until(g, TOWARD, x => speed(x) >= 13.4);
+    until(g, TOWARD, x => speed(x) >= 13.4 && distance(x) <= to);
     const v0 = speed(g);
     GM.step(g, { ...HELD, ...keys }); run(g, 0.25, { ...HELD, ...keys });
     const v1 = g.P.vy;                                                  // the rim is up the floor: toward it is negative
@@ -95,21 +95,28 @@ gtest("A jump carries half the speed you arrived with, plus up to 5 ft/s the way
     check(Math.abs(g.P.vy - v1) < 1e-9 && Math.abs(g.P.vx) < 1e-9, "the velocity changed in the air");
     return { v0, toward: -v1 };
   };
+  // off the dribble from range, a jumper: with no keys held it is a pull-up, and the plant stops them
   const none = air({}), lean = air({ u: true }), stop = air({ d: true });
-  check(Math.abs(none.toward - none.v0*GM.C.KEEP) < 0.05, `no keys: ${none.toward.toFixed(2)} ft/s from ${none.v0.toFixed(2)}`);
+  check(Math.abs(none.toward) < 1e-9, `no keys, a pull-up: ${none.toward.toFixed(2)} ft/s carried from ${none.v0.toFixed(2)}`);
+  // from floater range it is a floater, and keeps half its speed
+  const floater = air({}, 12);
+  check(Math.abs(floater.toward - floater.v0*GM.C.KEEP) < 0.05, `no keys from 12 ft, a floater: ${floater.toward.toFixed(2)} ft/s from ${floater.v0.toFixed(2)}`);
   check(Math.abs(lean.toward - (lean.v0*GM.C.KEEP + GM.C.LEAN)) < 0.05 && Math.abs(stop.toward - (stop.v0*GM.C.KEEP - GM.C.LEAN)) < 0.05, `leaning in ${lean.toward.toFixed(2)}, leaning back ${stop.toward.toFixed(2)}`);
-  // from a standstill, leaning away from the rim is a fadeaway, and its release line is later
-  const g = fresh(46, { defenders: false }); run(g, 0.3);
+  // from a standstill, leaning away from the rim is a fadeaway, and with the release line shift on its line is later
+  const g = fresh(46, { defenders: false }); g.params.drift = 1; run(g, 0.3);
   GM.step(g, { ...HELD, d: true }); run(g, 0.4, { ...HELD, d: true });
   check(Math.abs(g.P.vy - GM.C.LEAN) < 1e-9 && g.shot.line > GM.C.IDEAL + 40 && !g.shot.quick, `standing fade: ${g.P.vy.toFixed(2)} ft/s back, line at ${g.shot.line} ms`);
   run(g, g.shot.line/1000 - 0.4 - 2*GM.TICK, HELD); GM.step(g, AIM);
   check(g.last.fade === "back" && Math.abs(g.last.e) <= GM.C.PERFECT_MS && g.last.carried > 1 && g.last.airIn > 1.9, `fade ${g.last.fade}, ${g.last.e.toFixed(1)} ms off its line, ${g.last.carried.toFixed(1)} ft back, +${g.last.airIn.toFixed(1)} in`);
-  return `at ${none.v0.toFixed(1)} ft/s: ${none.toward.toFixed(1)} carried, ${lean.toward.toFixed(1)} leaning in, ${stop.toward.toFixed(1)} leaning back; standing fade ${g.last.carried.toFixed(1)} ft back, line +${g.last.shift} ms`;
+  return `at ${none.v0.toFixed(1)} ft/s: ${none.toward.toFixed(1)} carried pulling up, ${floater.toward.toFixed(1)} on a floater, ${lean.toward.toFixed(1)} leaning in, ${stop.toward.toFixed(1)} leaning back; standing fade ${g.last.carried.toFixed(1)} ft back, line +${g.last.shift} ms`;
 });
 
-gtest("A jump has one release line: the top of it, or, off a drive from floater range, a quick one on the way up; momentum moves either", () => {
+gtest("A jump has one release line: the top of it, or, off a drive from floater range, a quick one on the way up; with the release line shift on, momentum moves either", () => {
+  // by default the line stays put: the top of the jump, or the quick line
+  const fixed = keys => { const g = fresh(48, { defenders: false }); until(g, TOWARD, x => distance(x) <= 12); GM.step(g, { ...HELD, ...keys }); run(g, 0.2, { ...HELD, ...keys }); return g.shot.line; };
+  check(fixed({ d: true }) === GM.C.FL_IDEAL && fixed({ u: true }) === GM.C.FL_IDEAL, `by default the quick line stays at ${GM.C.FL_IDEAL} ms: braking ${fixed({ d: true })}, leaning in ${fixed({ u: true })}`);
   const up = (from, keys) => {
-    const g = fresh(48, { defenders: false });
+    const g = fresh(48, { defenders: false }); g.params.drift = 1;
     if (from === "drive") until(g, TOWARD, x => distance(x) <= 12); else { Object.assign(g.P, { x: RIM.x, y: RIM.y + 12 }); run(g, 0.2); }
     GM.step(g, { ...HELD, ...keys }); run(g, 0.2, { ...HELD, ...keys });
     return g;

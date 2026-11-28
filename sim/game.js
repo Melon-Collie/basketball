@@ -119,7 +119,7 @@ function create(opts = {}) {
     //   readMs ms, aiSpeed ft/s                        the AI on the ball: how old its picture of the handler is, and its top speed
     //   reachWait s, reachEvery s                      the AI's reach: how long the ball must have been left open at the end of its reach, and the wait before another
     //   stepUp %, sag ft, react ms, length x           the AI's help, its cushion, how late it sees a shot; and the on-ball defender's contest reach
-    params: { tAssist: 15, bonus: 30, aAssist: 40, drift: 1, fadeIn: 2, layupSpeed: 11.4, readMs: 260, aiSpeed: 13, reachWait: 1.8, reachEvery: 3, stepUp: 50,
+    params: { tAssist: 15, bonus: 30, aAssist: 40, drift: 0, fadeIn: 2, layupSpeed: 11.4, readMs: 260, aiSpeed: 13, reachWait: 1.8, reachEvery: 3, stepUp: 50,
               defOn: true, rimOn: true, sag: 4.5, react: 250, length: 1 },
     // The ball handler. up: s into a jump with the ball, or -1; v0x, v0y: the velocity they arrived with; lift: how
     // much of a full jump this one is. h: how high they are, 0 to 1. jumpT, land: a jump for a loose ball, as for a defender.
@@ -327,8 +327,11 @@ function inputDir() {
 // KEEP of the speed you arrived with, plus up to LEAN ft/s the way WASD is held while the legs load. So holding away
 // from the rim from a standstill is a fadeaway, holding toward it off a drive is a runner, and holding against your
 // own momentum is a hard stop.
-function airVelocity(vx, vy) {
+// pullup: a jump read as a jumper off the dribble. With no WASD held as the legs load, that is a pull-up: the plant
+// stops you, and nothing is carried into the air. Holding a direction still leans you into a fade or a runner.
+function airVelocity(vx, vy, pullup = false) {
   const d = inputDir();
+  if (!d && pullup) return { x: 0, y: 0 };
   return { x: vx*C.KEEP + (d ? d.x*C.LEAN : 0), y: vy*C.KEEP + (d ? d.y*C.LEAN : 0) };
 }
 // The release line, ms after the press. A jump has one, and it stays where it is once the feet have left:
@@ -529,7 +532,7 @@ function takeOff() {
     gx: P.x, gy: P.y, finish: cx.kind === "layup", quick: cx.kind === "floater",
     line: lineFor(cx.kind === "floater", P.vx*C.KEEP, P.vy*C.KEEP, f, nearOf(cx.kind === "layup", f.dist)),
     avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: 0, pivoted: hold.state === "pivot",
-    hook: !!cx.hook, faceA: drib.faceA, turned: 0 });                 // out of the post: facing away, still to turn to the rim
+    hook: !!cx.hook, faceA: drib.faceA, turned: 0, pullup: cx.kind === "jumper" && hold.state === "none" });                 // out of the post: facing away, still to turn to the rim
   shot.glass = onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
   if (!g.carry) g.carry = carryTarget(C.FORM_R);                       // off the dribble or a pivot the hand is where the cursor is
   hold.state = "none";   // going up ends the gather
@@ -544,7 +547,7 @@ function takeOff() {
 // The ball may be gone by then. If it isn't, that is travelling.
 function jumpMove(dt) {
   if (P.up*1000 < C.LOAD) {
-    const v1 = airVelocity(P.v0x, P.v0y), k = clamp((P.up + dt)*1000/C.LOAD, 0, 1);
+    const v1 = airVelocity(P.v0x, P.v0y, shot.pullup), k = clamp((P.up + dt)*1000/C.LOAD, 0, 1);
     P.vx = P.v0x + (v1.x - P.v0x)*k; P.vy = P.v0y + (v1.y - P.v0y)*k;
     if (shot.state === "shooting") { shot.avx = v1.x; shot.avy = v1.y; }
   }
@@ -1506,7 +1509,7 @@ function previewNow() {
   const f = frame(P), up = shot.state === "shooting", cxNow = up ? null : shotContext(), read = up ? null : cxNow.kind;
   const finish = up ? shot.finish : read === "layup", near = nearOf(finish, f.dist);
   // what the body will be doing in the air: settled once the feet have left, a forecast before that
-  const av = up ? { x: shot.avx, y: shot.avy } : airVelocity(P.vx, P.vy);
+  const av = up ? { x: shot.avx, y: shot.avy } : airVelocity(P.vx, P.vy, read === "jumper" && hold.state === "none");
   const v0 = up ? shot.gatherSpeed : Math.hypot(P.vx, P.vy);
   const quick = up ? shot.quick : read === "floater", line = up ? shot.line : lineFor(quick, av.x, av.y, f, near);
   const now = airBall(), dunk = up && canDunk(now);
