@@ -55,8 +55,8 @@ async function session(file) {
   await step(5); await snap('start');                     // the harness opens the page in free shooting: this session exercises the shot lab
   // 1. standing jumpers aimed at the rim: let go at the top of the jump (31 frames after the press), early and late
   for (const frames of [31, 28, 36]) { await at(0.5, 0.26); await step(3); await shoot(frames); await step(4); await snap(`jumper let go at ${frames}`); await step(200); await snap(`after jumper ${frames}`); }
-  // 2. cursor on the glass from straight on, then a fadeaway: leaning away from the rim at the jump
-  await at(0.56, 0.1); await step(8); await snap('glass aim'); await shoot(31); await step(220); await snap('after bank attempt');
+  // 2. cursor on the backboard from straight on (aim off the rim), then a fadeaway: leaning away from the rim at the jump
+  await at(0.56, 0.1); await step(8); await snap('aim on the backboard'); await shoot(31); await step(220); await snap('after a shot aimed at the backboard');
   await at(0.5, 0.26); await page.keyboard.down('KeyS'); await step(2); await shoot(34); await page.keyboard.up('KeyS'); await step(220); await snap('after fade');
   // 3. on-ball defender off so the lane is open: drive and go up early for a floater
   await page.locator('#defOn').uncheck(); await at(0.5, 0.3); await step(5);

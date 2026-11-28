@@ -575,7 +575,7 @@ All five milestones are done. Jumpers, floaters and layups in the prototype are 
 - **Calibration:** jumper noise 1.23× the old values, the quick line 1.50×, finishes 1.74×; contest scatter 6.19 in; clean looks 4% less noise, capped at 1.6 spreads. Results: open perfect three 50.1%, clean 59.1% (100% of misses near the rim, no airballs), 15 ft 60.1%, 25 ms off 45.1%, heavy contest 15.3%, open 15 ft fade 47.9%, floater 50.6%, open layup at a sprint from 3 ft 79.6% (67.9% from 5 ft, 76.3% let go a foot lower).
 - **Live readouts:** 14 simulated shots per refresh with a running average, instead of precomputed tables. The paired estimates share their random draws, so their difference shows only aim and momentum.
 - **Blocks and goaltending:** hands are real collision spheres (0.3 ft), at a standing reach of 8.2 ft (8.9 ft for the rim protector) plus a 2.2 ft jump, all placeholders until frames. Blocks turned out to be all-or-nothing for a given defender position: see Calibration, where standing jumpers against the default on-ball defender go from never blocked to blocked on every jump with a small change in distance or timing.
-- **Bank shots:** the cursor on the backboard beside the rim targets the glass, and a marker turns green where a bank can go in from your spot. From about 45° the working band is narrow and right beside the rim; from 63–65° it's over a foot wide; straight on, none.
+- **Bank shots:** removed as a choice (see Bank shots, under Blocks, bank shots and feedback). Every shot goes at the rim.
 - **Ratings retired for shooting:** the shooter rating and floater touch sliders are gone; a universal floor replaces them.
 
 **Airballs come from mistakes.** Heavy contests first airballed 15% of the time: their large spread sent the noise's outer tail clean past the rim. Now noise alone can carry a shot at most 12.5 in from the rim's center (a hard clank off the edge, never past it), plus 1.6 in at full contest, so a heavily altered shot airballs about 4% of the time. Bad timing, aim or drift are biases, not noise, so they can still airball any shot. A cap measured in spreads didn't work: it piles outliers onto its boundary, so airballs jump from about 17% to zero depending on whether that boundary falls inside the rim's reach. The calibration results above include this cap.
@@ -590,7 +590,7 @@ Open items: dunks don't fly yet.
 - **Release point** from the frame (height, wingspan).
 - **Noise** on speed and direction: the universal floor plus situational components, combined as now. Launch-angle noise is left at zero. Near-miss shaping becomes the shape of this noise.
 
-**What then emerges:** bank shots (aim the cursor at the glass for a deliberate bank), rim rolls, back-iron misses, soft touch, and realistic caroms for rebounding. Blocks become collisions between the defender's hand and the ball's path.
+**What then emerges:** rim rolls, back-iron misses, soft touch, and realistic caroms for rebounding. Blocks become collisions between the defender's hand and the ball's path.
 
 **Costs:**
 
@@ -622,7 +622,7 @@ At release, the player's inputs and situation become a launch: release point, di
 
 **Release point.** Where the hand is (see At the rim): 0.7 ft in front of the body and 9.6 ft up at the top of a standing jump, in a shooting form, or wherever the cursor has put the ball. Reach and jump are placeholder values until frames define them.
 
-**Target.** The rim center by default. With the cursor on the backboard, a point on the glass (see Bank shots).
+**Target.** The rim center, always (see Bank shots).
 
 **Arc (launch angle).** 48° for a set shot and 60° on the quick line. A finish is let go from anywhere between right under the rim and several feet out, low or high in the jump, so no one angle suits it: from close and low, a fixed one runs into the front of the rim. What stays the same is the angle it comes down into the rim at, 60°, and the launch angle is whatever gives that: tan(up) = tan(60°) + 2 × (rise needed) / (distance), capped at 82°. Finishes and quick releases are aimed 2 in past the rim's center: up close a ball that is a little long still drops and one that is a little short hits the front of the rim, so the middle of what goes in is behind the center. Between 4 and 8 ft the arc and the aim point are mixed by how much of the shot is a finish. A contest raises the arc by up to 6° at full strength, as the shooter goes over the hand. Dunks have no flight: the ball is placed through the rim unless blocked.
 
@@ -696,10 +696,10 @@ This replaces the block probability rolls for everything except dunks.
 
 **Goaltending.** Touching the ball on its way down, above rim height and within 1.6 ft of the rim's center, counts as a make.
 
-**Bank shots.** In the top-down view the backboard is a line behind the rim, from x = 22 to 28. With the cursor on that line, clear of the rim, when a jumper or floater starts, the target becomes a point on the glass, at the height that would send the ball in from the shooter's angle; the physics decides the rest. From the wing, a bank naturally beats a direct shot; straight on, it doesn't, because the glass already rescues long straight-on misses. No bonus is written in. Layups don't use this yet: they always go at the rim's center (see the open items above). While aiming at the glass, the target spot is shown on the board.
+**Bank shots.** There is no deliberate bank: every shot is aimed at the rim, and the backboard comes into play only by where the ball goes. There used to be one: with the cursor on the backboard, clear of the rim, when a jump started, the target became a point on the glass. In play it did not work. The cursor is moving all the time on the dribble and while aiming, so a bank was either an accident (one logged pull-up went up as a bank from a spot it could not go in from, 3%) or a fiddly target, and because a cursor near the rim never counted, banks registered only from wide angles, where real players rarely bank. A bank button was considered (aim at the rim, hold a key as you let go, and the game picks the spot on the glass) and left for later.
 
-- **Rim or glass is chosen when the shot starts,** by where the cursor is at the press, and not again. A cursor that slides off the rim onto the backboard during the shot is a worse aim at the rim, never a bank. Once it is a bank, the cursor slides the target along the glass on the side of the rim it started.
-- **The strip that counts as the glass stops short of the rim:** within 0.4 ft of the backboard's line and at least 1.1 ft to the side of the rim's center. It used to be 0.7 ft and 0.8 ft, which took in the back of the rim itself, and the choice was made at the release. A cursor typically 16 px off the rim turned 11% of shots into banks that went in 0 to 3% of the time; now it is 4%, and none of them from a cursor that drifted during the shot.
+What that leaves: aimed at the rim, a jump shot's arc comes down on the rim before it reaches the glass, so jumpers essentially never go in off the board (none of 54 shots from 45°, 8 to 16 ft, across aims and timings, touched the glass first). The glass matters for misses, finishes and rebounds. The physics still has the glass, and from 45° a bank aimed at the right spot would beat a direct shot (below), so a deliberate bank can come back without new physics.
+
 - **The court holds still while you shoot.** The camera normally keeps the player in place and slides the floor under them, which slides it under the cursor too. Running on a diagonal with the mouse untouched, the aim point moved 2.8 ft across the court (45 px) in the first quarter second of a shot. During your own shot the camera now stays where it was, so the cursor stays on the spot it was put and only the hand moves it, and the camera catches up once the ball is away.
 
 **Feedback view.** A side-on replay of each shot replaces the top-down landing chart: the arc from release to the rim, the rim and board drawn to scale, and markers where the ball touched. The court view keeps animating the ball from above.
@@ -726,7 +726,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 
 - A perfect launch at the rim center from 15 and 24 ft is a make with no contacts.
 - At 24 ft, 1–2% too slow hits the front rim, 1.5–2% too fast hits the back iron, and 5% slow is an airball. (Speed is that sensitive: 3% slow is already an airball.)
-- From 45°, the best bank beats shooting straight at the rim; straight on, it doesn't. (Measured at 12 ft with small errors: 76% vs 68% from 45°, 58% vs 81% straight on.)
+- From 45°, the best bank beats shooting straight at the rim; straight on, it doesn't. (Measured at 12 ft with small errors: 76% vs 68% from 45°, 58% vs 81% straight on.) The game no longer offers the bank as a choice; this is a property of the physics.
 - Small sideways errors produce some rim contacts that fall out (in-and-outs exist).
 - The same launch produces the identical path.
 - No bounce ever gains speed.
@@ -736,7 +736,7 @@ This is the point where the prototype becomes a real project. The physics is bui
 - Before calibration, inputs at 24 ft land within 10% of where today's model puts them. Closer in, aim still matches, and timing and drift errors shrink.
 - The situation rules behave as this doc describes them: the context table, each contest factor, clean looks, finishing scatter, and the reach and jump timing of defenders' arms: one length, so lower the further out, and in the shot for 0.6 s.
 - The game is deterministic and plain data: the same seed and inputs give the same game, a copy made mid-shot or sent as JSON carries on identically, and previewing the odds changes nothing.
-- Rim or glass is chosen at the press: a cursor that ends on the backboard is not a bank, one that started there stays one, and a near miss of the rim is not the glass.
+- Every shot goes at the rim: a cursor on the backboard is aim off the rim, not a bank.
 - Scripted input plays out as designed, with no browser: letting go 517 ms after the press is a perfect jumper, letting go before the feet leave is a pump fake, a jump carries half its speed plus the lean, coming down with the ball is travelling, a jump has one release line, the quick one off a drive from floater range and the top of the jump otherwise, and it does not move in the air, a jump that starts as a finish has no line and no aim wherever it is let go, the ball in the air is where the cursor puts it and stays out from under the rim, a ball held in front of an arm is blocked and one held away gets off, flying into a set defender is a charge, a ball over the rim near the top of a running jump is a dunk, a gather gives two steps and then a dead dribble, on the steps the ball goes after the cursor across the chest and never behind the back and a hand can take it only when the body is not in the way, the rim protector reads a euro a reaction time late, and the defender closes out or jumps on a shot they see.
 - A possession starts in a triple threat: a jab goes out and comes back, a pump fake leaves the dribble alone, Shift puts the ball on the floor, and a dribble picked up again stays dead. The AI stands off a live held ball and crowds a dead one.
 - The rules hold: a check ball to start, scores and changes of possession, defensive and offensive rebounds, the shot clock, out of bounds, a ball dribbled into a defender's hand, a dunk met at the rim as a live ball, and-ones and two-shot fouls at the line, and a game that ends at 21. With the rules off none of it applies.

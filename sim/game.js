@@ -78,7 +78,6 @@ const C = {
   BAR_JUMPER: 3.15 + 15*0.052, BAR_FLOATER: 3.5 + 20*0.055,   // in: the shooter's own share of the scatter, as the readout's bar draws it
   CONTACT_R: 1.9, FOUL_V: 3.5,      // a defender this close to a shooter and still coming at them this fast has run into them
   ARM_FOUL_R: 0.6,                  // a raised hand within this of a shooter's center is on their arms, not the ball (which leaves 0.7 ft out)
-  GLASS_DEPTH: 0.4, GLASS_SIDE: 1.1,  // aiming at the glass: the cursor within this of the backboard's line, and at least this far to the side of the rim's center
   LIVE_GAP: 3.4,                    // the AI stays at least this far off a triple threat: the drive is still there, so it can't crowd the shot
   BITE_R: 3.2,                      // the AI goes up for a jumper only from inside this, where a block is possible; so only there does a fake get it in the air
   SET_V: 0.5, OVER_V: 2,            // rebounding: a player moving this slowly is set; one in the air and coming into them this fast is over their back
@@ -155,7 +154,7 @@ function create(opts = {}) {
     fx: [], meterFlash: null,                                // floating text, rings and the meter's after-image
     // for the live readout only, never read by the rules: its own random stream, running make-chance estimates,
     // and bank targets already worked out
-    view: { seed: ((opts.seed ?? 1) ^ 0x9E3779B9) | 0, est: {}, zs: null, glass: { cache: {}, n: 0 } },
+    view: { seed: ((opts.seed ?? 1) ^ 0x9E3779B9) | 0, est: {}, zs: null },
   };
   Object.assign(game.R, { len: 1.2, stand: 8.9, mode: null, upX: 25, upY: 13, upDist: 8 });
   if (game.duo) game.params.rimOn = false;                   // one against one: nobody waiting at the rim
@@ -219,27 +218,6 @@ function physOut(sr, layup) {
   // a tip: a hand got a piece of it, and it carried on off line
   if (r.tipped) return { make: r.made, big: r.made ? "Make" : "Miss", sub: r.made ? "Tipped, and in anyway" : "Tipped", touched: true };
   return { make: r.made, big: r.made ? "Make" : "Miss", sub: layup ? (LAYUP_LABEL[r.label] || r.label) : r.label };
-}
-// Aiming at the glass: the cursor on the backboard line, clear of the rim. Height is chosen for you.
-// Rim or glass is chosen when the shot starts, by where the cursor is then, and not again: a cursor that slides off
-// the rim during the shot is a worse aim at the rim, never a bank nobody asked for. The strip that counts as the
-// glass stops short of the rim on every side, so a near miss of the rim is not on it either.
-// A shot works its target out exactly. The live readout asks many times a second, so it reuses nearby answers.
-function onGlass() {
-  const B = PHX.PHYS.BOARD;
-  return Math.abs(mouse.y - B.y) <= C.GLASS_DEPTH && mouse.x >= B.x0 + 0.3 && mouse.x <= B.x1 - 0.3 && Math.abs(mouse.x - HOOP.x) >= C.GLASS_SIDE;
-}
-function glassAimFor(from) {
-  const going = shot.state === "shooting";
-  if (going ? !shot.glass : !onGlass()) return null;
-  // once it is a bank, the cursor slides the target along the glass, on the side of the rim it started
-  const B = PHX.PHYS.BOARD, side = going ? shot.glassSide : (mouse.x >= HOOP.x ? 1 : -1);
-  const x = +(side > 0 ? clamp(mouse.x, HOOP.x + C.GLASS_SIDE, B.x1 - 0.3) : clamp(mouse.x, B.x0 + 0.3, HOOP.x - C.GLASS_SIDE)).toFixed(1);
-  if (!viewing) return LNX.glassTarget({ x: P.x, y: P.y }, "jumper", x, from);
-  const half = v => Math.round(v*2)/2, w = from.form;
-  const key = `${half(from.pos.x)}:${half(from.pos.y)}:${half(from.pos.z)}:${Math.round(w.layup*4)}:${w.floater > 0 ? 1 : 0}:${x.toFixed(1)}`, gl = g.view.glass;
-  if (!gl.cache[key]) { if (++gl.n > 300) { gl.cache = {}; gl.n = 0; } gl.cache[key] = LNX.glassTarget({ x: P.x, y: P.y }, "jumper", x, from); }
-  return gl.cache[key];
 }
 const liveZ = reuse => (reuse && g.view.zs) ? g.view.zs : (g.view.zs = Array.from({ length: 14 }, () => [gauss(), gauss()]));
 // running estimate: a few simulated shots per refresh. Estimates sharing a refresh share their random draws (zs),
@@ -440,16 +418,17 @@ function shotAt(t, o) {
   // a turnaround: what is still to turn when it is let go, and the turning already done, cost a jumper touch
   const turnIn = form.jumper*(C.SQUARE_IN*(1 - Math.cos(o.square || 0))/2 + C.TURN_IN*(o.turned || 0)/Math.PI);
   const from = { pos: { x: o.ball.x, y: o.ball.y, z: o.ball.z }, form };
-  const glass = glassAimFor(from), hs = handSpecs();
-  const base = { ...from, player: { x: P.x, y: P.y }, contest: c, hands: hs.map(SIT.handPath), target: glass ? glass.target : undefined };
-  const inp = o.perfect ? base : { ...base, aimTheta: glass ? 0 : clamp(aim.theta, -0.6, 0.6)*assistK*far, timingMs: eEff*far };
+  // every shot goes at the rim: the backboard comes into play only by where the ball goes
+  const hs = handSpecs();
+  const base = { ...from, player: { x: P.x, y: P.y }, contest: c, hands: hs.map(SIT.handPath) };
+  const inp = o.perfect ? base : { ...base, aimTheta: clamp(aim.theta, -0.6, 0.6)*assistK*far, timingMs: eEff*far };
   const sc = { form, dist: f.dist, q, move: o.v0, contest: c, clean, fadeIn: airScatter(air), bump: o.bump ? C.BUMP_IN*Math.min(1.5, o.bump/C.BUMP_REF) : 0, turn: turnIn,
                extra: Math.hypot(fin.parts[1], fin.parts[2])*(o.foul ? 1.15 : 1) };
   // the same scatter by what it comes from, for the readout's bar: touch, placement and hang, movement, the defense
   const own = Math.sqrt((form.jumper*C.BAR_JUMPER**2 + form.floater*C.BAR_FLOATER**2)*(1 - params.bonus/100*q)**2 + near*fin.parts[0]**2);
   const moved = Math.sqrt(form.jumper*(0.0196*o.v0*o.v0 + airScatter(air)**2) + form.floater*0.0064*o.v0*o.v0 + near*fin.parts[2]**2);
   const parts = [own, Math.sqrt(near)*fin.parts[1], moved, Math.hypot((form.jumper*C.CONTEST_SIG + form.floater*C.FL_CONTEST_SIG)*c, sc.bump)];
-  return { inp, sc, hs, f, near, far, quick, e, eEff, q, line, form, air, along, aim, assistK, con: { ...con, c }, clean, hangMs, glass, turnIn, hook: !!o.hook,
+  return { inp, sc, hs, f, near, far, quick, e, eEff, q, line, form, air, along, aim, assistK, con: { ...con, c }, clean, hangMs, turnIn, hook: !!o.hook,
            sig: { ...NZX.scatterIn(sc), parts, limit: fin.limit } };
 }
 // How far from facing the rim a shooter out of the post still is, in radians: 0 square to it, π facing straight away.
@@ -463,7 +442,7 @@ function nameOf(s, dunk, upMs) {
   if (dunk) return "Dunk";
   if (s.near >= 0.5 && s.hook) return "Hook shot";
   if (s.near >= 0.5) {
-    const how = s.glass ? "Bank" : P.y < HOOP.y - 0.2 ? "Reverse layup" : s.hangMs > 80 ? "Hanging layup" : upMs < C.IDEAL - 130 ? "Scoop" : "Layup";
+    const how = P.y < HOOP.y - 0.2 ? "Reverse layup" : s.hangMs > 80 ? "Hanging layup" : upMs < C.IDEAL - 130 ? "Scoop" : "Layup";
     return how;
   }
   if (s.quick) return "Floater";
@@ -533,7 +512,6 @@ function takeOff() {
     line: lineFor(cx.kind === "floater", P.vx*C.KEEP, P.vy*C.KEEP, f, nearOf(cx.kind === "layup", f.dist)),
     avx: P.vx*C.KEEP, avy: P.vy*C.KEEP, euro: fromSteps, bump: 0, pivoted: hold.state === "pivot",
     hook: !!cx.hook, faceA: drib.faceA, turned: 0, pullup: cx.kind === "jumper" && hold.state === "none" });                 // out of the post: facing away, still to turn to the rim
-  shot.glass = onGlass(); shot.glassSide = mouse.x >= HOOP.x ? 1 : -1;   // rim or glass: settled now
   if (!g.carry) g.carry = carryTarget(C.FORM_R);                       // off the dribble or a pivot the hand is where the cursor is
   hold.state = "none";   // going up ends the gather
   Object.assign(P, { up: 0, v0x: P.vx, v0y: P.vy, lift: liftAt(v0) });
@@ -616,7 +594,7 @@ function letGo() {
     if (ft) recordFreeThrow(out.make); else record(out.make, three ? 3 : 2, three, kind === "layup", kind === "floater");
     fl.value = three ? 3 : 2;
     g.last = { ...common, kind, name: nameOf(s, false, shot.t), out, foul, odds, three, e: s.e, eEff: s.eEff, q: s.q, quick: s.quick, near: s.near,
-               aim: s.aim, con: s.con, sig: s.sig, glass: !!s.glass, assistK: s.assistK, fade: s.far > 0.5 && !s.quick && fadeOf(P.vx, P.vy, f),
+               aim: s.aim, con: s.con, sig: s.sig, assistK: s.assistK, fade: s.far > 0.5 && !s.quick && fadeOf(P.vx, P.vy, f),
                air: s.air, airIn: airScatter(s.air), hangMs: s.hangMs, line: s.line, shift: s.line - (s.quick ? C.FL_IDEAL : C.IDEAL),
                rimMode: params.rimOn ? R.mode : "off" };
   }
@@ -1522,7 +1500,7 @@ function previewNow() {
               bump: up && shot.bump, finish, quick, line, hangMs: up ? Math.max(0, shot.t - C.IDEAL) : 0,
               hook: up ? shot.hook : !!cxNow.hook, square, turned };
   const s = shotAt(null, o);
-  const cx = { kind: dunk ? "dunk" : near >= 0.5 ? "layup" : quick ? "floater" : "jumper", note: "", hook: o.hook, turnaround: s.turnIn > 0.3, glass: s.glass, clean: s.clean, air: s.air, line,
+  const cx = { kind: dunk ? "dunk" : near >= 0.5 ? "layup" : quick ? "floater" : "jumper", note: "", hook: o.hook, turnaround: s.turnIn > 0.3, clean: s.clean, air: s.air, line,
                shift: line - (quick ? C.FL_IDEAL : C.IDEAL), fade: near < 0.5 && !quick && fadeOf(av.x, av.y, f) };
   const live = { cx, f, con: s.con, sig: s.sig, near, quick, ball: now, three: isThree(up ? { x: shot.gx, y: shot.gy } : P) };
   if (dunk) {

@@ -323,39 +323,33 @@ gtest("Flying into a defender who was set is a charge; into one inside the restr
   return `set, 8 ft out: ${set.flow.why}. In the restricted area: play on, with a bump. Sliding: ${sliding.flow.why || "play on"}`;
 });
 
-gtest("Rim or glass is chosen when the jump starts: a cursor that slides onto the backboard during it is not a bank", () => {
-  const BOARD_Y = 4.0, rim = { x: RIM.x, y: RIM.y }, glass = { x: RIM.x + 1.6, y: BOARD_Y };
-  // a standing jumper from the wing, with the cursor in one place at the press and another by the release
-  const from = (atPress, atRelease) => {
+gtest("Every shot goes at the rim: a cursor on the backboard is aim off the rim, not a bank", () => {
+  const glass = { x: RIM.x + 1.6, y: 4.0 }, rim = { x: RIM.x, y: RIM.y };
+  // a standing jumper from the wing with no scatter, the cursor on the rim or on the backboard beside it
+  const from = at => {
     const g = fresh(31, { defenders: false });
-    Object.assign(g.P, { x: 33, y: 13 }); run(g, 0.3, atPress);
-    GM.step(g, { ...atPress, shot: true }); run(g, 2*GM.TICK, { ...atPress, shot: true }); run(g, 59*GM.TICK, { ...atRelease, shot: true });
-    GM.step(g, atRelease);
+    Object.assign(g.P, { x: 33, y: 13 }); run(g, 0.3, at);
+    g.forced.push(...Array(400).fill(1));
+    GM.step(g, { ...at, shot: true }); run(g, 61*GM.TICK, { ...at, shot: true }); GM.step(g, at);
     return g.last;
   };
-  const shoot = from;
-  check(shoot(rim, rim).glass === false && shoot(glass, glass).glass === true, "on the rim throughout is a shot at the rim, and on the glass throughout is a bank");
-  check(shoot(rim, glass).glass === false, "a cursor that started on the rim and ended on the backboard should still be a shot at the rim");
-  check(shoot(glass, rim).glass === true, "a bank that was chosen at the press stays a bank");
-  // just behind the rim and a little to one side: a near miss of the rim, which used to count as the glass
-  const near = { x: RIM.x + 0.9, y: RIM.y - 0.6 };
-  check(shoot(near, near).glass === false, "a cursor 0.9 ft to the side and 0.6 ft behind the rim's center is a miss of the rim, not a bank");
-  check(Math.abs(shoot(rim, glass).aim.theta) > 0.02, "and sliding off the rim still costs it as aim");
-  return "decided at the jump; a near miss of the rim is not the glass";
+  const straight = from(rim), board = from(glass);
+  check(straight.out.make && Math.abs(straight.aim.theta) < 1e-9, `on the rim: ${straight.out.big} / ${straight.out.sub}`);
+  check(Math.abs(board.aim.theta) > 0.02 && board.name !== "Bank" && !("glass" in board), `on the backboard: aim ${(board.aim.theta*180/Math.PI).toFixed(1)}°, ${board.name}`);
+  return `on the rim: ${straight.out.sub}; on the backboard beside it, ${Math.abs(board.aim.theta*180/Math.PI).toFixed(1)}° of aim to the side: ${board.out.big} / ${board.out.sub}`;
 });
 
-gtest("A ball that has no way to get where it is aimed is a blown shot, not a crash", () => {
-  // right by the basket with the cursor on the glass: a bank from there, let go low, has no path. Looking at the
-  // odds on the way must not fall over either.
+gtest("A shot from right by the basket, looked at every tick on the way, is resolved and nothing falls over", () => {
+  // beside the rim with the cursor out at the corner of the backboard, let go low on the way up
   const g = fresh(55, { defenders: false });
-  Object.assign(g.P, { x: RIM.x - 3, y: RIM.y + 0.3 }); const glass = { x: RIM.x - 2.5, y: 4.0 };
-  run(g, 0.1, glass); GM.step(g, { ...glass, shot: true });
-  for (let i = 1; i < 24; i++) { GM.step(g, { ...glass, shot: true }); GM.preview(g); }
-  GM.step(g, glass); GM.preview(g); GM.lastOdds(g);
-  check(g.last && g.last.glass && !g.last.out.make && g.last.out.sub === "Blown layup" && g.stats.fga === 1, `expected a blown bank: ${JSON.stringify(g.last && g.last.out)}`);
+  Object.assign(g.P, { x: RIM.x - 3, y: RIM.y + 0.3 }); const corner = { x: RIM.x - 2.5, y: 4.0 };
+  run(g, 0.1, corner); GM.step(g, { ...corner, shot: true });
+  for (let i = 1; i < 24; i++) { GM.step(g, { ...corner, shot: true }); GM.preview(g); }
+  GM.step(g, corner); GM.preview(g); GM.lastOdds(g);
+  check(g.last && g.stats.fga === 1, `the shot was not resolved: ${JSON.stringify(g.last && g.last.out)}`);
   run(g, 2);
   check(g.shot.state === "idle", `afterwards: ${g.shot.state}`);
-  return `${g.last.name} from ${g.last.dist.toFixed(1)} ft, let go at ${g.last.ball.z.toFixed(1)} ft: ${g.last.out.sub}`;
+  return `${g.last.name} from ${g.last.dist.toFixed(1)} ft, let go at ${g.last.ball.z.toFixed(1)} ft: ${g.last.out.big} / ${g.last.out.sub}`;
 });
 
 gtest("Nothing in the game is rolled except a shot's scatter", () => {
